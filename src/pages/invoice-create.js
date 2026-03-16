@@ -561,6 +561,64 @@ export async function renderInvoiceCreate() {
     return (preferredPkAlias || activeAliasObj?.Name || firstAliasObj?.Name || firstAliasStr || fallbackObj?.Alias || fallbackObj?.ReceiverAlias || '').trim();
   }
 
+  function firstNonEmpty(obj, paths = []) {
+    for (const p of paths) {
+      const val = String(p)
+        .split('.')
+        .reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : undefined), obj);
+      if (val !== undefined && val !== null && String(val).trim() !== '') {
+        return String(val).trim();
+      }
+    }
+    return '';
+  }
+
+  function applyCustomerToForm(page, customer, fallback = {}) {
+    const source = customer && typeof customer === 'object' ? customer : {};
+    const backup = fallback && typeof fallback === 'object' ? fallback : {};
+
+    const name = firstNonEmpty(source, ['Title', 'Name', 'CustomerName']) || firstNonEmpty(backup, ['Title', 'Name']);
+    const vkn = firstNonEmpty(source, ['TaxNumber', 'Vkn', 'Tckn']) || firstNonEmpty(backup, ['TaxNumber']);
+    const alias = pickPreferredAlias(source.Aliases || backup.Aliases, source) || firstNonEmpty(source, ['Alias', 'ReceiverAlias']) || firstNonEmpty(backup, ['Alias', 'ReceiverAlias']);
+    const address = firstNonEmpty(source, ['Address', 'AddressInfo.Address', 'ContactInfo.Address']) || firstNonEmpty(backup, ['Address']);
+    const district = firstNonEmpty(source, ['District', 'DistrictName', 'AddressInfo.District', 'AddressInfo.DistrictName']) || firstNonEmpty(backup, ['District', 'DistrictName']);
+    const city = firstNonEmpty(source, ['City', 'CityName', 'AddressInfo.City', 'AddressInfo.CityName']) || firstNonEmpty(backup, ['City', 'CityName']);
+    const country = firstNonEmpty(source, ['Country', 'CountryName', 'AddressInfo.Country', 'AddressInfo.CountryName']) || firstNonEmpty(backup, ['Country']) || 'Turkiye';
+    const taxOffice = firstNonEmpty(source, ['TaxDepartment', 'TaxOffice', 'TaxOfficeName', 'TaxDepartmentName']) || firstNonEmpty(backup, ['TaxDepartment', 'TaxOffice']);
+    const email = firstNonEmpty(source, ['Email', 'ContactInfo.Email']) || firstNonEmpty(backup, ['Email']);
+    const phone = firstNonEmpty(source, ['Phone', 'Telephone', 'ContactInfo.Phone']) || firstNonEmpty(backup, ['Phone', 'Telephone']);
+
+    page.querySelector('#c_name').value = name;
+    page.querySelector('#c_vkn').value = vkn;
+    page.querySelector('#c_alias').value = alias;
+    page.querySelector('#c_address').value = address;
+    page.querySelector('#c_district').value = district;
+    page.querySelector('#c_city').value = city;
+    page.querySelector('#c_country').value = country;
+    page.querySelector('#c_vd').value = taxOffice;
+    page.querySelector('#c_email').value = email;
+    page.querySelector('#c_phone').value = phone;
+
+    const isEInvoice = source.ModuleType === 'eInvoice' || source.IsEInvoice || backup.ModuleType === 'eInvoice' || backup.IsEInvoice;
+    const tag = page.querySelector('#tagInvoiceType');
+    tag.style.display = 'inline-block';
+    tag.textContent = isEInvoice ? 'e-Fatura' : 'e-Arşiv';
+    tag.style.background = isEInvoice ? 'var(--accent)' : '#10b981';
+
+    const selTemplate = page.querySelector('#g_template');
+    const selScenario = page.querySelector('#g_scenario');
+    if (selTemplate) selTemplate.value = isEInvoice ? 'eFatura' : 'eArsiv';
+    if (selScenario) selScenario.value = isEInvoice ? 'TICARIFATURA' : 'EARSIV';
+
+    const ettnBadge = page.querySelector('#ettiBadge');
+    if (ettnBadge) {
+      ettnBadge.style.display = 'inline-flex';
+      page.querySelector('#ettiSpan').textContent = crypto.randomUUID();
+    }
+
+    return { isEInvoice, alias };
+  }
+
   async function refreshAliasByTaxNumber(page, force = false) {
     const scenario = page.querySelector('#g_scenario')?.value;
     if (scenario === 'EARSIV') return;
@@ -708,9 +766,8 @@ export async function renderInvoiceCreate() {
             item.addEventListener('click', async () => {
               const cSearch = validList[item.getAttribute('data-idx')];
               
-              // Temel alanları doldur (eğer Get detayları gecikirse vs.)
-              page.querySelector('#c_name').value = cSearch.Title || '';
-              page.querySelector('#c_vkn').value = cSearch.TaxNumber || '';
+              // Mobil/yavas baglantida detay endpoint'i gecikse bile alanlar aninda dolsun.
+              applyCustomerToForm(page, cSearch, cSearch);
               
               // Tıklandıktan sonra search kutusunu kapat, yükleniyor moduna al (Opsiyonel ama iyi olur)
               searchResults.innerHTML = '<div style="padding:10px; color:var(--text-muted); text-align:center;">Mükellef detayları getiriliyor...</div>';
@@ -722,52 +779,16 @@ export async function renderInvoiceCreate() {
                   ? (detailRes.data?.Content || detailRes.data?.Data || detailRes.data)
                   : null;
                 const c = (detailData && typeof detailData === 'object') ? detailData : cSearch;
-                
-                const isEInvoice = c.ModuleType === 'eInvoice' || c.IsEInvoice || cSearch.IsEInvoice;
-                
-                page.querySelector('#c_name').value = c.Title || cSearch.Title || '';
-                
-                // Aliases formatı API'ye göre değişebilir; aktif alias Name alanını öncelikli al.
-                const aliases = Array.isArray(c.Aliases)
-                  ? c.Aliases
-                  : (Array.isArray(cSearch.Aliases) ? cSearch.Aliases : []);
-
-                const aliasName = pickPreferredAlias(aliases, c);
-                page.querySelector('#c_alias').value = aliasName;
-                
-                // Adres bilgileri
-                page.querySelector('#c_address').value = c.Address?.trim() || '';
-                page.querySelector('#c_district').value = c.District || '';
-                page.querySelector('#c_city').value = c.City || '';
-                page.querySelector('#c_country').value = c.Country || 'Türkiye';
-                page.querySelector('#c_vd').value = c.TaxDepartment || '';
-                page.querySelector('#c_vkn').value = c.TaxNumber || cSearch.TaxNumber || '';
-                
-                // Rozet ve Tür
-                const tag = page.querySelector('#tagInvoiceType');
-                tag.style.display = 'inline-block';
-                tag.textContent = isEInvoice ? 'e-Fatura' : 'e-Arşiv';
-                tag.style.background = isEInvoice ? 'var(--accent)' : '#10b981';
-
-                // Şablon ve Senaryoları Dinamik Doldurma
-                const selTemplate = page.querySelector('#g_template');
-                const selScenario = page.querySelector('#g_scenario');
-                if(selTemplate) selTemplate.value = isEInvoice ? 'eFatura' : 'eArsiv';
-                if(selScenario) selScenario.value = isEInvoice ? 'TICARIFATURA' : 'EARSIV';
-                
-                // Demo ETTN
-                const ettnBadge = page.querySelector('#ettiBadge');
-                if(ettnBadge) {
-                   ettnBadge.style.display = 'inline-flex';
-                   page.querySelector('#ettiSpan').textContent = crypto.randomUUID();
-                }
+                const filled = applyCustomerToForm(page, c, cSearch);
 
                 searchResults.style.display = 'none';
                 searchInput.value = '';
-                showToast(aliasName ? (c.Title + ' bilgileri başarıyla dolduruldu.') : ('Mükellef bulundu fakat etiket bilgisi gelmedi, lütfen manuel etiket girin.'), aliasName ? 'success' : 'warning');
+                const companyName = page.querySelector('#c_name').value || cSearch.Title || 'Mükellef';
+                showToast(filled.alias ? (companyName + ' bilgileri başarıyla dolduruldu.') : ('Mükellef bulundu fakat etiket bilgisi gelmedi, lütfen manuel etiket girin.'), filled.alias ? 'success' : 'warning');
               } catch(e) {
                 searchResults.style.display = 'none';
-                showToast('Detaylar alınırken hata oluştu.', 'error');
+                searchInput.value = '';
+                showToast('Temel bilgiler dolduruldu, detay servisinden adres alanlari alinamadi.', 'warning');
               }
             });
           });
