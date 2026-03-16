@@ -5,7 +5,6 @@ import { getSupabase, dbSelect, dbInsert, dbUpdate, dbDelete, isSupabaseConfigur
 
 const LS_KEY = 'nilfatura_accounts';
 const LS_ACTIVE = 'nilfatura_active_account';
-const LS_PREFS = 'nilfatura_account_prefs';
 
 function getLocalAccounts() {
   try {
@@ -41,18 +40,6 @@ function mergeAccounts(localItems = [], remoteItems = []) {
     if (x?.id) map.set(x.id, x);
   });
   return Array.from(map.values());
-}
-
-function getLocalPrefs() {
-  try {
-    return JSON.parse(localStorage.getItem(LS_PREFS) || '{}');
-  } catch {
-    return {};
-  }
-}
-
-function saveLocalPrefs(prefs) {
-  localStorage.setItem(LS_PREFS, JSON.stringify(prefs || {}));
 }
 
 async function getAuthenticatedUserId() {
@@ -101,7 +88,7 @@ export async function listAccounts() {
 }
 
 // ── Add Account ──
-export async function addAccount({ name, apiKey, environment = 'test', color = '#6366f1', companyName = '', vkn = '' }) {
+export async function addAccount({ name, apiKey, environment = 'test', color = '#6366f1', companyName = '', vkn = '', invoiceSeries = '' }) {
   const account = {
     id: crypto.randomUUID(),
     name,
@@ -111,6 +98,7 @@ export async function addAccount({ name, apiKey, environment = 'test', color = '
     is_active: false,
     company_name: companyName,
     vkn,
+    invoice_series: invoiceSeries,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -230,20 +218,4 @@ export async function getActiveEnvironment() {
 }
 
 // ── Account Preferences (local) ──
-export function getAccountPreferences(accountId) {
-  if (!accountId) return {};
-  const prefs = getLocalPrefs();
-  return prefs[accountId] || {};
-}
-
-export function setAccountPreferences(accountId, updates = {}) {
-  if (!accountId) return;
-  const prefs = getLocalPrefs();
-  const prev = prefs[accountId] || {};
-  prefs[accountId] = {
-    ...prev,
-    ...updates,
-    updated_at: new Date().toISOString()
-  };
-  saveLocalPrefs(prefs);
-}
+// Obsolete: Using direct columns in accounts object now

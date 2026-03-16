@@ -369,7 +369,7 @@ async function loadAccountSwitcher(sidebar) {
         const id = item.dataset.id;
         if (id) {
           await setActiveAccount(id);
-          window.location.reload();
+          window.dispatchEvent(new CustomEvent('accountChanged', { detail: { accountId: id } }));
         }
       }
     });

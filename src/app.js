@@ -370,8 +370,8 @@ async function handleAccountSwitch(accountId) {
     await setActiveAccount(accountId);
     if (seq !== accountSwitchSeq) return;
 
-    // En güvenli yol: tüm eski page state/in-flight istekleri sıfırlamak için tam yenile.
-    window.location.reload();
+    // Sayfayı yenilemek yerine custom event fırlat ve re-render et
+    window.dispatchEvent(new CustomEvent('accountChanged', { detail: { accountId } }));
   } finally {
     isAccountSwitching = false;
   }

@@ -1,7 +1,7 @@
 import { EInvoice, EArchive, buildEInvoiceModel, General } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { navigate } from '../router.js';
-import { getActiveAccount, getAccountPreferences } from '../services/account-manager.js';
+import { getActiveAccount } from '../services/account-manager.js';
 
 const INVOICE_EDIT_CONTEXT_KEY = 'nilfatura_invoice_edit_context';
 
@@ -1014,9 +1014,8 @@ function applyAccountSeriesDefault(page, activeAccount) {
   if (!activeAccount?.id) return;
   const seriesSelect = page.querySelector('#g_series');
   if (!seriesSelect) return;
-  const prefs = getAccountPreferences(activeAccount.id);
-  if (prefs?.invoice_series) {
-    setSeriesSelectValue(seriesSelect, prefs.invoice_series);
+  if (activeAccount?.invoice_series) {
+    setSeriesSelectValue(seriesSelect, activeAccount.invoice_series);
   }
 }
 

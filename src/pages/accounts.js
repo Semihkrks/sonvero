@@ -1,7 +1,7 @@
 // ══════════════════════════════════════════
 // Accounts Management Page
 // ══════════════════════════════════════════
-import { listAccounts, addAccount, updateAccount, deleteAccount, setActiveAccount, getActiveAccountId, ACCOUNT_COLORS, getAccountPreferences, setAccountPreferences } from '../services/account-manager.js';
+import { listAccounts, addAccount, updateAccount, deleteAccount, setActiveAccount, getActiveAccountId, ACCOUNT_COLORS } from '../services/account-manager.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 
@@ -102,7 +102,7 @@ async function refreshGrid(page) {
 
 function showAccountForm(page, existing = null) {
   const isEdit = !!existing;
-  const existingPrefs = existing ? getAccountPreferences(existing.id) : {};
+  const existingPrefs = { invoice_series: existing?.invoice_series };
   const colorOptions = ACCOUNT_COLORS.map(c =>
     `<button type="button" class="color-opt" data-color="${c}" style="width:28px;height:28px;border-radius:50%;border:2px solid ${c === (existing?.color || '#6366f1') ? 'white' : 'transparent'};background:${c};cursor:pointer;transition:all 0.15s"></button>`
   ).join('');
@@ -189,12 +189,10 @@ function showAccountForm(page, existing = null) {
 
       try {
         if (isEdit) {
-          await updateAccount(existing.id, { name, api_key: apiKey, environment: env, color: selectedColor, company_name: company, vkn });
-          setAccountPreferences(existing.id, { invoice_series: invoiceSeries });
+          await updateAccount(existing.id, { name, api_key: apiKey, environment: env, color: selectedColor, company_name: company, vkn, invoice_series: invoiceSeries });
           showToast('Hesap güncellendi', 'success');
         } else {
-          const newAcc = await addAccount({ name, apiKey, environment: env, color: selectedColor, companyName: company, vkn });
-          setAccountPreferences(newAcc.id, { invoice_series: invoiceSeries });
+          const newAcc = await addAccount({ name, apiKey, environment: env, color: selectedColor, companyName: company, vkn, invoiceSeries });
           const all = await listAccounts();
           if (all.length === 1) await setActiveAccount(newAcc.id);
           showToast('Hesap eklendi', 'success');

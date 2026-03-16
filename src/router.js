@@ -48,6 +48,9 @@ export async function handleRoute(renderLayout) {
 export function startRouter(renderLayout) {
   const onRoute = () => handleRoute(renderLayout);
   window.addEventListener('hashchange', onRoute);
+
+  // Global event listener for account changes so the current page updates
+  window.addEventListener('accountChanged', onRoute);
   onRoute();
 
   return () => window.removeEventListener('hashchange', onRoute);

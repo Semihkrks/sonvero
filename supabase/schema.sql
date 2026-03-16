@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   is_active BOOLEAN DEFAULT false,
   company_name TEXT,
   vkn TEXT,
+  invoice_series TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
