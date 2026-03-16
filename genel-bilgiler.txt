@@ -1,0 +1,152 @@
+import { EInvoice, EArchive, buildEInvoiceModel, General } from '../api/nilvera.js';
+import { showToast } from '../components/toast.js';
+import { navigate } from '../router.js';
+
+const ic = {
+  trash: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
+  plus: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`,
+  search: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>`,
+  save: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg>`,
+  send: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4 20-7z"/></svg>`
+};
+
+const UNITS = [
+  { val: 'C62', lbl: 'ADET' },
+  { val: 'KGM', lbl: 'KG' },
+  { val: 'LTR', lbl: 'LİTRE' },
+  { val: 'MTR', lbl: 'METRE' },
+  { val: 'MON', lbl: 'AY' },
+  { val: 'DAY', lbl: 'GÜN' },
+  { val: 'HUR', lbl: 'SAAT' }
+];
+
+export async function renderInvoiceCreate() {
+  const page = document.createElement('div');
+
+  page.innerHTML = `
+    <div class="page-header" style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <h2>Fatura Oluştur (e-Fatura / e-Arşiv)</h2>
+        <p class="page-header-sub">Mal / Hizmet Faturası Mükellef Bilgileri ve İçeriği</p>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="btn btn-secondary" id="btnDraft">${ic.save} TASLAK</button>
+        <button class="btn btn-primary" id="btnSend">${ic.send} ONAYLA GÖNDER</button>
+      </div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 20px; margin-bottom: 20px;">
+      <!-- ALICI BİLGİLERİ -->
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+          <h3 style="font-size:16px; font-weight:700;">👥 Alıcı Bilgileri</h3>
+          <span id="tagInvoiceType" style="background:var(--accent); color:#fff; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; display:none;"></span>
+        </div>
+        
+        <div class="form-group" style="position:relative;">
+          <div style="position:relative;">
+            <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); pointer-events:none;">${ic.search}</span>
+            <input type="text" class="form-input" id="searchCustomer" placeholder="Alıcı Adını Giriniz..." style="padding-left:36px; border-color:var(--accent);" autocomplete="off">
+          </div>
+          <div id="searchResults" style="display:none; position:absolute; top:100%; left:0; right:0; background:var(--bg-modal); border:1px solid var(--border); z-index:99; border-radius:6px; max-height:200px; overflow-y:auto; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+          <div class="form-group" style="grid-column:span 2;">
+            <label class="form-label">Unvan / Adı Soyadı *</label>
+            <input type="text" class="form-input" id="c_name">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Etiket (Mail)</label>
+            <input type="text" class="form-input" id="c_alias" placeholder="urn:mail:...">
+          </div>
+          <div class="form-group">
+            <label class="form-label">VKN-TCKN *</label>
+            <input type="text" class="form-input" id="c_vkn">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Vergi Dairesi</label>
+            <input type="text" class="form-input" id="c_vd">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Adres</label>
+            <input type="text" class="form-input" id="c_address">
+          </div>
+          <div class="form-group">
+            <label class="form-label">İlçe</label>
+            <input type="text" class="form-input" id="c_district">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Şehir</label>
+            <input type="text" class="form-input" id="c_city">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Ülke</label>
+            <select class="form-select" id="c_country">
+              <option value="Türkiye">Türkiye</option>
+              <option value="Almanya">Almanya</option>
+              <option value="İngiltere">İngiltere</option>
+              <option value="ABD">ABD</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Posta Kodu</label>
+            <input type="text" class="form-input" id="c_zip">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Telefon</label>
+            <input type="text" class="form-input" id="c_phone">
+          </div>
+          <div class="form-group">
+            <label class="form-label">E-Posta</label>
+            <input type="email" class="form-input" id="c_email">
+          </div>
+        </div>
+      </div>
+
+      <!-- GENEL BİLGİLER -->
+      <div class="card">
+        <h3 style="font-size:16px; margin-bottom:15px; font-weight:700;">📄 Genel Bilgiler</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+          <div class="form-group">
+            <label class="form-label">Fatura Tarihi *</label>
+            <input type="datetime-local" class="form-input" id="g_date" value="${new Date().toISOString().slice(0, 16)}">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fatura Serisi</label>
+            <input type="text" class="form-input" id="g_series" placeholder="AAA" maxlength="3">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fatura Senaryosu</label>
+            <select class="form-select" id="g_scenario">
+              <option value="TICARIFATURA">Ticari Fatura</option>
+              <option value="TEMELFATURA">Temel Fatura</option>
+              <option value="EARSIV">e-Arşiv Fatura</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Fatura Tipi</label>
+            <select class="form-select" id="g_type">
+              <option value="SATIS">Satış</option>
+              <option value="IADE">İade</option>
+              <option value="TEVKIFAT">Tevkifat</option>
+              <option value="ISTISNA">İstisna</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Para Birimi</label>
+            <select class="form-select" id="g_currency">
+              <option value="TRY">Türk Lirası</option>
+              <option value="USD">Amerikan Doları</option>
+              <option value="EUR">Euro</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Döviz Kuru</label>
+            <input type="number" class="form-input" id="g_exchange" placeholder="1.0000" disabled>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    

@@ -1,0 +1,347 @@
+# Nilvera API Catalog (Generated)
+
+GeneratedAt: 2026-03-15T01:37:04.598Z
+
+## general (47)
+- GET /Alerts - Uyarı mesajlarını getirir.
+- GET /Campaigns - Kampanyaları getirir.
+- GET /Company - Firma bilgilerini getirir.
+- PUT /Company - Firma bilgilerini günceller.
+- GET /Company/Certificate - Firma sertifikalarını getirir.
+- POST /Company/Certificate - Firmaya sertifika ekler.
+- PUT /Company/Certificate - Firma sertifikasını günceller.
+- DELETE /Company/Certificate/{ID} - Firma sertifikasını siler.
+- GET /Company/Certificate/{SerialNumber} - Seri numarasına göre sertifika getirilir.
+- GET /Company/List - Kullanıcıya tanımlı firmaları getirir.
+- GET /Company/Modules - Firma modüllerini getirir.
+- GET /CompanyDocuments - Firma döküman bilgilerini listeler.
+- POST /CompanyDocuments - Firmaya yeni döküman ekler.
+- DELETE /CompanyDocuments/{ID} - Firmaya eklenen dökümanı siler.
+- GET /CompanyIdentification - Firma kimlik bilgilerini listeler.
+- POST /CompanyIdentification - Firmaya yeni kimlik bilgisi ekler.
+- DELETE /CompanyIdentification/{ID} - Firmadan kimlik bilgisi siler.
+- GET /Credits - Kredi bilgisi getirir.
+- GET /Customers - Müşteri listeler.
+- POST /Customers - Müşteri ekler.
+- PUT /Customers - Müşteri günceller.
+- DELETE /Customers/{ID} - Müşteri Siler.
+- GET /Customers/{ID} - Müşteri Bilgisini Getirir.
+- DELETE /Customers/Bulk - Müşteri Toplu Siler.
+- GET /Customers/GetCustomerInfo/{TaxNumber} - Vergi Kimlik Numarası İle Müşteri Bilgisini Getirir.
+- GET /Customers/Search/{searchText} - Müşteri Arar.
+- GET /ExchangeRate - Döviz kurlarını getirir.
+- GET /GibEArchiveAccount - Gib kullanıcı adı ve parola getirir.
+- PUT /GibEArchiveAccount - Gib kullanıcı adı ve parola günceller.
+- GET /GlobalCompany - Mükellef listesi getirir.
+- GET /GlobalCompany/{AliasType}/{GlobalUserType} - Mükellef listesi ZIP olarak dönülür
+- GET /GlobalCompany/Check/Name/{Name} - Ünvandan mükellef olup olmadığı sorgular.
+- GET /GlobalCompany/Check/TaxNumber/{TaxNumber} - Vergi numarasından mükellef olup olmadığı sorgular.
+- POST /GlobalCompany/GetGlobalCustomerInfo - Mükellef bilgisini liste halinde getirir.
+- GET /GlobalCompany/GetGlobalCustomerInfo/{TaxNumber} - Mükellef bilgisini getirir.
+- GET /GlobalCompany/Search/{searchText} - Mükellef listesi içerisinde arama yapar.
+- POST /Mailing/Email/Setting - Mail özelliğini değiştirir.
+- GET /Mailing/Setting - Mail ayarlarını getirir.
+- POST /Mailing/Sms/Setting/{IsActive} - Sms özelliğini değiştirir.
+- POST /Mailing/Whatsapp/Setting/{IsActive} - Whatsapp özelliğini değiştirir.
+- ... +7 more
+
+## einvoice (120)
+- DELETE /Draft - Taslak faturaları siler.
+- GET /Draft - Taslak faturaları listeler.
+- GET /Draft/{UUID}/html - Html dosyasını indirir.
+- GET /Draft/{UUID}/model - Model olarak indirir.
+- GET /Draft/{UUID}/pdf - Pdf dosyasını indirir.
+- GET /Draft/{UUID}/Tags - Taslak faturanın etiket bilgilerini getirir.
+- GET /Draft/{UUID}/Whatsapphistories - Whatsapp ın işlem geçmişini getirir.
+- GET /Draft/{UUID}/xml - XML dosyasını indirir.
+- POST /Draft/ConfirmAndSend - Taslak faturayı onaylayıp gönderir.
+- POST /Draft/Create - Taslak fatura oluşturur.
+- POST /Draft/CreateBulk - Toplu Taslak fatura oluşturur.
+- POST /Draft/EditAndSend - Taslak faturayı düzenleyerek gönderir.
+- POST /Draft/Export/{fileType} - Belgelerinizi toplu olarak dışarı aktarır.
+- PUT /Draft/Operation/{operationType} - Belgelere toplu olarak yeni durum atar.
+- PUT /Draft/SpecialCode - Taslak Faturaya özel kod ataması yapılır.
+- PUT /Draft/Tags - Taslak faturaya etiket atama yapılır.
+- POST /Draft/Whatsapp/Send - Taslak faturayı whatsapp üzerinden gönderir.
+- GET /Notification/Purchase - Alış faturaları için bildirim kurallarını listeler.
+- POST /Notification/Purchase - Alış faturası için bildirim kuralı oluşturur.
+- PUT /Notification/Purchase - Alış faturasına ait bildirim kuralını günceller.
+- DELETE /Notification/Purchase/{ID} - Alış faturasına ait bildirimi kuralını siler.
+- GET /Notification/Purchase/{ID} - Alış faturasına ait bildirim kuralını getirir.
+- GET /Notification/Sale - Satış faturasına ait bildirim kurallarını listeler.
+- POST /Notification/Sale - Satış faturasına ait bildirim kuralı oluşturur.
+- PUT /Notification/Sale - Satış faturasına ait bildirim kuralını günceller.
+- DELETE /Notification/Sale/{ID} - Satış faturasına ait bildirim kuralını siler.
+- GET /Notification/Sale/{ID} - Satış faturasına ait bildirim kuralını getirir.
+- GET /Old - Eski faturaları listeler.
+- POST /Old - Eski faturaları yükler.
+- GET /Old/{UUID}/html - Html dosyasını indirir.
+- GET /Old/{UUID}/pdf - Pdf dosyasını indirir.
+- GET /Old/{UUID}/xml - Xml dosyasını indirir.
+- POST /Old/Export/{fileType} - Faturaları toplu olarak dışarı aktarır.
+- PUT /Old/Operation/{operationType} - Faturalara toplu olarak yeni durum atar.
+- GET /Purchase - Gelen faturaları listeler.
+- GET /Purchase/{MessageId}/MailActivityhistories - Mail aktivitelerini getirir.
+- GET /Purchase/{UUID}/Attachments - Fatura eklerini getirir.
+- GET /Purchase/{UUID}/CheckFromGib - Faturayı Gib den kontrol eder.
+- POST /Purchase/{UUID}/CreateDraft - Gelen faturayı taslak olarak kaydeder.
+- POST /Purchase/{UUID}/CreateReturn - Gelen faturayı iade faturası olarak kaydeder.
+- ... +80 more
+
+## earchive (89)
+- DELETE /Draft - Taslak faturaları siler.
+- GET /Draft - Taslak faturaları listeler.
+- GET /Draft/{UUID}/html - Html dosyasını indirir.
+- GET /Draft/{UUID}/model - Model dosyasını indirir.
+- GET /Draft/{UUID}/pdf - Pdf dosyasını indirir.
+- GET /Draft/{UUID}/Tags - Taslak faturanın etiket bilgilerini getirir.
+- GET /Draft/{UUID}/Whatsapphistories - Whatsapp ın işlem geçmişini getirir.
+- GET /Draft/{UUID}/xml - XML dosyasını indirir.
+- POST /Draft/ConfirmAndSend - Taslak faturayı onaylayıp gönderir.
+- POST /Draft/Create - Taslak fatura oluşturur.
+- POST /Draft/CreateBulk - Toplu Taslak fatura oluşturur.
+- POST /Draft/EditAndSend - Taslak belgeyi düzenleyerek gönderir.
+- POST /Draft/Export/{fileType} - Belgelerinizi toplu olarak dışarı aktarır.
+- PUT /Draft/Operation/{operationType} - Belgelere toplu olarak yeni durum atar.
+- PUT /Draft/SpecialCode - Taslak E-Arşiv Faturaya özel kod ataması yapılır.
+- PUT /Draft/Tags - Taslak faturaya etiket atama yapılır.
+- POST /Draft/Whatsapp/Send - Taslak faturayı whatsapp üzerinden gönderir.
+- GET /Gib/Purchase - Gib E-Arşiv Faturalarını Getirir
+- GET /Invoices - Faturaları listeler.
+- GET /Invoices/{MessageId}/MailActivityhistories - Mail aktivitelerini getirir.
+- GET /Invoices/{UUID}/Attachments - Fatura eklerini getirir.
+- PUT /Invoices/{UUID}/Cancel - Faturayı iptal eder.
+- POST /Invoices/{UUID}/CreateDraft - Faturayı taslak olarak kaydeder.
+- GET /Invoices/{UUID}/DespatchInfo - Faturanın irsaliye bilgisini getirir.
+- GET /Invoices/{UUID}/Details - Faturanın detayını getirir.
+- GET /Invoices/{UUID}/Histories - Faturanın işlem geçmişini getirir.
+- GET /Invoices/{UUID}/html - Html dosyasını indirir.
+- GET /Invoices/{UUID}/Mailhistories - Mailin işlem geçmişini getirir.
+- GET /Invoices/{UUID}/pdf - Pdf dosyasını indirir.
+- PUT /Invoices/{UUID}/RevertCancel - Fatura iptal işlemini geri alır.
+- GET /Invoices/{UUID}/Smshistories - Sms işlem geçmişini getirir.
+- GET /Invoices/{UUID}/Status - E-Arşiv Faturanın durum bilgilerini getirir.
+- GET /Invoices/{UUID}/Tags - Faturanın etiket bilgilerini getirir.
+- GET /Invoices/{UUID}/Taxes - Faturanın vergilerini getirir.
+- GET /Invoices/{UUID}/Whatsapphistories - Whatsapp ın işlem geçmişini getirir.
+- GET /Invoices/{UUID}/xml - Xml dosyasını indirir.
+- POST /Invoices/Bulk/Draft - Giden faturaları toplu taslak oluşturur.
+- POST /Invoices/Email/Send - Faturayı mail üzerinden gönderir.
+- POST /Invoices/Export/{fileType} - Faturaları toplu olarak dışarı aktarır.
+- PUT /Invoices/Operation/{operationType} - Faturalara toplu olarak yeni durum atar.
+- ... +49 more
+
+## edespatch (129)
+- GET /AnswerSeries - Yanıt serilerini listeler.
+- POST /AnswerSeries - Yeni yanıt seri oluşturur.
+- PUT /AnswerSeries - Yanıt seriyi düzenler.
+- GET /AnswerSeries/{id} - Yanıt serinin detayını getirir.
+- GET /AnswerTemplates - Yanıt şablonlarını listeler.
+- PUT /AnswerTemplates - Yanıt şablonu günceller.
+- DELETE /AnswerTemplates/{id} - Yanıt şablonunu siler.
+- GET /AnswerTemplates/{id} - Yanıt şablonun detayını getirir.
+- GET /AnswerTemplates/Preview/{UUID} - Şablonu önizler.
+- DELETE /Draft - Taslak irsaliyeleri siler.
+- GET /Draft - Taslak irsaliyeleri listeler.
+- GET /Draft/{UUID}/html - Html dosyasını indirir.
+- GET /Draft/{UUID}/model - Model olarak indirir.
+- GET /Draft/{UUID}/pdf - Pdf dosyasını indirir.
+- GET /Draft/{UUID}/Tags - Taslak irsaliyenin etiket bilgilerini getirir.
+- GET /Draft/{UUID}/Whatsapphistories - Whatsapp ın işlem geçmişini getirir.
+- GET /Draft/{UUID}/xml - XML dosyasını indirir.
+- POST /Draft/ConfirmAndSend - Taslak irsaliyeyi onaylayıp gönderir.
+- POST /Draft/Create - Taslak irsaliye oluşturur.
+- POST /Draft/CreateBulk - Toplu taslak irsaliye oluşturur.
+- POST /Draft/EditAndSend - Taslak irsaliyeyi düzenleyerek gönderir.
+- POST /Draft/Export/{fileType} - Belgelerinizi toplu olarak dışarı aktarır.
+- PUT /Draft/Operation/{operationType} - Belgelere toplu olarak yeni durum atar.
+- PUT /Draft/SpecialCode - Taslak İrsaliyeye özel kod ataması yapılır.
+- PUT /Draft/Tags - Taslak irsaliye etiket atama yapılır.
+- POST /Draft/Whatsapp/Send - Taslak irsaliyeyi whatsapp üzerinden gönderir.
+- GET /Notification/Purchase - Alış irsaliyeleri için bildirim kurallarını listeler.
+- POST /Notification/Purchase - Alış irsaliyesi için bildirim kuralı oluşturur.
+- PUT /Notification/Purchase - Alış irsaliyesine ait bildirim kuralını günceller.
+- DELETE /Notification/Purchase/{ID} - Alış irsaliyesine ait bildirimi kuralını siler.
+- GET /Notification/Purchase/{ID} - Alış irsaliyesine ait bildirim kuralını getirir.
+- GET /Notification/Sale - Satış irsaliyesine ait bildirim kurallarını listeler.
+- POST /Notification/Sale - Satış irsaliyesine ait bildirim kuralı oluşturur.
+- PUT /Notification/Sale - Satış irsaliyesine ait bildirim kuralını günceller.
+- DELETE /Notification/Sale/{ID} - Satış irsaliyesine ait bildirim kuralını siler.
+- GET /Notification/Sale/{ID} - Satış irsaliyesine ait bildirim kuralını getirir.
+- GET /Old - Eski irsaliyeleri listeler.
+- POST /Old - Eski irsaliyeleri yükler.
+- GET /Old/{UUID}/html - Html dosyasını indirir.
+- GET /Old/{UUID}/pdf - Pdf dosyasını indirir.
+- ... +89 more
+
+## evoucher (77)
+- DELETE /Draft - Taslak makbuzları siler.
+- GET /Draft - Taslak makbuzları listeler.
+- GET /Draft/{UUID}/html - Html dosyasını indirir.
+- GET /Draft/{UUID}/model - Model dosyasını indirir.
+- GET /Draft/{UUID}/pdf - Pdf dosyasını indirir.
+- GET /Draft/{UUID}/Tags - Taslak makbuzun etiket bilgilerini getirir.
+- GET /Draft/{UUID}/Whatsapphistories - Whatsapp ın işlem geçmişini getirir.
+- GET /Draft/{UUID}/xml - XML dosyasını indirir.
+- POST /Draft/ConfirmAndSend - Taslak makbuzu onaylayıp gönderir.
+- POST /Draft/Create - Taslak makbuz oluşturur.
+- POST /Draft/CreateBulk - Toplu Taslak makbuz oluşturur.
+- POST /Draft/EditAndSend - Taslak belgeyi düzenleyerek gönderir.
+- POST /Draft/Export/{fileType} - Belgelerinizi toplu olarak dışarı aktarır.
+- PUT /Draft/Operation/{operationType} - Belgelere toplu olarak yeni durum atar.
+- PUT /Draft/SpecialCode - Taslak makbuza özel kod ataması yapılır.
+- PUT /Draft/Tags - Taslak belgelerinize etiket atama yapılır.
+- POST /Draft/Whatsapp/Send - Taslak makbuzu whatsapp üzerinden gönderir.
+- GET /Notification - E-SMM bildirim kurallarını listeler.
+- POST /Notification - E-SMM bildirim kuralı oluşturur.
+- PUT /Notification - E-SMM bildirimi kuralını günceller.
+- DELETE /Notification/{ID} - E-SMM bildirimi kuralını siler.
+- GET /Notification/{ID} - E-SMM bildirimi kuralını getirir.
+- GET /Report - Raporları getirir.
+- GET /Report/{UUID}/CheckFromGib - Rapor durumunu GİB den sorgular.
+- GET /Report/{UUID}/Histories - Rapor işlem geçmişini getirir.
+- GET /Report/{UUID}/xml - Rapor Xml dosyasını indirir.
+- GET /Report/List - Gönderilmiş rapor içerisindeki belgeleri listeler.
+- GET /Report/ToReport - Rapor oluşturulacak listeyi getirir.
+- POST /Send/Base64String - UBL-TR Xml ZIP formatındaki Makbuzun string Base64 değeri göndermek için bu uç kullanılır.
+- POST /Send/Base64String/Preview - Gönderilecek makbuzu ön izler.
+- POST /Send/Model - Makbuzu model olarak gönderir.
+- POST /Send/Model/Download - Ön izlenen makbuzu indirir.
+- POST /Send/Model/Preview - Gönderilecek makbuzu ön izler.
+- POST /Send/Report - Rapor gönderir.
+- POST /Send/Xml - Makbuzu UBL-TR Xml formatında zipli yada açık halde (Xml) olarak gönderir.
+- POST /Send/Xml/Preview - Gönderilecek makbuzu ön izler.
+- GET /Series - Serileri Listeler
+- POST /Series - Yeni seri oluşturur.
+- PUT /Series - Seriyi düzenler.
+- GET /Series/{id} - Serinin detayını getirir.
+- ... +37 more
+
+## eproducer (84)
+- DELETE /Draft - Taslak makbuzları siler.
+- GET /Draft - Taslak makbuzları listeler.
+- GET /Draft/{UUID}/html - Html dosyasını indirir.
+- GET /Draft/{UUID}/model - Model dosyasını indirir.
+- GET /Draft/{UUID}/pdf - Pdf dosyasını indirir.
+- GET /Draft/{UUID}/Tags - Taslak makbuzun etiket bilgilerini getirir.
+- GET /Draft/{UUID}/Whatsapphistories - Whatsapp ın işlem geçmişini getirir.
+- GET /Draft/{UUID}/xml - XML dosyasını indirir.
+- POST /Draft/ConfirmAndSend - Taslak makbuzu onaylayıp gönderir.
+- POST /Draft/Create - Taslak makbuz oluşturur.
+- POST /Draft/CreateBulk - Toplu Taslak makbuz oluşturur.
+- POST /Draft/EditAndSend - Taslak belgeyi düzenleyerek gönderir.
+- POST /Draft/Export/{fileType} - Belgelerinizi toplu olarak dışarı aktarır.
+- PUT /Draft/Operation/{operationType} - Belgelere toplu olarak yeni durum atar.
+- PUT /Draft/SpecialCode - Taslak makbuza özel kod ataması yapılır.
+- PUT /Draft/Tags - Taslak makbuza etiket atama yapılır.
+- POST /Draft/Whatsapp/Send - Taslak makbuzu whatsapp üzerinden gönderir.
+- GET /Notification - Makbuz bildirim kurallarını listeler.
+- POST /Notification - Makbuz bildirim kuralı oluşturur.
+- PUT /Notification - Makbuz bildirimi kuralını günceller.
+- DELETE /Notification/{ID} - Makbuz bildirimi kuralını siler.
+- GET /Notification/{ID} - Makbuz bildirimi kuralını getirir.
+- GET /Old - Eski makbuzları listeler.
+- POST /Old - Eski makbuzları yükler.
+- GET /Old/{UUID}/html - Html dosyasını indirir.
+- GET /Old/{UUID}/pdf - Pdf dosyasını indirir.
+- GET /Old/{UUID}/xml - Xml dosyasını indirir.
+- POST /Old/Export/{fileType} - Makbuzları toplu olarak dışarı aktarır.
+- PUT /Old/Operation/{operationType} - Makbuzlara toplu olarak yeni durum atar.
+- GET /Producers - Makbuzları listeler.
+- GET /Producers/{MessageId}/MailActivityhistories - Mail aktivitelerini getirir.
+- PUT /Producers/{UUID}/Cancel - Makbuzu iptal eder.
+- POST /Producers/{UUID}/CreateDraft - Makbuzu taslak olarak kaydeder.
+- GET /Producers/{UUID}/Details - Makbuzun detayını getirir.
+- GET /Producers/{UUID}/Histories - Makbuzun işlem geçmişini getirir.
+- GET /Producers/{UUID}/html - Html dosyasını indirir.
+- GET /Producers/{UUID}/Mailhistories - Mailin işlem geçmişini getirir.
+- GET /Producers/{UUID}/pdf - Pdf dosyasını indirir.
+- PUT /Producers/{UUID}/RevertCancel - Makbuz iptal işlemini geri alır.
+- GET /Producers/{UUID}/Smshistories - Sms işlem geçmişini getirir.
+- ... +44 more
+
+## eledger (72)
+- DELETE /Accountants - Muhasebeci silinir.
+- GET /Accountants - Firmaya atanmış muhasebeci listesini getirir.
+- POST /Accountants - Muhasebeci eklenir.
+- PUT /Accountants - Muhasebeci bilgileri düzenlenir.
+- GET /Companies/Accounting - Firmaya kayıtlı müşavirin bilgilerini getirir.
+- GET /Companies/Erp - Firmaya tanımlı ERP listesi getirilir.
+- GET /Companies/Erp/Parameters/{CompanyErpID} - Firmaya tanımlı ERP parametreleri getirilir.
+- GET /Companies/Query - Firma defter sorguları getirilir.
+- DELETE /Documents - Defteri Siler
+- GET /Documents - Defterleri Getirir.
+- GET /Documents/Account/{Year} - Defter yıla göre toplam borç alacak sayısını getirir
+- GET /Documents/AllBranch/Download - Firma ve tüm alt şubelerinin ilgili yıl ve aydaki defterlerini indirir.
+- GET /Documents/Check - .
+- GET /Documents/Detail - Defter Detaylarını Getirir.
+- POST /Documents/Download - UUID List alarak defteri indirir.
+- GET /Documents/Download/File - İlgili Yıl ve Aydaki Csv Dosyasını İndirir.
+- DELETE /Documents/EntryNumbers - Yüklenen eski defterleri siler.
+- GET /Documents/EntryNumbers - İlgili Yıldaki Defter Numaralarını Getirir.
+- POST /Documents/EntryNumbers - Eski defterleri yükler.
+- GET /Documents/History/{UUID} - Defter geçmişini getirir.
+- GET /Documents/Html - Defteri Görüntüler.
+- DELETE /Documents/Inventory - Envanter Defterini Siler
+- GET /Documents/Inventory - Envater Defterlerini Getirir.
+- GET /Documents/Inventory/Check - .
+- POST /Documents/Inventory/Download/{UUID} - İlgili envanter defterini tekil olarak indirir.
+- GET /Documents/Inventory/Download/Year - İlgili envanter defterini toplu olarak indirir.
+- GET /Documents/Inventory/Html - Envanter Defterini Önizler
+- GET /Documents/Inventory/Schematron - Envanter Defterine şema/şematron kontrolü uygulanır.
+- GET /Documents/Period/Download - İlgili Yıl ve Aydaki Defterleri İndirir.
+- POST /Documents/Period/Download/Bulk - Defterleri toplu olarak indirir.
+- POST /Documents/Schematron - Deftere şema/şematron kontrolü uygulanır.
+- POST /Documents/Update/Status/{UUID} - Defter statusunu başarılı yapar.
+- GET /Documents/Year/Download - İlgili Yıldaki Tüm Defterleri İndirir.
+- PUT /EntryLocked - Fiş kilitlendikten sonra update ve create atılır.
+- GET /EntryLocked/Control - Fiş kilitleme için kontroller başlatılır.
+- GET /Erp - ERP listesi getirilir.
+- GET /Gib/Inventory/Receive - GİB onaylı envanter beratını getirir.
+- POST /Gib/Inventory/ReSend - Hatalı ve tekrar gönderilmesi gereken envanter defterleri gönderilir.
+- POST /Gib/Inventory/Send - envanter defteri gibe gönderilir.
+- GET /Gib/Receive - GİB onaylı beratları getirir.
+- ... +32 more
+
+## einsurance (76)
+- DELETE /Draft - Taslak E-SKGB siler.
+- GET /Draft - Taslak belgeleri listeler.
+- GET /Draft/{UUID}/html - Html dosyasını indirir.
+- GET /Draft/{UUID}/model - Model dosyasını indirir.
+- GET /Draft/{UUID}/pdf - Pdf dosyasını indirir.
+- GET /Draft/{UUID}/Tags - Taslak E-SKGB etiket bilgilerini getirir.
+- GET /Draft/{UUID}/Whatsapphistories - Whatsapp ın işlem geçmişini getirir.
+- GET /Draft/{UUID}/xml - XML dosyasını indirir.
+- POST /Draft/ConfirmAndSend - Taslak E-SKGB onaylayıp gönderir.
+- POST /Draft/Create
+- POST /Draft/CreateBulk - Toplu Taslak E-SKGB oluşturur.
+- POST /Draft/EditAndSend - Taslak E-SKGB düzenleyerek gönderir.
+- POST /Draft/Export/{fileType} - Belgelerinizi toplu olarak dışarı aktarır.
+- PUT /Draft/Operation/{operationType} - Belgelere toplu olarak yeni durum atar.
+- PUT /Draft/SpecialCode - Taslak E-SKGB özel kod ataması yapılır.
+- PUT /Draft/Tags - Taslak E-SKGB etiket atama yapılır.
+- POST /Draft/Whatsapp/Send - Taslak E-SKGB whatsapp üzerinden gönderir.
+- GET /Insurances - SKG Belgelerini listeler.
+- GET /Insurances/{MessageId}/MailActivityhistories - Mail aktivitelerini getirir.
+- PUT /Insurances/{UUID}/Cancel - SKG Belgesini iptal eder.
+- POST /Insurances/{UUID}/CreateDraft - SKG Belgesini taslak olarak kaydeder.
+- GET /Insurances/{UUID}/Details - SKG detayını getirir.
+- GET /Insurances/{UUID}/Histories - SKG işlem geçmişini getirir.
+- GET /Insurances/{UUID}/html - Html dosyasını indirir.
+- GET /Insurances/{UUID}/Mailhistories - Mailin işlem geçmişini getirir.
+- GET /Insurances/{UUID}/pdf - Pdf dosyasını indirir.
+- PUT /Insurances/{UUID}/RevertCancel - SKG iptal işlemini geri alır.
+- GET /Insurances/{UUID}/Smshistories - Sms işlem geçmişini getirir.
+- GET /Insurances/{UUID}/Status - SKG Belgesinin durum bilgilerini getirir.
+- GET /Insurances/{UUID}/Tags - SKG Belgesinin etiket bilgilerini getirir.
+- GET /Insurances/{UUID}/Whatsapphistories - Whatsapp işlem geçmişini getirir.
+- GET /Insurances/{UUID}/xml - Xml dosyasını indirir.
+- POST /Insurances/Email/Send - SKG Belgesini mail üzerinden gönderir.
+- POST /Insurances/Export/{fileType} - SKGları toplu olarak dışarı aktarır.
+- PUT /Insurances/Operation/{operationType} - SKGlara toplu olarak yeni durum atar.
+- POST /Insurances/Sms/Send - SKG Belgesini sms üzerinden gönderir.
+- PUT /Insurances/SpecialCode - SKG Belgesine özel kod ataması yapılır.
+- PUT /Insurances/Tags - SKG Belgesine etiket atama yapılır.
+- POST /Insurances/Whatsapp/Send - SKG Belgesini whatsapp üzerinden gönderir.
+- GET /Notification - SKGB bildirim kurallarını listeler.
+- ... +36 more

@@ -1,0 +1,7010 @@
+{
+  "generatedAt": "2026-03-15T01:37:04.598Z",
+  "source": "https://apitest.nilvera.com/{service}/swagger/v1/swagger.json",
+  "services": {
+    "general": {
+      "service": "general",
+      "title": "General API",
+      "version": "v1",
+      "endpointCount": 47,
+      "endpoints": [
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Alerts",
+          "operationId": "",
+          "summary": "Uyarı mesajlarını getirir.",
+          "tags": [
+            "Alerts"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Campaigns",
+          "operationId": "",
+          "summary": "Kampanyaları getirir.",
+          "tags": [
+            "Campaigns"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Company",
+          "operationId": "",
+          "summary": "Firma bilgilerini getirir.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "PUT",
+          "path": "/Company",
+          "operationId": "",
+          "summary": "Firma bilgilerini günceller.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Company/Certificate",
+          "operationId": "",
+          "summary": "Firma sertifikalarını getirir.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/Company/Certificate",
+          "operationId": "",
+          "summary": "Firmaya sertifika ekler.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "PUT",
+          "path": "/Company/Certificate",
+          "operationId": "",
+          "summary": "Firma sertifikasını günceller.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "DELETE",
+          "path": "/Company/Certificate/{ID}",
+          "operationId": "",
+          "summary": "Firma sertifikasını siler.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Company/Certificate/{SerialNumber}",
+          "operationId": "",
+          "summary": "Seri numarasına göre sertifika getirilir.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Company/List",
+          "operationId": "",
+          "summary": "Kullanıcıya tanımlı firmaları getirir.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Company/Modules",
+          "operationId": "",
+          "summary": "Firma modüllerini getirir.",
+          "tags": [
+            "Company"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/CompanyDocuments",
+          "operationId": "",
+          "summary": "Firma döküman bilgilerini listeler.",
+          "tags": [
+            "CompanyDocuments"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/CompanyDocuments",
+          "operationId": "",
+          "summary": "Firmaya yeni döküman ekler.",
+          "tags": [
+            "CompanyDocuments"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "DELETE",
+          "path": "/CompanyDocuments/{ID}",
+          "operationId": "",
+          "summary": "Firmaya eklenen dökümanı siler.",
+          "tags": [
+            "CompanyDocuments"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/CompanyIdentification",
+          "operationId": "",
+          "summary": "Firma kimlik bilgilerini listeler.",
+          "tags": [
+            "CompanyIdentification"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/CompanyIdentification",
+          "operationId": "",
+          "summary": "Firmaya yeni kimlik bilgisi ekler.",
+          "tags": [
+            "CompanyIdentification"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "DELETE",
+          "path": "/CompanyIdentification/{ID}",
+          "operationId": "",
+          "summary": "Firmadan kimlik bilgisi siler.",
+          "tags": [
+            "CompanyIdentification"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Credits",
+          "operationId": "",
+          "summary": "Kredi bilgisi getirir.",
+          "tags": [
+            "Credits"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Customers",
+          "operationId": "",
+          "summary": "Müşteri listeler.",
+          "tags": [
+            "Customers"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/Customers",
+          "operationId": "",
+          "summary": "Müşteri ekler.",
+          "tags": [
+            "Customers"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "PUT",
+          "path": "/Customers",
+          "operationId": "",
+          "summary": "Müşteri günceller.",
+          "tags": [
+            "Customers"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "DELETE",
+          "path": "/Customers/{ID}",
+          "operationId": "",
+          "summary": "Müşteri Siler.",
+          "tags": [
+            "Customers"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Customers/{ID}",
+          "operationId": "",
+          "summary": "Müşteri Bilgisini Getirir.",
+          "tags": [
+            "Customers"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "DELETE",
+          "path": "/Customers/Bulk",
+          "operationId": "",
+          "summary": "Müşteri Toplu Siler.",
+          "tags": [
+            "Customers"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Customers/GetCustomerInfo/{TaxNumber}",
+          "operationId": "",
+          "summary": "Vergi Kimlik Numarası İle Müşteri Bilgisini Getirir.",
+          "tags": [
+            "Customers"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Customers/Search/{searchText}",
+          "operationId": "",
+          "summary": "Müşteri Arar.",
+          "tags": [
+            "Customers"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/ExchangeRate",
+          "operationId": "",
+          "summary": "Döviz kurlarını getirir.",
+          "tags": [
+            "ExchangeRate"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/GibEArchiveAccount",
+          "operationId": "",
+          "summary": "Gib kullanıcı adı ve parola getirir.",
+          "tags": [
+            "GibEArchiveAccount"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "PUT",
+          "path": "/GibEArchiveAccount",
+          "operationId": "",
+          "summary": "Gib kullanıcı adı ve parola günceller.",
+          "tags": [
+            "GibEArchiveAccount"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/GlobalCompany",
+          "operationId": "",
+          "summary": "Mükellef listesi getirir.",
+          "tags": [
+            "GlobalCompany"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/GlobalCompany/{AliasType}/{GlobalUserType}",
+          "operationId": "",
+          "summary": "Mükellef listesi ZIP olarak dönülür",
+          "tags": [
+            "GlobalCompany"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/GlobalCompany/Check/Name/{Name}",
+          "operationId": "",
+          "summary": "Ünvandan mükellef olup olmadığı sorgular.",
+          "tags": [
+            "GlobalCompany"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/GlobalCompany/Check/TaxNumber/{TaxNumber}",
+          "operationId": "",
+          "summary": "Vergi numarasından mükellef olup olmadığı sorgular.",
+          "tags": [
+            "GlobalCompany"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/GlobalCompany/GetGlobalCustomerInfo",
+          "operationId": "",
+          "summary": "Mükellef bilgisini liste halinde getirir.",
+          "tags": [
+            "GlobalCompany"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/GlobalCompany/GetGlobalCustomerInfo/{TaxNumber}",
+          "operationId": "",
+          "summary": "Mükellef bilgisini getirir.",
+          "tags": [
+            "GlobalCompany"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/GlobalCompany/Search/{searchText}",
+          "operationId": "",
+          "summary": "Mükellef listesi içerisinde arama yapar.",
+          "tags": [
+            "GlobalCompany"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/Mailing/Email/Setting",
+          "operationId": "",
+          "summary": "Mail özelliğini değiştirir.",
+          "tags": [
+            "Mailing"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Mailing/Setting",
+          "operationId": "",
+          "summary": "Mail ayarlarını getirir.",
+          "tags": [
+            "Mailing"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/Mailing/Sms/Setting/{IsActive}",
+          "operationId": "",
+          "summary": "Sms özelliğini değiştirir.",
+          "tags": [
+            "Mailing"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/Mailing/Whatsapp/Setting/{IsActive}",
+          "operationId": "",
+          "summary": "Whatsapp özelliğini değiştirir.",
+          "tags": [
+            "Mailing"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Stocks",
+          "operationId": "",
+          "summary": "Stokları getirir.",
+          "tags": [
+            "Stocks"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "POST",
+          "path": "/Stocks",
+          "operationId": "",
+          "summary": "Stok ekler.",
+          "tags": [
+            "Stocks"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "PUT",
+          "path": "/Stocks",
+          "operationId": "",
+          "summary": "Stok Günceller.",
+          "tags": [
+            "Stocks"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "DELETE",
+          "path": "/Stocks/{ID}",
+          "operationId": "",
+          "summary": "Stok siler.",
+          "tags": [
+            "Stocks"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Stocks/{ID}",
+          "operationId": "",
+          "summary": "Stok Getirir.",
+          "tags": [
+            "Stocks"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "DELETE",
+          "path": "/Stocks/Bulk",
+          "operationId": "",
+          "summary": "Stokları Toplu Siler.",
+          "tags": [
+            "Stocks"
+          ]
+        },
+        {
+          "service": "general",
+          "method": "GET",
+          "path": "/Stocks/SearchStock/{searchText}",
+          "operationId": "",
+          "summary": "Stok arar.",
+          "tags": [
+            "Stocks"
+          ]
+        }
+      ]
+    },
+    "einvoice": {
+      "service": "einvoice",
+      "title": "E-Invoice API",
+      "version": "v1",
+      "endpointCount": 120,
+      "endpoints": [
+        {
+          "service": "einvoice",
+          "method": "DELETE",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak faturaları siler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak faturaları listeler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Draft/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Draft/{UUID}/model",
+          "operationId": "",
+          "summary": "Model olarak indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Draft/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Taslak faturanın etiket bilgilerini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Draft/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Draft/ConfirmAndSend",
+          "operationId": "",
+          "summary": "Taslak faturayı onaylayıp gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Draft/Create",
+          "operationId": "",
+          "summary": "Taslak fatura oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Draft/CreateBulk",
+          "operationId": "",
+          "summary": "Toplu Taslak fatura oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Draft/EditAndSend",
+          "operationId": "",
+          "summary": "Taslak faturayı düzenleyerek gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Draft/Export/{fileType}",
+          "operationId": "",
+          "summary": "Belgelerinizi toplu olarak dışarı aktarır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Draft/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Belgelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Draft/SpecialCode",
+          "operationId": "",
+          "summary": "Taslak Faturaya özel kod ataması yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Draft/Tags",
+          "operationId": "",
+          "summary": "Taslak faturaya etiket atama yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Draft/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Taslak faturayı whatsapp üzerinden gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Notification/Purchase",
+          "operationId": "",
+          "summary": "Alış faturaları için bildirim kurallarını listeler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Notification/Purchase",
+          "operationId": "",
+          "summary": "Alış faturası için bildirim kuralı oluşturur.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Notification/Purchase",
+          "operationId": "",
+          "summary": "Alış faturasına ait bildirim kuralını günceller.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "DELETE",
+          "path": "/Notification/Purchase/{ID}",
+          "operationId": "",
+          "summary": "Alış faturasına ait bildirimi kuralını siler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Notification/Purchase/{ID}",
+          "operationId": "",
+          "summary": "Alış faturasına ait bildirim kuralını getirir.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Notification/Sale",
+          "operationId": "",
+          "summary": "Satış faturasına ait bildirim kurallarını listeler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Notification/Sale",
+          "operationId": "",
+          "summary": "Satış faturasına ait bildirim kuralı oluşturur.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Notification/Sale",
+          "operationId": "",
+          "summary": "Satış faturasına ait bildirim kuralını günceller.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "DELETE",
+          "path": "/Notification/Sale/{ID}",
+          "operationId": "",
+          "summary": "Satış faturasına ait bildirim kuralını siler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Notification/Sale/{ID}",
+          "operationId": "",
+          "summary": "Satış faturasına ait bildirim kuralını getirir.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Old",
+          "operationId": "",
+          "summary": "Eski faturaları listeler.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Old",
+          "operationId": "",
+          "summary": "Eski faturaları yükler.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Old/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Old/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Old/{UUID}/xml",
+          "operationId": "",
+          "summary": "Xml dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Old/Export/{fileType}",
+          "operationId": "",
+          "summary": "Faturaları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Old/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Faturalara toplu olarak yeni durum atar.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase",
+          "operationId": "",
+          "summary": "Gelen faturaları listeler.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{MessageId}/MailActivityhistories",
+          "operationId": "",
+          "summary": "Mail aktivitelerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Attachments",
+          "operationId": "",
+          "summary": "Fatura eklerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/CheckFromGib",
+          "operationId": "",
+          "summary": "Faturayı Gib den kontrol eder.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Purchase/{UUID}/CreateDraft",
+          "operationId": "",
+          "summary": "Gelen faturayı taslak olarak kaydeder.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Purchase/{UUID}/CreateReturn",
+          "operationId": "",
+          "summary": "Gelen faturayı iade faturası olarak kaydeder.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/DespatchInfo",
+          "operationId": "",
+          "summary": "Faturanın irsaliye bilgisini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Details",
+          "operationId": "",
+          "summary": "Faturanın detayını getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/EnvelopeInfo",
+          "operationId": "",
+          "summary": "Faturaya ait ETTN numarası ile Zarf bilgilerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Faturanın işlem geçmişini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Mailhistories",
+          "operationId": "",
+          "summary": "Mailin işlem geçmişini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/RejectedNote",
+          "operationId": "",
+          "summary": "Faturanın red cevabını getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Smshistories",
+          "operationId": "",
+          "summary": "Sms işlem geçmişini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Status",
+          "operationId": "",
+          "summary": "Faturanın statü bilgilerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Faturanın etiket bilgilerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Taxes",
+          "operationId": "",
+          "summary": "Faturanın vergilerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Purchase/Email/Send",
+          "operationId": "",
+          "summary": "Faturayı mail olarak gönderir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Purchase/Export/{fileType}",
+          "operationId": "",
+          "summary": "Faturaları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Purchase/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Faturalara toplu olarak yeni durum atar.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Purchase/SendAnswer",
+          "operationId": "",
+          "summary": "Faturaya yanıt verir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Purchase/Sms/Send",
+          "operationId": "",
+          "summary": "Faturayı sms olarak gönderir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Purchase/SpecialCode",
+          "operationId": "",
+          "summary": "Faturaya özel kod ataması yapılır.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Purchase/Tags",
+          "operationId": "",
+          "summary": "Faturaya etiket atama yapılır.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Purchase/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Faturayı whatsapp üzerinden gönderir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale",
+          "operationId": "",
+          "summary": "Giden faturaları listeler.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{MessageId}/MailActivityhistories",
+          "operationId": "",
+          "summary": "Mail aktivitelerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Attachments",
+          "operationId": "",
+          "summary": "Fatura eklerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/CheckFromGib",
+          "operationId": "",
+          "summary": "Faturayı Gib den kontrol eder.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/CheckFromGtb",
+          "operationId": "",
+          "summary": "Faturayı Gtb den kontrol eder.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Sale/{UUID}/CreateDraft",
+          "operationId": "",
+          "summary": "Giden faturayı taslak olarak kaydeder.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/DespatchInfo",
+          "operationId": "",
+          "summary": "Faturanın irsaliye bilgisini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Details",
+          "operationId": "",
+          "summary": "Faturanın detayını getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/EnvelopeInfo",
+          "operationId": "",
+          "summary": "Faturaya ait ETTN numarası ile Zarf bilgilerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Faturanın işlem geçmişini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Mailhistories",
+          "operationId": "",
+          "summary": "Mailin işlem geçmişini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/RejectedNote",
+          "operationId": "",
+          "summary": "Faturanın red cevabını getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Smshistories",
+          "operationId": "",
+          "summary": "Sms işlem geçmişini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Status",
+          "operationId": "",
+          "summary": "Faturanın durumunu getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Faturanın etiket bilgilerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Taxes",
+          "operationId": "",
+          "summary": "Faturanın vergilerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Sale/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Sale/Bulk/Draft",
+          "operationId": "",
+          "summary": "Giden faturaları toplu taslak oluşturur.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Sale/Email/Send",
+          "operationId": "",
+          "summary": "Faturayı mail olarak gönderir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Sale/Export/{fileType}",
+          "operationId": "",
+          "summary": "Faturaları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Sale/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Faturalara toplu olarak yeni durum atar.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Sale/Sms/Send",
+          "operationId": "",
+          "summary": "Faturayı sms olarak gönderir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Sale/SpecialCode",
+          "operationId": "",
+          "summary": "Faturaya özel kod ataması yapılır.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Sale/Tags",
+          "operationId": "",
+          "summary": "Faturaya etiket atama yapılır.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Sale/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Faturayı whatsapp olarak gönderir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Send/Base64String",
+          "operationId": "",
+          "summary": "UBL-TR Xml formatındaki faturanın zip halindeki string Base64 değeri göndermek için bu uç kullanılır.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Send/Base64String/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek faturayı ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Send/Model",
+          "operationId": "",
+          "summary": "Faturayı model olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Send/Model/Download",
+          "operationId": "",
+          "summary": "Ön izlenen faturayı xml olarak indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Send/Model/Download/Pdf",
+          "operationId": "",
+          "summary": "Ön izlenen faturayı pdf olarak indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Send/Model/Preview",
+          "operationId": "",
+          "summary": "Model olarak Gönderilecek faturayı ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Send/Xml",
+          "operationId": "",
+          "summary": "Faturayı UBL-TR Xml formatında zipli yada açık halde (Xml) olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Send/Xml/Preview",
+          "operationId": "",
+          "summary": "Xml olarak Gönderilecek faturayı ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Serileri Listeler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Yeni seri oluşturur.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Seriyi düzenler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Series/{id}",
+          "operationId": "",
+          "summary": "Serinin detayını getirir.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Statistics/Purchase",
+          "operationId": "",
+          "summary": "Gelen faturalarının istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Statistics/Purchase/Daily",
+          "operationId": "",
+          "summary": "Gelen faturalarının günlük istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Statistics/Purchase/Last",
+          "operationId": "",
+          "summary": "Gelen faturaların son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Statistics/Sale",
+          "operationId": "",
+          "summary": "Giden faturalarının istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Statistics/Sale/Daily",
+          "operationId": "",
+          "summary": "Giden faturalarının günlük istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Statistics/Sale/Last",
+          "operationId": "",
+          "summary": "Giden faturaların son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket listesini getirir.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket oluşturur.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket günceller.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "DELETE",
+          "path": "/Tags/{UUID}",
+          "operationId": "",
+          "summary": "Etiket silinir",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonları listeler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonu günceller.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "DELETE",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonu siler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonun detayını getirir.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "GET",
+          "path": "/Templates/Preview/{UUID}",
+          "operationId": "",
+          "summary": "Şablonu önizler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Upload",
+          "operationId": "",
+          "summary": "Taslaklara xml olarak fatura yükler.",
+          "tags": [
+            "Upload"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "PUT",
+          "path": "/Upload/{UUID}",
+          "operationId": "",
+          "summary": "Taslaklara yüklenen faturayı günceller.",
+          "tags": [
+            "Upload"
+          ]
+        },
+        {
+          "service": "einvoice",
+          "method": "POST",
+          "path": "/Upload/Sgk",
+          "operationId": "",
+          "summary": "Taslaklara SGK faturası için pdf olarak dosya yükler.",
+          "tags": [
+            "Upload"
+          ]
+        }
+      ]
+    },
+    "earchive": {
+      "service": "earchive",
+      "title": "E-Archive API",
+      "version": "v1",
+      "endpointCount": 89,
+      "endpoints": [
+        {
+          "service": "earchive",
+          "method": "DELETE",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak faturaları siler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak faturaları listeler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Draft/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Draft/{UUID}/model",
+          "operationId": "",
+          "summary": "Model dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Draft/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Taslak faturanın etiket bilgilerini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Draft/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Draft/ConfirmAndSend",
+          "operationId": "",
+          "summary": "Taslak faturayı onaylayıp gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Draft/Create",
+          "operationId": "",
+          "summary": "Taslak fatura oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Draft/CreateBulk",
+          "operationId": "",
+          "summary": "Toplu Taslak fatura oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Draft/EditAndSend",
+          "operationId": "",
+          "summary": "Taslak belgeyi düzenleyerek gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Draft/Export/{fileType}",
+          "operationId": "",
+          "summary": "Belgelerinizi toplu olarak dışarı aktarır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Draft/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Belgelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Draft/SpecialCode",
+          "operationId": "",
+          "summary": "Taslak E-Arşiv Faturaya özel kod ataması yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Draft/Tags",
+          "operationId": "",
+          "summary": "Taslak faturaya etiket atama yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Draft/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Taslak faturayı whatsapp üzerinden gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Gib/Purchase",
+          "operationId": "",
+          "summary": "Gib E-Arşiv Faturalarını Getirir",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices",
+          "operationId": "",
+          "summary": "Faturaları listeler.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{MessageId}/MailActivityhistories",
+          "operationId": "",
+          "summary": "Mail aktivitelerini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Attachments",
+          "operationId": "",
+          "summary": "Fatura eklerini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Invoices/{UUID}/Cancel",
+          "operationId": "",
+          "summary": "Faturayı iptal eder.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Invoices/{UUID}/CreateDraft",
+          "operationId": "",
+          "summary": "Faturayı taslak olarak kaydeder.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/DespatchInfo",
+          "operationId": "",
+          "summary": "Faturanın irsaliye bilgisini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Details",
+          "operationId": "",
+          "summary": "Faturanın detayını getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Faturanın işlem geçmişini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Mailhistories",
+          "operationId": "",
+          "summary": "Mailin işlem geçmişini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Invoices/{UUID}/RevertCancel",
+          "operationId": "",
+          "summary": "Fatura iptal işlemini geri alır.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Smshistories",
+          "operationId": "",
+          "summary": "Sms işlem geçmişini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Status",
+          "operationId": "",
+          "summary": "E-Arşiv Faturanın durum bilgilerini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Faturanın etiket bilgilerini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Taxes",
+          "operationId": "",
+          "summary": "Faturanın vergilerini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Invoices/{UUID}/xml",
+          "operationId": "",
+          "summary": "Xml dosyasını indirir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Invoices/Bulk/Draft",
+          "operationId": "",
+          "summary": "Giden faturaları toplu taslak oluşturur.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Invoices/Email/Send",
+          "operationId": "",
+          "summary": "Faturayı mail üzerinden gönderir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Invoices/Export/{fileType}",
+          "operationId": "",
+          "summary": "Faturaları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Invoices/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Faturalara toplu olarak yeni durum atar.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Invoices/Sms/Send",
+          "operationId": "",
+          "summary": "Faturayı sms üzerinden gönderir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Invoices/SpecialCode",
+          "operationId": "",
+          "summary": "E-Arşiv Faturaya özel kod ataması yapılır.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Invoices/Tags",
+          "operationId": "",
+          "summary": "Faturaya etiket atama yapılır.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Invoices/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Faturayı whatsapp üzerinden gönderir.",
+          "tags": [
+            "Invoices"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "E-Arşiv bildirim kurallarını listeler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "E-Arşiv bildirim kuralı oluşturur.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "E-Arşiv bildirimi kuralını günceller.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "DELETE",
+          "path": "/Notification/{ID}",
+          "operationId": "",
+          "summary": "E-Arşiv bildirimi kuralını siler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Notification/{ID}",
+          "operationId": "",
+          "summary": "E-Arşiv bildirimi kuralını getirir.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Old",
+          "operationId": "",
+          "summary": "Eski faturaları listeler.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Old",
+          "operationId": "",
+          "summary": "Eski faturaları yükler.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Old/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Old/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Old/{UUID}/xml",
+          "operationId": "",
+          "summary": "Xml dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Old/Export/{fileType}",
+          "operationId": "",
+          "summary": "Faturaları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Old/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Faturalara toplu olarak yeni durum atar.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Report",
+          "operationId": "",
+          "summary": "Raporları getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Report/{UUID}/CheckFromGib",
+          "operationId": "",
+          "summary": "Rapor durumunu GİB den sorgular.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Report/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Rapor işlem geçmişini getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Report/{UUID}/xml",
+          "operationId": "",
+          "summary": "Rapor Xml dosyasını indirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Report/List",
+          "operationId": "",
+          "summary": "Gönderilmiş rapor içerisindeki belgeleri listeler.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Report/ToReport",
+          "operationId": "",
+          "summary": "Rapor oluşturulacak listeyi getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Base64String",
+          "operationId": "",
+          "summary": "UBL-TR Xml formatındaki faturanın zip halindeki string Base64 değeri göndermek için bu uç kullanılır.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Base64String/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek faturayı ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Model",
+          "operationId": "",
+          "summary": "Faturayı model olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Model/Download",
+          "operationId": "",
+          "summary": "Ön izlenen faturayı xml olarak indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Model/Download/Pdf",
+          "operationId": "",
+          "summary": "Ön izlenen faturayı pdf olarak indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Model/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek faturayı ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Report",
+          "operationId": "",
+          "summary": "Rapor gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Xml",
+          "operationId": "",
+          "summary": "Faturayı UBL-TR Xml formatında zipli yada açık halde (Xml) olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Send/Xml/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek faturayı ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Serileri Listeler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Yeni seri oluşturur.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Seriyi düzenler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Series/{id}",
+          "operationId": "",
+          "summary": "Serinin detayını getirir.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Statistics",
+          "operationId": "",
+          "summary": "Faturalarının istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Statistics/Daily",
+          "operationId": "",
+          "summary": "Giden e-arşiv faturaların günlük istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Statistics/Last",
+          "operationId": "",
+          "summary": "Faturaların son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket listesini getirir.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket oluşturur.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket günceller.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "DELETE",
+          "path": "/Tags/{UUID}",
+          "operationId": "",
+          "summary": "Etiket silinir",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonları listeler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonu günceller.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "DELETE",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonu siler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonun detayını getirir.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "GET",
+          "path": "/Templates/Preview/{UUID}",
+          "operationId": "",
+          "summary": "Şablonu önizler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "POST",
+          "path": "/Upload",
+          "operationId": "",
+          "summary": "Taslaklara xml olarak fatura yükler.",
+          "tags": [
+            "Upload"
+          ]
+        },
+        {
+          "service": "earchive",
+          "method": "PUT",
+          "path": "/Upload/{UUID}",
+          "operationId": "",
+          "summary": "Taslaklara yüklenen faturayı günceller.",
+          "tags": [
+            "Upload"
+          ]
+        }
+      ]
+    },
+    "edespatch": {
+      "service": "edespatch",
+      "title": "E-Despatch API",
+      "version": "v1",
+      "endpointCount": 129,
+      "endpoints": [
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/AnswerSeries",
+          "operationId": "",
+          "summary": "Yanıt serilerini listeler.",
+          "tags": [
+            "AnswerSeries"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/AnswerSeries",
+          "operationId": "",
+          "summary": "Yeni yanıt seri oluşturur.",
+          "tags": [
+            "AnswerSeries"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/AnswerSeries",
+          "operationId": "",
+          "summary": "Yanıt seriyi düzenler.",
+          "tags": [
+            "AnswerSeries"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/AnswerSeries/{id}",
+          "operationId": "",
+          "summary": "Yanıt serinin detayını getirir.",
+          "tags": [
+            "AnswerSeries"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/AnswerTemplates",
+          "operationId": "",
+          "summary": "Yanıt şablonlarını listeler.",
+          "tags": [
+            "AnswerTemplates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/AnswerTemplates",
+          "operationId": "",
+          "summary": "Yanıt şablonu günceller.",
+          "tags": [
+            "AnswerTemplates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "DELETE",
+          "path": "/AnswerTemplates/{id}",
+          "operationId": "",
+          "summary": "Yanıt şablonunu siler.",
+          "tags": [
+            "AnswerTemplates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/AnswerTemplates/{id}",
+          "operationId": "",
+          "summary": "Yanıt şablonun detayını getirir.",
+          "tags": [
+            "AnswerTemplates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/AnswerTemplates/Preview/{UUID}",
+          "operationId": "",
+          "summary": "Şablonu önizler.",
+          "tags": [
+            "AnswerTemplates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "DELETE",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak irsaliyeleri siler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak irsaliyeleri listeler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Draft/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Draft/{UUID}/model",
+          "operationId": "",
+          "summary": "Model olarak indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Draft/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Taslak irsaliyenin etiket bilgilerini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Draft/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Draft/ConfirmAndSend",
+          "operationId": "",
+          "summary": "Taslak irsaliyeyi onaylayıp gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Draft/Create",
+          "operationId": "",
+          "summary": "Taslak irsaliye oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Draft/CreateBulk",
+          "operationId": "",
+          "summary": "Toplu taslak irsaliye oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Draft/EditAndSend",
+          "operationId": "",
+          "summary": "Taslak irsaliyeyi düzenleyerek gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Draft/Export/{fileType}",
+          "operationId": "",
+          "summary": "Belgelerinizi toplu olarak dışarı aktarır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Draft/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Belgelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Draft/SpecialCode",
+          "operationId": "",
+          "summary": "Taslak İrsaliyeye özel kod ataması yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Draft/Tags",
+          "operationId": "",
+          "summary": "Taslak irsaliye etiket atama yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Draft/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Taslak irsaliyeyi whatsapp üzerinden gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Notification/Purchase",
+          "operationId": "",
+          "summary": "Alış irsaliyeleri için bildirim kurallarını listeler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Notification/Purchase",
+          "operationId": "",
+          "summary": "Alış irsaliyesi için bildirim kuralı oluşturur.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Notification/Purchase",
+          "operationId": "",
+          "summary": "Alış irsaliyesine ait bildirim kuralını günceller.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "DELETE",
+          "path": "/Notification/Purchase/{ID}",
+          "operationId": "",
+          "summary": "Alış irsaliyesine ait bildirimi kuralını siler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Notification/Purchase/{ID}",
+          "operationId": "",
+          "summary": "Alış irsaliyesine ait bildirim kuralını getirir.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Notification/Sale",
+          "operationId": "",
+          "summary": "Satış irsaliyesine ait bildirim kurallarını listeler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Notification/Sale",
+          "operationId": "",
+          "summary": "Satış irsaliyesine ait bildirim kuralı oluşturur.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Notification/Sale",
+          "operationId": "",
+          "summary": "Satış irsaliyesine ait bildirim kuralını günceller.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "DELETE",
+          "path": "/Notification/Sale/{ID}",
+          "operationId": "",
+          "summary": "Satış irsaliyesine ait bildirim kuralını siler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Notification/Sale/{ID}",
+          "operationId": "",
+          "summary": "Satış irsaliyesine ait bildirim kuralını getirir.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Old",
+          "operationId": "",
+          "summary": "Eski irsaliyeleri listeler.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Old",
+          "operationId": "",
+          "summary": "Eski irsaliyeleri yükler.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Old/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Old/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Old/{UUID}/xml",
+          "operationId": "",
+          "summary": "Xml dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Old/Export/{fileType}",
+          "operationId": "",
+          "summary": "İrsaliyeleri toplu olarak dışarı aktarır.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Old/Operation/{operationType}",
+          "operationId": "",
+          "summary": "İrsaliyelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase",
+          "operationId": "",
+          "summary": "Gelen irsaliyeleri listeler.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{MessageId}/MailActivityhistories",
+          "operationId": "",
+          "summary": "Mail aktivitelerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Attachments",
+          "operationId": "",
+          "summary": "İrsaliyenin eklerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/CheckFromGib",
+          "operationId": "",
+          "summary": "İrsaliyeyi Gib den kontrol eder.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Purchase/{UUID}/CreateDraft",
+          "operationId": "",
+          "summary": "Gelen irsaliyeyi taslak olarak kaydeder.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Details",
+          "operationId": "",
+          "summary": "İrsaliyenin detayını getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/EnvelopeInfo",
+          "operationId": "",
+          "summary": "İrsaliyeye ait ETTN numarası ile Zarf bilgilerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Histories",
+          "operationId": "",
+          "summary": "İrsaliyenin işlem geçmişini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Lines",
+          "operationId": "",
+          "summary": "İrsaliye kalemlerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Mailhistories",
+          "operationId": "",
+          "summary": "Mail işlem geçmişini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Smshistories",
+          "operationId": "",
+          "summary": "Sms işlem geçmişini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Status",
+          "operationId": "",
+          "summary": "Giden İrsaliyenin statü bilgilerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Tags",
+          "operationId": "",
+          "summary": "İrsaliyenin etiket bilgilerini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp işlem geçmişini getirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/Answer/{UUID}/html",
+          "operationId": "",
+          "summary": "Yanıt Html dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/Answer/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Yanıt Pdf dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Purchase/Answer/{UUID}/xml",
+          "operationId": "",
+          "summary": "Yanıt XML dosyasını indirir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Purchase/Answer/Export/{fileType}",
+          "operationId": "",
+          "summary": "İrsaliye yanıtlarını toplu olarak dışarı aktarır.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Purchase/Email/Send",
+          "operationId": "",
+          "summary": "İrsaliyeyi mail olarak gönderir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Purchase/Export/{fileType}",
+          "operationId": "",
+          "summary": "İrsaliyeleri toplu olarak dışarı aktarır.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Purchase/Operation/{operationType}",
+          "operationId": "",
+          "summary": "İrsaliyelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Purchase/SendAnswer",
+          "operationId": "",
+          "summary": "İrsaliyeye yanıt verir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Purchase/Sms/Send",
+          "operationId": "",
+          "summary": "İrsaliyeyi sms üzerinden gönderir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Purchase/SpecialCode",
+          "operationId": "",
+          "summary": "İrsaliyeye özel kod ataması yapılır.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Purchase/Tags",
+          "operationId": "",
+          "summary": "İrsaliye etiket atama yapılır.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Purchase/Whatsapp/Send",
+          "operationId": "",
+          "summary": "İrsaliyeyi whatsapp üzerinden gönderir.",
+          "tags": [
+            "Purchase"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale",
+          "operationId": "",
+          "summary": "Giden irsaliyeleri listeler.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{MessageId}/MailActivityhistories",
+          "operationId": "",
+          "summary": "Mail aktivitelerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Attachments",
+          "operationId": "",
+          "summary": "İrsaliyenin eklerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/CheckFromGib",
+          "operationId": "",
+          "summary": "İrsaliyeyi Gib den kontrol eder.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Sale/{UUID}/CreateDraft",
+          "operationId": "",
+          "summary": "Giden irsaliyeyi taslak olarak kaydeder.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Details",
+          "operationId": "",
+          "summary": "İrsaliyenin detayını getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/EnvelopeInfo",
+          "operationId": "",
+          "summary": "İrsaliyeye ait ETTN numarası ile Zarf bilgilerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Histories",
+          "operationId": "",
+          "summary": "İrsaliyenin işlem geçmişini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Mailhistories",
+          "operationId": "",
+          "summary": "Mailin işlem geçmişini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Smshistories",
+          "operationId": "",
+          "summary": "Sms işlem geçmişini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Status",
+          "operationId": "",
+          "summary": "Giden İrsaliyenin statü bilgilerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Tags",
+          "operationId": "",
+          "summary": "İrsaliyenin etiket bilgilerini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/Answer/{UUID}/html",
+          "operationId": "",
+          "summary": "Yanıt Html dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/Answer/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Yanıt Pdf dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Sale/Answer/{UUID}/xml",
+          "operationId": "",
+          "summary": "Yanıt XML dosyasını indirir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Sale/Answer/Export/{fileType}",
+          "operationId": "",
+          "summary": "İrsaliye yanıtlarını toplu olarak dışarı aktarır.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Sale/Email/Send",
+          "operationId": "",
+          "summary": "İrsaliyeyi mail olarak gönderir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Sale/Export/{fileType}",
+          "operationId": "",
+          "summary": "İrsaliyeleri toplu olarak dışarı aktarır.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Sale/Operation/{operationType}",
+          "operationId": "",
+          "summary": "İrsaliyelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Sale/Sms/Send",
+          "operationId": "",
+          "summary": "İrsaliyeyi sms üzerinden gönderir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Sale/SpecialCode",
+          "operationId": "",
+          "summary": "İrsaliyeye özel kod ataması yapılır.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Sale/Tags",
+          "operationId": "",
+          "summary": "İrsaliye etiket atama yapılır.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Sale/ToInvoice",
+          "operationId": "",
+          "summary": "Giden irsaliyeyi fatura taslaklarına kaydeder.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Sale/Whatsapp/Send",
+          "operationId": "",
+          "summary": "İrsaliyeyi whatsapp üzerinden gönderir.",
+          "tags": [
+            "Sale"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Send/Base64String",
+          "operationId": "",
+          "summary": "UBL-TR Xml formatındaki irsaliyenin zip halindeki string Base64 değeri göndermek için bu uç kullanılır.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Send/Base64String/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek irsaliyeyi ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Send/Model",
+          "operationId": "",
+          "summary": "İrsaliyeyi model olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Send/Model/Download",
+          "operationId": "",
+          "summary": "Ön izlenen irsaliyeyi xml olarak indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Send/Model/Download/Pdf",
+          "operationId": "",
+          "summary": "Ön izlenen irsaliyeyi pdf olarak indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Send/Model/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek irsaliyeyi ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Send/Xml",
+          "operationId": "",
+          "summary": "İrsaliyeyi UBL-TR Xml formatında zipli yada açık halde (Xml) olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Send/Xml/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek irsaliyeyi ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Serileri Listeler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Yeni seri oluşturur.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Seriyi düzenler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Series/{id}",
+          "operationId": "",
+          "summary": "Serinin detayını getirir.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Statistics/Purchase",
+          "operationId": "",
+          "summary": "Gelen irsaliyelerin istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Statistics/Purchase/Daily",
+          "operationId": "",
+          "summary": "Gelen irsaliyelerin günlük istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Statistics/Purchase/Last",
+          "operationId": "",
+          "summary": "Gelen irsaliyelerin son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Statistics/Sale",
+          "operationId": "",
+          "summary": "Giden irsaiyelerin istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Statistics/Sale/Daily",
+          "operationId": "",
+          "summary": "Giden irsaliyelerin günlük istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Statistics/Sale/Last",
+          "operationId": "",
+          "summary": "Giden irsaliyelerin son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket listesini getirir.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket oluşturur.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket günceller.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "DELETE",
+          "path": "/Tags/{UUID}",
+          "operationId": "",
+          "summary": "Etiket silinir",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonları listeler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonu günceller.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "DELETE",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonu siler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonun detayını getirir.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "GET",
+          "path": "/Templates/Preview/{UUID}",
+          "operationId": "",
+          "summary": "Şablonu önizler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "POST",
+          "path": "/Upload",
+          "operationId": "",
+          "summary": "Taslaklara xml olarak irsaliye yükler.",
+          "tags": [
+            "Upload"
+          ]
+        },
+        {
+          "service": "edespatch",
+          "method": "PUT",
+          "path": "/Upload/{UUID}",
+          "operationId": "",
+          "summary": "Taslaklara yüklenen irsaliyeyi günceller.",
+          "tags": [
+            "Upload"
+          ]
+        }
+      ]
+    },
+    "evoucher": {
+      "service": "evoucher",
+      "title": "E-Serbest Meslek Makbuzu API",
+      "version": "v1",
+      "endpointCount": 77,
+      "endpoints": [
+        {
+          "service": "evoucher",
+          "method": "DELETE",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak makbuzları siler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak makbuzları listeler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Draft/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Draft/{UUID}/model",
+          "operationId": "",
+          "summary": "Model dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Draft/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Taslak makbuzun etiket bilgilerini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Draft/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Draft/ConfirmAndSend",
+          "operationId": "",
+          "summary": "Taslak makbuzu onaylayıp gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Draft/Create",
+          "operationId": "",
+          "summary": "Taslak makbuz oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Draft/CreateBulk",
+          "operationId": "",
+          "summary": "Toplu Taslak makbuz oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Draft/EditAndSend",
+          "operationId": "",
+          "summary": "Taslak belgeyi düzenleyerek gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Draft/Export/{fileType}",
+          "operationId": "",
+          "summary": "Belgelerinizi toplu olarak dışarı aktarır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Draft/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Belgelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Draft/SpecialCode",
+          "operationId": "",
+          "summary": "Taslak makbuza özel kod ataması yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Draft/Tags",
+          "operationId": "",
+          "summary": "Taslak belgelerinize etiket atama yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Draft/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Taslak makbuzu whatsapp üzerinden gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "E-SMM bildirim kurallarını listeler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "E-SMM bildirim kuralı oluşturur.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "E-SMM bildirimi kuralını günceller.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "DELETE",
+          "path": "/Notification/{ID}",
+          "operationId": "",
+          "summary": "E-SMM bildirimi kuralını siler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Notification/{ID}",
+          "operationId": "",
+          "summary": "E-SMM bildirimi kuralını getirir.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Report",
+          "operationId": "",
+          "summary": "Raporları getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Report/{UUID}/CheckFromGib",
+          "operationId": "",
+          "summary": "Rapor durumunu GİB den sorgular.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Report/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Rapor işlem geçmişini getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Report/{UUID}/xml",
+          "operationId": "",
+          "summary": "Rapor Xml dosyasını indirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Report/List",
+          "operationId": "",
+          "summary": "Gönderilmiş rapor içerisindeki belgeleri listeler.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Report/ToReport",
+          "operationId": "",
+          "summary": "Rapor oluşturulacak listeyi getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Send/Base64String",
+          "operationId": "",
+          "summary": "UBL-TR Xml ZIP formatındaki Makbuzun string Base64 değeri göndermek için bu uç kullanılır.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Send/Base64String/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek makbuzu ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Send/Model",
+          "operationId": "",
+          "summary": "Makbuzu model olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Send/Model/Download",
+          "operationId": "",
+          "summary": "Ön izlenen makbuzu indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Send/Model/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek makbuzu ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Send/Report",
+          "operationId": "",
+          "summary": "Rapor gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Send/Xml",
+          "operationId": "",
+          "summary": "Makbuzu UBL-TR Xml formatında zipli yada açık halde (Xml) olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Send/Xml/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek makbuzu ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Serileri Listeler",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Yeni seri oluşturur.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Seriyi düzenler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Series/{id}",
+          "operationId": "",
+          "summary": "Serinin detayını getirir.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Statistics",
+          "operationId": "",
+          "summary": "Makbuzların istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Statistics/Daily",
+          "operationId": "",
+          "summary": "Giden E-Serbest Meslek Makbuzlarının günlük istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Statistics/Last",
+          "operationId": "",
+          "summary": "Makbuzların son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket listesini getirir.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket oluşturur.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket günceller.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "DELETE",
+          "path": "/Tags/{UUID}",
+          "operationId": "",
+          "summary": "Etiket silinir",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonları listeler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonu günceller.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "DELETE",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonu siler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonun detayını getirir.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Templates/Preview/{UUID}",
+          "operationId": "",
+          "summary": "Şablonu önizler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Upload",
+          "operationId": "",
+          "summary": "Taslaklara xml olarak makbuz yükler.",
+          "tags": [
+            "Upload"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Upload/{UUID}",
+          "operationId": "",
+          "summary": "Taslaklara yüklenen makbuzu günceller.",
+          "tags": [
+            "Upload"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers",
+          "operationId": "",
+          "summary": "Makbuzları listeler.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{MessageId}/MailActivityhistories",
+          "operationId": "",
+          "summary": "Mail aktivitelerini getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Vouchers/{UUID}/Cancel",
+          "operationId": "",
+          "summary": "Makbuzu iptal eder.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Vouchers/{UUID}/CreateDraft",
+          "operationId": "",
+          "summary": "Makbuzu taslak olarak kaydeder.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/Details",
+          "operationId": "",
+          "summary": "Makbuzun detayını getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Makbuzun işlem geçmişini getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/Mailhistories",
+          "operationId": "",
+          "summary": "Mailin işlem geçmişini getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Vouchers/{UUID}/RevertCancel",
+          "operationId": "",
+          "summary": "Makbuz iptal işlemini geri alır.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/Smshistories",
+          "operationId": "",
+          "summary": "Sms işlem geçmişini getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/Status",
+          "operationId": "",
+          "summary": "Makbuzunun durum bilgilerini getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Makbuzun etiket bilgilerini getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/Taxes",
+          "operationId": "",
+          "summary": "Makbuzun vergilerini getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp işlem geçmişini getirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "GET",
+          "path": "/Vouchers/{UUID}/xml",
+          "operationId": "",
+          "summary": "Xml dosyasını indirir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Vouchers/Email/Send",
+          "operationId": "",
+          "summary": "Makbuzu mail üzerinden gönderir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Vouchers/Export/{fileType}",
+          "operationId": "",
+          "summary": "Makbuzları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Vouchers/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Makbuzlara toplu olarak yeni durum atar.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Vouchers/Sms/Send",
+          "operationId": "",
+          "summary": "Makbuzu sms üzerinden gönderir.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Vouchers/SpecialCode",
+          "operationId": "",
+          "summary": "Makbuza özel kod ataması yapılır.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "PUT",
+          "path": "/Vouchers/Tags",
+          "operationId": "",
+          "summary": "Makbuza etiket atama yapılır.",
+          "tags": [
+            "Vouchers"
+          ]
+        },
+        {
+          "service": "evoucher",
+          "method": "POST",
+          "path": "/Vouchers/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Makbuzu whatsapp üzerinden gönderir.",
+          "tags": [
+            "Vouchers"
+          ]
+        }
+      ]
+    },
+    "eproducer": {
+      "service": "eproducer",
+      "title": "E-Mustahsil Makbuz API",
+      "version": "v1",
+      "endpointCount": 84,
+      "endpoints": [
+        {
+          "service": "eproducer",
+          "method": "DELETE",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak makbuzları siler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak makbuzları listeler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Draft/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Draft/{UUID}/model",
+          "operationId": "",
+          "summary": "Model dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Draft/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Taslak makbuzun etiket bilgilerini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Draft/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Draft/ConfirmAndSend",
+          "operationId": "",
+          "summary": "Taslak makbuzu onaylayıp gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Draft/Create",
+          "operationId": "",
+          "summary": "Taslak makbuz oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Draft/CreateBulk",
+          "operationId": "",
+          "summary": "Toplu Taslak makbuz oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Draft/EditAndSend",
+          "operationId": "",
+          "summary": "Taslak belgeyi düzenleyerek gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Draft/Export/{fileType}",
+          "operationId": "",
+          "summary": "Belgelerinizi toplu olarak dışarı aktarır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Draft/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Belgelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Draft/SpecialCode",
+          "operationId": "",
+          "summary": "Taslak makbuza özel kod ataması yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Draft/Tags",
+          "operationId": "",
+          "summary": "Taslak makbuza etiket atama yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Draft/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Taslak makbuzu whatsapp üzerinden gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "Makbuz bildirim kurallarını listeler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "Makbuz bildirim kuralı oluşturur.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "Makbuz bildirimi kuralını günceller.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "DELETE",
+          "path": "/Notification/{ID}",
+          "operationId": "",
+          "summary": "Makbuz bildirimi kuralını siler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Notification/{ID}",
+          "operationId": "",
+          "summary": "Makbuz bildirimi kuralını getirir.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Old",
+          "operationId": "",
+          "summary": "Eski makbuzları listeler.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Old",
+          "operationId": "",
+          "summary": "Eski makbuzları yükler.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Old/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Old/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Old/{UUID}/xml",
+          "operationId": "",
+          "summary": "Xml dosyasını indirir.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Old/Export/{fileType}",
+          "operationId": "",
+          "summary": "Makbuzları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Old/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Makbuzlara toplu olarak yeni durum atar.",
+          "tags": [
+            "Old"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers",
+          "operationId": "",
+          "summary": "Makbuzları listeler.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{MessageId}/MailActivityhistories",
+          "operationId": "",
+          "summary": "Mail aktivitelerini getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Producers/{UUID}/Cancel",
+          "operationId": "",
+          "summary": "Makbuzu iptal eder.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Producers/{UUID}/CreateDraft",
+          "operationId": "",
+          "summary": "Makbuzu taslak olarak kaydeder.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/Details",
+          "operationId": "",
+          "summary": "Makbuzun detayını getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Makbuzun işlem geçmişini getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/Mailhistories",
+          "operationId": "",
+          "summary": "Mailin işlem geçmişini getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Producers/{UUID}/RevertCancel",
+          "operationId": "",
+          "summary": "Makbuz iptal işlemini geri alır.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/Smshistories",
+          "operationId": "",
+          "summary": "Sms işlem geçmişini getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/Status",
+          "operationId": "",
+          "summary": "Makbuzun durum bilgilerini getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Makbuzun etiket bilgilerini getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/Taxes",
+          "operationId": "",
+          "summary": "Makbuzun vergilerini getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp işlem geçmişini getirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Producers/{UUID}/xml",
+          "operationId": "",
+          "summary": "Xml dosyasını indirir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Producers/Email/Send",
+          "operationId": "",
+          "summary": "Makbuzu mail üzerinden gönderir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Producers/Export/{fileType}",
+          "operationId": "",
+          "summary": "Makbuzları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Producers/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Makbuzlara toplu olarak yeni durum atar.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Producers/Sms/Send",
+          "operationId": "",
+          "summary": "Makbuzu sms üzerinden gönderir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Producers/SpecialCode",
+          "operationId": "",
+          "summary": "Makbuza özel kod ataması yapılır.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Producers/Tags",
+          "operationId": "",
+          "summary": "Makbuza etiket atama yapılır.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Producers/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Makbuzu whatsapp üzerinden gönderir.",
+          "tags": [
+            "Producers"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Report",
+          "operationId": "",
+          "summary": "Raporları getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Report/{UUID}/CheckFromGib",
+          "operationId": "",
+          "summary": "Rapor durumunu GİB den sorgular.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Report/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Rapor işlem geçmişini getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Report/{UUID}/xml",
+          "operationId": "",
+          "summary": "Rapor Xml dosyasını indirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Report/List",
+          "operationId": "",
+          "summary": "Gönderilmiş rapor içerisindeki belgeleri listeler.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Report/ToReport",
+          "operationId": "",
+          "summary": "Rapor oluşturulacak listeyi getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Send/Base64String",
+          "operationId": "",
+          "summary": "UBL-TR Xml ZIP formatındaki makbuzun string Base64 değeri göndermek için bu uç kullanılır.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Send/Base64String/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek makbuzu ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Send/Model",
+          "operationId": "",
+          "summary": "Makbuzu model olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Send/Model/Download",
+          "operationId": "",
+          "summary": "Ön izlenen makbuzu indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Send/Model/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek makbuzu ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Send/Report",
+          "operationId": "",
+          "summary": "Rapor gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Send/Xml",
+          "operationId": "",
+          "summary": "Makbuzu UBL-TR Xml formatında zipli yada açık halde (Xml) olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Send/Xml/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek makbuzu ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Serileri Listeler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Yeni seri oluşturur.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Seriyi düzenler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Series/{id}",
+          "operationId": "",
+          "summary": "Serinin detayını getirir.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Statistics",
+          "operationId": "",
+          "summary": "Makbuzların istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Statistics/Daily",
+          "operationId": "",
+          "summary": "Giden makbuzların günlük istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Statistics/Last",
+          "operationId": "",
+          "summary": "Makbuzların son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket listesini getirir.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket oluşturur.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket günceller.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "DELETE",
+          "path": "/Tags/{UUID}",
+          "operationId": "",
+          "summary": "Etiket silinir",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonları listeler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonu günceller.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "DELETE",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonu siler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonun detayını getirir.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "GET",
+          "path": "/Templates/Preview/{UUID}",
+          "operationId": "",
+          "summary": "Şablonu önizler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "POST",
+          "path": "/Upload",
+          "operationId": "",
+          "summary": "Taslaklara xml olarak makbuz yükler.",
+          "tags": [
+            "Upload"
+          ]
+        },
+        {
+          "service": "eproducer",
+          "method": "PUT",
+          "path": "/Upload/{UUID}",
+          "operationId": "",
+          "summary": "Taslaklara yüklenen makbuzu günceller.",
+          "tags": [
+            "Upload"
+          ]
+        }
+      ]
+    },
+    "eledger": {
+      "service": "eledger",
+      "title": "E-Ledger API",
+      "version": "v1",
+      "endpointCount": 72,
+      "endpoints": [
+        {
+          "service": "eledger",
+          "method": "DELETE",
+          "path": "/Accountants",
+          "operationId": "",
+          "summary": "Muhasebeci silinir.",
+          "tags": [
+            "Accountants"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Accountants",
+          "operationId": "",
+          "summary": "Firmaya atanmış muhasebeci listesini getirir.",
+          "tags": [
+            "Accountants"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Accountants",
+          "operationId": "",
+          "summary": "Muhasebeci eklenir.",
+          "tags": [
+            "Accountants"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "PUT",
+          "path": "/Accountants",
+          "operationId": "",
+          "summary": "Muhasebeci bilgileri düzenlenir.",
+          "tags": [
+            "Accountants"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Companies/Accounting",
+          "operationId": "",
+          "summary": "Firmaya kayıtlı müşavirin bilgilerini getirir.",
+          "tags": [
+            "Companies"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Companies/Erp",
+          "operationId": "",
+          "summary": "Firmaya tanımlı ERP listesi getirilir.",
+          "tags": [
+            "Companies"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Companies/Erp/Parameters/{CompanyErpID}",
+          "operationId": "",
+          "summary": "Firmaya tanımlı ERP parametreleri getirilir.",
+          "tags": [
+            "Companies"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Companies/Query",
+          "operationId": "",
+          "summary": "Firma defter sorguları getirilir.",
+          "tags": [
+            "Companies"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "DELETE",
+          "path": "/Documents",
+          "operationId": "",
+          "summary": "Defteri Siler",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents",
+          "operationId": "",
+          "summary": "Defterleri Getirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Account/{Year}",
+          "operationId": "",
+          "summary": "Defter yıla göre toplam borç alacak sayısını getirir",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/AllBranch/Download",
+          "operationId": "",
+          "summary": "Firma ve tüm alt şubelerinin ilgili yıl ve aydaki defterlerini indirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Check",
+          "operationId": "",
+          "summary": ".",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Detail",
+          "operationId": "",
+          "summary": "Defter Detaylarını Getirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Documents/Download",
+          "operationId": "",
+          "summary": "UUID List alarak defteri indirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Download/File",
+          "operationId": "",
+          "summary": "İlgili Yıl ve Aydaki Csv Dosyasını İndirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "DELETE",
+          "path": "/Documents/EntryNumbers",
+          "operationId": "",
+          "summary": "Yüklenen eski defterleri siler.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/EntryNumbers",
+          "operationId": "",
+          "summary": "İlgili Yıldaki Defter Numaralarını Getirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Documents/EntryNumbers",
+          "operationId": "",
+          "summary": "Eski defterleri yükler.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/History/{UUID}",
+          "operationId": "",
+          "summary": "Defter geçmişini getirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Html",
+          "operationId": "",
+          "summary": "Defteri Görüntüler.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "DELETE",
+          "path": "/Documents/Inventory",
+          "operationId": "",
+          "summary": "Envanter Defterini Siler",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Inventory",
+          "operationId": "",
+          "summary": "Envater Defterlerini Getirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Inventory/Check",
+          "operationId": "",
+          "summary": ".",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Documents/Inventory/Download/{UUID}",
+          "operationId": "",
+          "summary": "İlgili envanter defterini tekil olarak indirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Inventory/Download/Year",
+          "operationId": "",
+          "summary": "İlgili envanter defterini toplu olarak indirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Inventory/Html",
+          "operationId": "",
+          "summary": "Envanter Defterini Önizler",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Inventory/Schematron",
+          "operationId": "",
+          "summary": "Envanter Defterine şema/şematron kontrolü uygulanır.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Period/Download",
+          "operationId": "",
+          "summary": "İlgili Yıl ve Aydaki Defterleri İndirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Documents/Period/Download/Bulk",
+          "operationId": "",
+          "summary": "Defterleri toplu olarak indirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Documents/Schematron",
+          "operationId": "",
+          "summary": "Deftere şema/şematron kontrolü uygulanır.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Documents/Update/Status/{UUID}",
+          "operationId": "",
+          "summary": "Defter statusunu başarılı yapar.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Documents/Year/Download",
+          "operationId": "",
+          "summary": "İlgili Yıldaki Tüm Defterleri İndirir.",
+          "tags": [
+            "Documents"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "PUT",
+          "path": "/EntryLocked",
+          "operationId": "",
+          "summary": "Fiş kilitlendikten sonra update ve create atılır.",
+          "tags": [
+            "EntryLocked"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/EntryLocked/Control",
+          "operationId": "",
+          "summary": "Fiş kilitleme için kontroller başlatılır.",
+          "tags": [
+            "EntryLocked"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Erp",
+          "operationId": "",
+          "summary": "ERP listesi getirilir.",
+          "tags": [
+            "Erp"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Gib/Inventory/Receive",
+          "operationId": "",
+          "summary": "GİB onaylı envanter beratını getirir.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Gib/Inventory/ReSend",
+          "operationId": "",
+          "summary": "Hatalı ve tekrar gönderilmesi gereken envanter defterleri gönderilir.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Gib/Inventory/Send",
+          "operationId": "",
+          "summary": "envanter defteri gibe gönderilir.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Gib/Receive",
+          "operationId": "",
+          "summary": "GİB onaylı beratları getirir.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Gib/ReSend",
+          "operationId": "",
+          "summary": "Hatalı ve tekrar gönderilmesi gereken defterler gönderilir.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Gib/Send",
+          "operationId": "",
+          "summary": "Yevmiye ve Kebir beratları gibe gönderilir.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Gib/Send/Report",
+          "operationId": "",
+          "summary": "Defter raporu gibe gönderilir.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Gib/Status",
+          "operationId": "",
+          "summary": "İlgili aydaki defterlerin statülerini döner.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Gib/Status/Report",
+          "operationId": "",
+          "summary": "Defter raporu durumunu sorgular.",
+          "tags": [
+            "Gib"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Luca/DownloadExcel",
+          "operationId": "",
+          "summary": "",
+          "tags": [
+            "Luca"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Properties",
+          "operationId": "",
+          "summary": "Defter ayarlarını getirir.",
+          "tags": [
+            "Properties"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "PUT",
+          "path": "/Properties",
+          "operationId": "",
+          "summary": "Defter ayarları yoksa oluşturur varsa günceller.",
+          "tags": [
+            "Properties"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Sign/Base64String",
+          "operationId": "",
+          "summary": "Defteri base64 string olarak getirir.",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Sign/Check",
+          "operationId": "",
+          "summary": "Belirli bir dönemdeki tüm defterler imzalanmış mı kontrol eder.",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Sign/Hsm",
+          "operationId": "",
+          "summary": "",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Sign/Inventory/Base64String",
+          "operationId": "",
+          "summary": "Envanter defterini base64 string olarak getirir.",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Sign/Inventory/Hsm",
+          "operationId": "",
+          "summary": "İlgili dönemdeki tüm envanter defterleri firma imzası ile imzalar.",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "PUT",
+          "path": "/Sign/Inventory/Upload",
+          "operationId": "",
+          "summary": "İmzalanmış envanter defterini sisteme yükler.",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Sign/Inventory/UUID",
+          "operationId": "",
+          "summary": "İlgili Dönemdeki tüm envanter defterlerin UUID lerini getirir.",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "PUT",
+          "path": "/Sign/Upload",
+          "operationId": "",
+          "summary": "İmzalanmış defteri sisteme yükler.",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Sign/UUID",
+          "operationId": "",
+          "summary": "İlgili Dönemdeki tüm defterlerin UUID lerini getirir.",
+          "tags": [
+            "Sign"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Statistics",
+          "operationId": "",
+          "summary": "Defter istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Statistics/Last",
+          "operationId": "",
+          "summary": "E-Ledger son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "DELETE",
+          "path": "/Uploads",
+          "operationId": "",
+          "summary": "Yüklenen dosyayı siler.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Uploads",
+          "operationId": "",
+          "summary": "Yüklenmiş defterlerin durumlarını listeler.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Uploads",
+          "operationId": "",
+          "summary": "Zip halindeki .csv dosyası alınarak defter oluşturulur.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Uploads/Base64String",
+          "operationId": "",
+          "summary": "Zip halindeki .csv dosyasının  Base64 string değeri alınarak defter oluşturulur.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "DELETE",
+          "path": "/Uploads/Inventory",
+          "operationId": "",
+          "summary": "Yüklenen inventory dosyayı siler.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Uploads/Inventory",
+          "operationId": "",
+          "summary": "Yüklenmiş envanter defterlerinin durumlarını listeler.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Uploads/Inventory",
+          "operationId": "",
+          "summary": "Zip halindeki .csv dosyası alınarak envanter defteri oluşturulur.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Uploads/Inventory/Base64String",
+          "operationId": "",
+          "summary": "Zip halindeki .csv dosyası alınarak envanter defter oluşturulur.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Uploads/Inventory/Download/UUID",
+          "operationId": "",
+          "summary": "File UUID yüklenen defteri csv olarak indirir.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Uploads/Inventory/UUID",
+          "operationId": "",
+          "summary": "File UUID ile hataları döner.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Uploads/Latest",
+          "operationId": "",
+          "summary": "Son oluşan defterin yıl ve period bilgisini getirir.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "POST",
+          "path": "/Uploads/Summary",
+          "operationId": "",
+          "summary": "Manuel yüklenen defterlerin GIB Onaylı beratları bu api ucundan yüklenir.",
+          "tags": [
+            "Uploads"
+          ]
+        },
+        {
+          "service": "eledger",
+          "method": "GET",
+          "path": "/Uploads/UUID",
+          "operationId": "",
+          "summary": "File UUID ile hataları döner.",
+          "tags": [
+            "Uploads"
+          ]
+        }
+      ]
+    },
+    "einsurance": {
+      "service": "einsurance",
+      "title": "E-Sigorta Komisyon Gider Belgesi API",
+      "version": "v1",
+      "endpointCount": 76,
+      "endpoints": [
+        {
+          "service": "einsurance",
+          "method": "DELETE",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak E-SKGB siler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Draft",
+          "operationId": "",
+          "summary": "Taslak belgeleri listeler.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Draft/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Draft/{UUID}/model",
+          "operationId": "",
+          "summary": "Model dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Draft/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Tags",
+          "operationId": "",
+          "summary": "Taslak E-SKGB etiket bilgilerini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Draft/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp ın işlem geçmişini getirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Draft/{UUID}/xml",
+          "operationId": "",
+          "summary": "XML dosyasını indirir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Draft/ConfirmAndSend",
+          "operationId": "",
+          "summary": "Taslak E-SKGB onaylayıp gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Draft/Create",
+          "operationId": "",
+          "summary": "",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Draft/CreateBulk",
+          "operationId": "",
+          "summary": "Toplu Taslak E-SKGB oluşturur.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Draft/EditAndSend",
+          "operationId": "",
+          "summary": "Taslak E-SKGB düzenleyerek gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Draft/Export/{fileType}",
+          "operationId": "",
+          "summary": "Belgelerinizi toplu olarak dışarı aktarır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Draft/Operation/{operationType}",
+          "operationId": "",
+          "summary": "Belgelere toplu olarak yeni durum atar.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Draft/SpecialCode",
+          "operationId": "",
+          "summary": "Taslak E-SKGB özel kod ataması yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Draft/Tags",
+          "operationId": "",
+          "summary": "Taslak E-SKGB etiket atama yapılır.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Draft/Whatsapp/Send",
+          "operationId": "",
+          "summary": "Taslak E-SKGB whatsapp üzerinden gönderir.",
+          "tags": [
+            "Draft"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances",
+          "operationId": "",
+          "summary": "SKG Belgelerini listeler.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{MessageId}/MailActivityhistories",
+          "operationId": "",
+          "summary": "Mail aktivitelerini getirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Insurances/{UUID}/Cancel",
+          "operationId": "",
+          "summary": "SKG Belgesini iptal eder.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Insurances/{UUID}/CreateDraft",
+          "operationId": "",
+          "summary": "SKG Belgesini taslak olarak kaydeder.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/Details",
+          "operationId": "",
+          "summary": "SKG detayını getirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/Histories",
+          "operationId": "",
+          "summary": "SKG  işlem geçmişini getirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/html",
+          "operationId": "",
+          "summary": "Html dosyasını indirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/Mailhistories",
+          "operationId": "",
+          "summary": "Mailin işlem geçmişini getirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/pdf",
+          "operationId": "",
+          "summary": "Pdf dosyasını indirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Insurances/{UUID}/RevertCancel",
+          "operationId": "",
+          "summary": "SKG iptal işlemini geri alır.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/Smshistories",
+          "operationId": "",
+          "summary": "Sms işlem geçmişini getirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/Status",
+          "operationId": "",
+          "summary": "SKG Belgesinin durum bilgilerini getirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/Tags",
+          "operationId": "",
+          "summary": "SKG Belgesinin etiket bilgilerini getirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/Whatsapphistories",
+          "operationId": "",
+          "summary": "Whatsapp işlem geçmişini getirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Insurances/{UUID}/xml",
+          "operationId": "",
+          "summary": "Xml dosyasını indirir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Insurances/Email/Send",
+          "operationId": "",
+          "summary": "SKG Belgesini mail üzerinden gönderir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Insurances/Export/{fileType}",
+          "operationId": "",
+          "summary": "SKGları toplu olarak dışarı aktarır.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Insurances/Operation/{operationType}",
+          "operationId": "",
+          "summary": "SKGlara toplu olarak yeni durum atar.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Insurances/Sms/Send",
+          "operationId": "",
+          "summary": "SKG Belgesini sms üzerinden gönderir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Insurances/SpecialCode",
+          "operationId": "",
+          "summary": "SKG Belgesine özel kod ataması yapılır.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Insurances/Tags",
+          "operationId": "",
+          "summary": "SKG Belgesine etiket atama yapılır.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Insurances/Whatsapp/Send",
+          "operationId": "",
+          "summary": "SKG Belgesini whatsapp üzerinden gönderir.",
+          "tags": [
+            "Insurances"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "SKGB bildirim kurallarını listeler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "SKGB bildirim kuralı oluşturur.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Notification",
+          "operationId": "",
+          "summary": "SKGB bildirimi kuralını günceller.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "DELETE",
+          "path": "/Notification/{ID}",
+          "operationId": "",
+          "summary": "SKGB bildirimi kuralını siler.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Notification/{ID}",
+          "operationId": "",
+          "summary": "SKGB bildirimi kuralını getirir.",
+          "tags": [
+            "Notification"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Report",
+          "operationId": "",
+          "summary": "Raporları getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Report/{UUID}/CheckFromGib",
+          "operationId": "",
+          "summary": "Rapor durumunu GİB den sorgular.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Report/{UUID}/Histories",
+          "operationId": "",
+          "summary": "Rapor işlem geçmişini getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Report/{UUID}/xml",
+          "operationId": "",
+          "summary": "Rapor Xml dosyasını indirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Report/List",
+          "operationId": "",
+          "summary": "Gönderilmiş rapor içerisindeki belgeleri listeler.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Report/ToReport",
+          "operationId": "",
+          "summary": "Rapor oluşturulacak listeyi getirir.",
+          "tags": [
+            "Report"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Send/Base64String",
+          "operationId": "",
+          "summary": "UBL-TR Xml ZIP formatındaki SKG Belgesini string Base64 değeri göndermek için bu uç kullanılır.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Send/Base64String/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek SKG Belgesini ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Send/Model",
+          "operationId": "",
+          "summary": "SKG Belgesini model olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Send/Model/Download",
+          "operationId": "",
+          "summary": "Ön izlenen SKG Belgesini indirir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Send/Model/Preview",
+          "operationId": "",
+          "summary": "Gönderilecek SKG Belgesini ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Send/Report",
+          "operationId": "",
+          "summary": "Rapor gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Send/Xml",
+          "operationId": "",
+          "summary": "SKG Belgesini UBL-TR Xml formatında zipli yada açık halde (Xml) olarak gönderir.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Send/Xml/Preview",
+          "operationId": "",
+          "summary": "SKG Belgesini ön izler.",
+          "tags": [
+            "Send"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Serileri Listeler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Yeni seri oluşturur.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Series",
+          "operationId": "",
+          "summary": "Seriyi düzenler.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Series/{id}",
+          "operationId": "",
+          "summary": "Serinin detayını getirir.",
+          "tags": [
+            "Series"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Statistics",
+          "operationId": "",
+          "summary": "E-SKGB istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Statistics/Daily",
+          "operationId": "",
+          "summary": "Giden E-Sigorta Komisyon Gider Belgelerinin günlük istatistiklerini getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Statistics/Last",
+          "operationId": "",
+          "summary": "E-SKGB son 10 kaydını getirir.",
+          "tags": [
+            "Statistics"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket listesini getirir.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket oluşturur.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Tags",
+          "operationId": "",
+          "summary": "Etiket günceller.",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "DELETE",
+          "path": "/Tags/{UUID}",
+          "operationId": "",
+          "summary": "Etiket silinir",
+          "tags": [
+            "Tags"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonları listeler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Templates",
+          "operationId": "",
+          "summary": "Şablonu günceller.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "DELETE",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonu siler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Templates/{id}",
+          "operationId": "",
+          "summary": "Şablonun detayını getirir.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "GET",
+          "path": "/Templates/Preview/{UUID}",
+          "operationId": "",
+          "summary": "Şablonu önizler.",
+          "tags": [
+            "Templates"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "POST",
+          "path": "/Upload",
+          "operationId": "",
+          "summary": "Taslaklara xml olarak belge yükler.",
+          "tags": [
+            "Upload"
+          ]
+        },
+        {
+          "service": "einsurance",
+          "method": "PUT",
+          "path": "/Upload/{UUID}",
+          "operationId": "",
+          "summary": "Taslaklara yüklenen belgeyi günceller.",
+          "tags": [
+            "Upload"
+          ]
+        }
+      ]
+    }
+  }
+}
