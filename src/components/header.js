@@ -73,6 +73,28 @@ export function renderHeader(title = 'Dashboard', options = {}) {
 
   function closeAccountDropdown() {
     accountDropdown?.classList.remove('open');
+    if (accountDropdown) {
+      accountDropdown.style.position = '';
+      accountDropdown.style.top = '';
+      accountDropdown.style.right = '';
+      accountDropdown.style.left = '';
+      accountDropdown.style.zIndex = '';
+      accountDropdown.style.maxWidth = '';
+    }
+  }
+
+  function positionAccountDropdown() {
+    if (!accountBtn || !accountDropdown) return;
+    const rect = accountBtn.getBoundingClientRect();
+    const margin = 12;
+    const right = Math.max(margin, window.innerWidth - rect.right);
+
+    accountDropdown.style.position = 'fixed';
+    accountDropdown.style.top = `${Math.round(rect.bottom + 8)}px`;
+    accountDropdown.style.right = `${Math.round(right)}px`;
+    accountDropdown.style.left = 'auto';
+    accountDropdown.style.zIndex = '10000';
+    accountDropdown.style.maxWidth = `min(92vw, 320px)`;
   }
 
   function renderAccountDropdownContent(accounts = [], activeId = '') {
@@ -133,6 +155,7 @@ export function renderHeader(title = 'Dashboard', options = {}) {
     }
 
     accountDropdown.classList.add('open');
+    positionAccountDropdown();
     accountDropdown.innerHTML = '<div class="header-account-loading">Hesaplar yükleniyor...</div>';
 
     try {
@@ -149,6 +172,12 @@ export function renderHeader(title = 'Dashboard', options = {}) {
     setTimeout(() => {
       document.addEventListener('click', closeAccountDropdown, { once: true });
     }, 0);
+  });
+
+  window.addEventListener('resize', () => {
+    if (accountDropdown?.classList.contains('open')) {
+      positionAccountDropdown();
+    }
   });
 
   return header;
