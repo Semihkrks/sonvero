@@ -571,6 +571,9 @@ a:hover { color: var(--accent-hover); }
   background: var(--bg-secondary);
   backdrop-filter: blur(20px);
   flex-shrink: 0;
+  position: relative;
+  z-index: 1300;
+  overflow: visible;
 }
 
 .header-title {
@@ -624,6 +627,8 @@ a:hover { color: var(--accent-hover); }
   align-items: center;
   gap: 8px;
   margin-left: auto;
+  position: relative;
+  z-index: 1301;
 }
 
 .header-btn {
@@ -668,6 +673,7 @@ a:hover { color: var(--accent-hover); }
 .header-user {
   margin-left: 4px;
   position: relative;
+  z-index: 1302;
 }
 
 .header-user-avatar {
@@ -703,7 +709,7 @@ a:hover { color: var(--accent-hover); }
   box-shadow: var(--shadow-lg);
   display: none;
   overflow: hidden;
-  z-index: 1200;
+  z-index: 3000;
 }
 
 .header-account-dropdown.open {
