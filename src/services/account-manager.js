@@ -201,6 +201,20 @@ export async function getActiveAccount() {
   const id = getActiveAccountId();
   if (!id) return null;
 
+  const userId = await getAuthenticatedUserId();
+  if (userId) {
+    try {
+      const remote = await dbSelect('accounts', { user_id: userId, id });
+      const fresh = Array.isArray(remote) ? remote[0] : null;
+      if (fresh) {
+        upsertLocalAccount(fresh);
+        return fresh;
+      }
+    } catch (e) {
+      console.warn('Supabase active account fetch failed, using local cache:', e);
+    }
+  }
+
   const accounts = await listAccounts();
   return accounts.find(a => a.id === id) || null;
 }
