@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/nilvera-api/:path*",
+      "destination": "https://apitest.nilvera.com/:path*"
+    },
+    {
+      "source": "/nilvera-live/:path*",
+      "destination": "https://api.nilvera.com/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
