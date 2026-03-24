@@ -59,7 +59,7 @@ async function refreshGrid(page) {
   grid.innerHTML = accounts.map(acc => `
     <div class="account-card ${acc.id === activeId ? 'active-account' : ''}" data-id="${acc.id}">
       <div class="account-card-header">
-        <span class="account-card-color" style="background:${acc.color || '#6366f1'}"></span>
+        <span class="account-card-color" style="background:${acc.color || '#3b82f6'}"></span>
         <span class="account-card-name">${acc.name}</span>
         <span class="account-card-env ${acc.environment}">${acc.environment === 'live' ? 'CANLI' : 'TEST'}</span>
       </div>
@@ -104,7 +104,7 @@ function showAccountForm(page, existing = null) {
   const isEdit = !!existing;
   const existingPrefs = { invoice_series: existing?.invoice_series };
   const colorOptions = ACCOUNT_COLORS.map(c =>
-    `<button type="button" class="color-opt" data-color="${c}" style="width:28px;height:28px;border-radius:50%;border:2px solid ${c === (existing?.color || '#6366f1') ? 'white' : 'transparent'};background:${c};cursor:pointer;transition:all 0.15s"></button>`
+    `<button type="button" class="color-opt" data-color="${c}" style="width:28px;height:28px;border-radius:50%;border:2px solid ${c === (existing?.color || '#3b82f6') ? 'white' : 'transparent'};background:${c};cursor:pointer;transition:all 0.15s"></button>`
   ).join('');
 
   const body = document.createElement('div');
@@ -142,14 +142,21 @@ function showAccountForm(page, existing = null) {
         <input type="text" class="form-input" id="accVkn" value="${existing?.vkn || ''}" />
       </div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Fatura Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
-      <input type="text" class="form-input" id="accInvoiceSeries" maxlength="12" placeholder="Örn: AKA / BIR" value="${existingPrefs.invoice_series || ''}" />
-      <span class="form-hint">Bu hesap aktifken Fatura Oluştur ekranında seri otomatik gelir.</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="form-group">
+        <label class="form-label">Fatura Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
+        <input type="text" class="form-input" id="accInvoiceSeries" maxlength="12" placeholder="Örn: AKA / BIR" value="${existingPrefs.invoice_series || ''}" />
+        <span class="form-hint">Fatura Oluştur ekranında seri otomatik gelir.</span>
+      </div>
+      <div class="form-group">
+        <label class="form-label">İrsaliye Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
+        <input type="text" class="form-input" id="accDespatchSeries" maxlength="12" placeholder="Örn: AYK" value="${existing?.despatch_series || ''}" />
+        <span class="form-hint">İrsaliye Oluştur ekranında seri otomatik gelir.</span>
+      </div>
     </div>
   `;
 
-  let selectedColor = existing?.color || '#6366f1';
+  let selectedColor = existing?.color || '#3b82f6';
 
   const footer = document.createElement('div');
   footer.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
@@ -183,16 +190,17 @@ function showAccountForm(page, existing = null) {
       const company = document.getElementById('accCompany')?.value?.trim();
       const vkn = document.getElementById('accVkn')?.value?.trim();
       const invoiceSeries = (document.getElementById('accInvoiceSeries')?.value || '').trim().toUpperCase();
+      const despatchSeries = (document.getElementById('accDespatchSeries')?.value || '').trim().toUpperCase();
 
       if (!name) return showToast('Hesap adı gerekli', 'warning');
       if (!apiKey) return showToast('API anahtarı gerekli', 'warning');
 
       try {
         if (isEdit) {
-          await updateAccount(existing.id, { name, api_key: apiKey, environment: env, color: selectedColor, company_name: company, vkn, invoice_series: invoiceSeries });
+          await updateAccount(existing.id, { name, api_key: apiKey, environment: env, color: selectedColor, company_name: company, vkn, invoice_series: invoiceSeries, despatch_series: despatchSeries });
           showToast('Hesap güncellendi', 'success');
         } else {
-          const newAcc = await addAccount({ name, apiKey, environment: env, color: selectedColor, companyName: company, vkn, invoiceSeries });
+          const newAcc = await addAccount({ name, apiKey, environment: env, color: selectedColor, companyName: company, vkn, invoiceSeries, despatchSeries });
           const all = await listAccounts();
           if (all.length === 1) await setActiveAccount(newAcc.id);
           showToast('Hesap eklendi', 'success');

@@ -8,6 +8,7 @@ import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
 import { exportCariDefter } from '../services/cari-export.js';
 import { getActiveAccount } from '../services/account-manager.js';
+import { registerCacheReset } from '../router.js';
 
 // ── SVG Icons ──
 const ic = {
@@ -51,6 +52,7 @@ function getMonthRange() {
 }
 
 export async function renderEArsivInvoices() {
+  resetEarsivCache();
   const page = document.createElement('div');
   const account = await getActiveAccount();
   const { start, end } = getMonthRange();
@@ -173,12 +175,15 @@ export async function renderEArsivInvoices() {
     document.body.appendChild(dd);
 
     dd.querySelectorAll('.action-dropdown-item').forEach(btn => {
-      btn.addEventListener('click', (ev) => {
+      btn.addEventListener('click', async (ev) => {
         ev.stopPropagation();
         dd.remove();
         if (btn.dataset.act === 'excel') exportFiltered(page);
         else if (btn.dataset.act === 'cari-excel') exportCariFiltered(page);
-        else showToast('Toplu indirme özelliği çok yakında!', 'info');
+        else if (btn.dataset.act === 'pdf-all') await bulkDownloadForFiltered(page, 'pdf');
+        else if (btn.dataset.act === 'pdf-single') await bulkDownloadForFiltered(page, 'pdf');
+        else if (btn.dataset.act === 'xml-all') await bulkDownloadForFiltered(page, 'xml');
+        else if (btn.dataset.act === 'xml-env') await bulkDownloadForFiltered(page, 'xml');
       });
     });
   });
@@ -225,6 +230,12 @@ export async function renderEArsivInvoices() {
 
 let cachedEarsiv = [];
 let filteredEarsiv = [];
+
+function resetEarsivCache() {
+  cachedEarsiv = [];
+  filteredEarsiv = [];
+}
+registerCacheReset(resetEarsivCache);
 
 function extractItems(data) {
   if (!data) return [];
@@ -562,6 +573,59 @@ async function exportCariFiltered(page) {
   }
 }
 
+function getEffectiveList() {
+  const checked = document.querySelectorAll('.row-check:checked');
+  if (checked.length > 0) {
+    return Array.from(checked).map(cb => {
+      const uuid = cb.dataset.uuid;
+      return filteredEarsiv.find(i => (i.UUID || i.uuid || i.Id) === uuid);
+    }).filter(Boolean);
+  }
+  return filteredEarsiv;
+}
+
+function summarizeBulkResult(ok, fail, label) {
+  if (ok > 0 && fail === 0) showToast(`${ok} kayıt ${label} başarılı`, 'success');
+  else if (ok > 0) showToast(`${ok} başarılı, ${fail} başarısız — ${label}`, 'warning');
+  else showToast(`${label} başarısız (${fail} hata)`, 'error');
+}
+
+async function bulkDownloadForFiltered(page, type) {
+  const list = getEffectiveList();
+  if (!list.length) {
+    showToast('İndirilecek kayıt bulunamadı', 'warning');
+    return;
+  }
+  let okCount = 0, failCount = 0;
+  const capped = list.slice(0, 30);
+  if (list.length > 30) showToast('Performans için ilk 30 kayıt indirilecek', 'info');
+
+  for (const inv of capped) {
+    const uuid = inv.UUID || inv.uuid || inv.Id || '';
+    if (!uuid) { failCount++; continue; }
+    try {
+      const res = type === 'pdf' ? await EArchive.getInvoicePdf(uuid) : await EArchive.getInvoiceXml(uuid);
+      if (res.success && res.data) {
+        const content = typeof res.data === 'string' ? res.data : (res.data.File || res.data.String || res.data[0]);
+        if (content) {
+          const isBase64 = content.match(/^[a-zA-Z0-9+/=]+$/);
+          const url = isBase64
+            ? `data:application/${type};base64,${content}`
+            : `data:application/${type},${encodeURIComponent(content)}`;
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = `Fatura_${uuid}.${type}`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          okCount++;
+        } else { failCount++; }
+      } else { failCount++; }
+    } catch { failCount++; }
+  }
+  summarizeBulkResult(okCount, failCount, type === 'pdf' ? 'PDF indirme' : 'XML indirme');
+}
+
 async function downloadFile(uuid, source, type) {
   try {
     let res;
@@ -670,35 +734,55 @@ async function showPdfPreviewModal(uuid, source) {
     if (!res.success || !res.data) throw new Error(res.error || 'PDF alınamadı');
 
     const content = typeof res.data === 'string' ? res.data : (res.data.File || res.data.String || res.data[0]);
-    const isBase64 = content.match(/^[a-zA-Z0-9+/=]+$/);
-    const pdfUrl = isBase64 ? `data:application/pdf;base64,${content}#toolbar=0&navpanes=0&scrollbar=0` : `data:application/pdf,${encodeURIComponent(content)}#toolbar=0&navpanes=0&scrollbar=0`;
+    if (!content) throw new Error('PDF içeriği boş');
 
-    bodyEl.innerHTML = `<iframe src="${pdfUrl}" width="100%" height="100%" style="border:none;border-radius:4px;"></iframe>`;
+    const isBase64 = content.match(/^[a-zA-Z0-9+/=\s]+$/);
+    let blobUrl;
+    if (isBase64) {
+      const byteChars = atob(content.replace(/\s/g, ''));
+      const byteNumbers = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      blobUrl = URL.createObjectURL(new Blob([byteNumbers], { type: 'application/pdf' }));
+    } else {
+      blobUrl = URL.createObjectURL(new Blob([content], { type: 'application/pdf' }));
+    }
+
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
+    if (isMobile) {
+      bodyEl.style.height = 'auto'; bodyEl.style.minHeight = 'auto';
+      bodyEl.innerHTML = `
+        <div style="text-align:center;padding:30px">
+          <div style="width:64px;height:64px;border-radius:16px;background:var(--accent-bg);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <h3 style="font-size:16px;margin-bottom:8px">PDF Hazır</h3>
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Mobil tarayıcıda önizleme için PDF'i yeni sekmede açın</p>
+          <div style="display:flex;flex-direction:column;gap:10px;max-width:280px;margin:0 auto">
+            <a href="${blobUrl}" target="_blank" rel="noopener" class="btn btn-primary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none">${ic.fileText} PDF'i Aç</a>
+            <a href="${blobUrl}" download="Fatura_${uuid}.pdf" class="btn btn-secondary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none">${ic.download} PDF İndir</a>
+          </div>
+        </div>`;
+    } else {
+      bodyEl.innerHTML = `<iframe src="${blobUrl}#toolbar=0&navpanes=0&scrollbar=0" width="100%" height="100%" style="border:none;border-radius:4px;"></iframe>`;
+    }
 
     const mailBtn = footerEl.querySelector('#mailPdfBtn');
     const dlBtn = footerEl.querySelector('#downloadPdfBtn');
     const printBtn = footerEl.querySelector('#printPdfBtn');
-    
-    mailBtn.style.display = 'flex';
-    dlBtn.style.display = 'flex';
-    printBtn.style.display = 'flex';
+    if (!isMobile) { mailBtn.style.display = 'flex'; dlBtn.style.display = 'flex'; printBtn.style.display = 'flex'; }
 
     mailBtn.addEventListener('click', () => { modal?.close(); showEmailModal(uuid, source); });
     dlBtn.addEventListener('click', () => {
-      const link = document.createElement('a');
-      link.href = pdfUrl;
-      link.download = `Fatura_${uuid}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      const link = document.createElement('a'); link.href = blobUrl; link.download = `Fatura_${uuid}.pdf`;
+      document.body.appendChild(link); link.click(); document.body.removeChild(link);
     });
     printBtn.addEventListener('click', () => {
       const iframe = bodyEl.querySelector('iframe');
-      if (iframe) {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      }
+      if (iframe) { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
     });
+
+    const origClose = modal?.close?.bind(modal);
+    if (modal && origClose) { modal.close = () => { URL.revokeObjectURL(blobUrl); origClose(); }; }
 
   } catch (err) {
     bodyEl.innerHTML = `<div class="empty-state">${ic.error}<h3>Önizleme Yüklenemedi</h3><p>${err.message}</p></div>`;

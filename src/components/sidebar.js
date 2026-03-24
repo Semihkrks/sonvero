@@ -248,7 +248,7 @@ export function renderSidebar(currentRoute) {
 
     <div class="account-switcher" id="accountSwitcher">
       <div class="account-switcher-current">
-        <span class="account-dot" id="accountDot" style="background:#6366f1"></span>
+        <span class="account-dot" id="accountDot" style="background:#3b82f6"></span>
         <span class="account-switcher-name" id="accountName">Hesap Seçin</span>
         <span class="account-switcher-env" id="accountEnv">TEST</span>
       </div>
@@ -335,7 +335,7 @@ async function loadAccountSwitcher(sidebar) {
     const dot = sidebar.querySelector('#accountDot');
     const name = sidebar.querySelector('#accountName');
     const env = sidebar.querySelector('#accountEnv');
-    if (dot) dot.style.background = active.color || '#6366f1';
+    if (dot) dot.style.background = active.color || '#3b82f6';
     if (name) name.textContent = active.name;
     if (env) {
       env.textContent = active.environment === 'live' ? 'CANLI' : 'TEST';
@@ -349,7 +349,7 @@ async function loadAccountSwitcher(sidebar) {
 
   dropdown.innerHTML = accounts.map(acc => `
     <button class="account-dropdown-item ${acc.id === activeId ? 'active' : ''}" data-id="${acc.id}">
-      <span class="account-dot" style="background:${acc.color || '#6366f1'}"></span>
+      <span class="account-dot" style="background:${acc.color || '#3b82f6'}"></span>
       ${acc.name}
       <span class="account-switcher-env" style="${acc.environment === 'live' ? 'background:var(--success-bg);color:var(--success)' : ''}">${acc.environment === 'live' ? 'CANLI' : 'TEST'}</span>
     </button>

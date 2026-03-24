@@ -2,6 +2,7 @@ import { EDespatch } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { getActiveAccount } from '../services/account-manager.js';
+import { registerCacheReset } from '../router.js';
 
 const ic = {
   truck: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>`,
@@ -23,6 +24,13 @@ const ic = {
 let cachedRows = [];
 let cachedOutgoingAccountId = '';
 let outgoingLoadSeq = 0;
+
+function resetEDespatchOutgoingCache() {
+  cachedRows = [];
+  cachedOutgoingAccountId = '';
+  outgoingLoadSeq++;
+}
+registerCacheReset(resetEDespatchOutgoingCache);
 const OUTGOING_SPECIAL_CODE_KEY = 'nilfatura_edespatch_sale_special_codes';
 
 function loadOutgoingSpecialCodeMap() {
@@ -599,6 +607,7 @@ function applySearch(page) {
 }
 
 export async function renderEDespatchOutgoing(options = {}) {
+  resetEDespatchOutgoingCache();
   const page = document.createElement('div');
   const { start, end } = getYearStartAndToday();
   const moduleLabel = options.moduleLabel || 'e-İrsaliye';

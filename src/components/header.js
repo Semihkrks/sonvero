@@ -104,7 +104,7 @@ export function renderHeader(title = 'Dashboard', options = {}) {
       const isActive = acc.id === activeId;
       return `
         <button class="header-account-item ${isActive ? 'active' : ''}" data-account-id="${acc.id}">
-          <span class="header-account-dot" style="background:${acc.color || '#6366f1'}"></span>
+          <span class="header-account-dot" style="background:${acc.color || '#3b82f6'}"></span>
           <span class="header-account-name">${acc.name || 'Hesap'}</span>
           <span class="header-account-env ${envClass}">${envLabel}</span>
         </button>
@@ -179,6 +179,56 @@ export function renderHeader(title = 'Dashboard', options = {}) {
       positionAccountDropdown();
     }
   });
+
+  // ── Global Search ──
+  const searchInput = header.querySelector('#globalSearch');
+  if (searchInput) {
+    let searchTimeout = null;
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const q = searchInput.value.trim();
+        if (!q) return;
+        clearTimeout(searchTimeout);
+
+        // Route-based search shortcuts
+        const routeMap = {
+          'cari': '/cari', 'musteri': '/musteriler', 'müşteri': '/musteriler',
+          'firma': '/firma', 'ayar': '/settings', 'hesap': '/accounts',
+          'etiket': '/efatura-etiketler', 'sablon': '/efatura-sablonlar', 'şablon': '/efatura-sablonlar',
+          'gelen': '/incoming', 'giden': '/outgoing', 'arsiv': '/earsiv-faturalar',
+          'irsaliye': '/eirsaliye-gelen', 'taslak': '/drafts', 'export': '/export',
+          'dashboard': '/dashboard', 'gib': '/gib-earsiv',
+        };
+
+        const lower = q.toLowerCase();
+        for (const [keyword, route] of Object.entries(routeMap)) {
+          if (lower.includes(keyword)) {
+            window.location.hash = '#' + route;
+            searchInput.value = '';
+            searchInput.blur();
+            return;
+          }
+        }
+
+        // Default: search in customer list (cari page)
+        window.location.hash = '#/musteriler';
+        searchInput.value = '';
+        searchInput.blur();
+
+        // After navigation, try to fill the search on the target page
+        setTimeout(() => {
+          const targetSearch = document.querySelector('#customerSearch');
+          if (targetSearch) {
+            targetSearch.value = q;
+            targetSearch.dispatchEvent(new Event('input'));
+            const searchBtn = document.querySelector('#customerSearchBtn');
+            if (searchBtn) searchBtn.click();
+          }
+        }, 300);
+      }
+    });
+  }
 
   return header;
 }

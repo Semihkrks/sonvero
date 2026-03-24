@@ -30,6 +30,8 @@
     margin-left: 0 !important;
     width: 100vw;
     height: 100vh !important;
+    height: 100dvh !important;
+    height: var(--app-height, 100vh) !important;
     padding-bottom: 0;
     display: flex;
     flex-direction: column;
@@ -39,11 +41,13 @@
     min-height: 58px;
     height: auto;
     border-radius: 0;
-    padding: 10px 12px;
+    padding: max(10px, var(--safe-top, 0px)) 12px 10px 12px;
     margin: 0;
     width: 100vw;
     gap: 10px;
     justify-content: space-between;
+    -webkit-user-select: none;
+    user-select: none;
   }
 
   .hamburger-btn {
@@ -106,17 +110,19 @@
     bottom: 0;
     left: 0;
     width: 100vw;
-    height: 70px;
+    height: calc(60px + var(--safe-bottom, 10px));
     background: var(--bg-card);
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-top: 1px solid var(--border);
     z-index: 9999;
     justify-content: space-around;
-    align-items: center;
+    align-items: flex-start;
+    padding-top: 6px;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
-    padding-bottom: env(safe-area-inset-bottom, 10px);
+    padding-bottom: var(--safe-bottom, 10px);
     transition: transform 0.24s ease, opacity 0.24s ease;
+    touch-action: manipulation;
   }
 
   .mobile-bottom-nav.mobile-bottom-nav--hidden {
@@ -1071,6 +1077,46 @@
   .cari-detail-summary,
   .cari-movement-amounts {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ── iOS-specific fixes ── */
+@supports (-webkit-touch-callout: none) {
+  /* Prevent iOS input zoom — force 16px minimum */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="url"],
+  input[type="tel"],
+  input[type="number"],
+  input[type="date"],
+  input[type="search"],
+  textarea,
+  select,
+  .form-input,
+  .form-select,
+  .filter-input {
+    font-size: max(16px, 1em) !important;
+  }
+
+  /* iOS rubber-band scroll fix */
+  .page-content {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+  }
+
+  /* iOS sidebar overlay touch fix */
+  .sidebar-overlay {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* iOS header account dropdown positioning fix */
+  .header-account-dropdown {
+    position: fixed;
+    will-change: transform;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
   }
 }
 

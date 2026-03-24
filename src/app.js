@@ -25,6 +25,12 @@ import { renderExportPage } from './pages/export.js';
 import { renderSettings } from './pages/settings.js';
 import { renderCariPage } from './pages/cari.js';
 import { renderPlaceholderPage } from './pages/placeholder-page.js';
+import { renderCompanyInfo } from './pages/company-info.js';
+import { renderCustomers } from './pages/customers.js';
+import { renderTagsPage } from './pages/tags.js';
+import { renderTemplatesPage } from './pages/templates.js';
+import { renderGibEarsiv } from './pages/gib-earsiv.js';
+import { renderEirsaliyeCreate } from './pages/eirsaliye-create.js';
 import { renderEDespatchOutgoing } from './pages/eirsaliye-outgoing.js';
 import { renderEDespatchIncoming } from './pages/eirsaliye-incoming.js';
 import {
@@ -38,12 +44,51 @@ import {
 const savedTheme = localStorage.getItem('nilfatura_theme') || 'dark';
 document.documentElement.setAttribute('data-theme', savedTheme);
 
+// ── iOS viewport height fix ──
+function setAppHeight() {
+  document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
+}
+setAppHeight();
+window.addEventListener('resize', setAppHeight);
+window.addEventListener('orientationchange', () => setTimeout(setAppHeight, 100));
+
 const ALLOWED_LOGIN_EMAIL = 'sonvera@gmail.com';
 const ALLOWED_LOGIN_PASSWORD = '123659789sK.';
+
+// ── Rate Limiting ──
+let loginFailCount = 0;
+let loginLockUntil = 0;
+
+function getLoginCooldown() {
+  if (loginFailCount < 3) return 0;
+  if (loginFailCount < 5) return 15;
+  if (loginFailCount < 8) return 30;
+  return 60;
+}
+
+function isLoginLocked() {
+  if (!loginLockUntil) return false;
+  if (Date.now() >= loginLockUntil) {
+    loginLockUntil = 0;
+    return false;
+  }
+  return true;
+}
+
+function recordLoginFail() {
+  loginFailCount++;
+  const cooldown = getLoginCooldown();
+  if (cooldown > 0) {
+    loginLockUntil = Date.now() + cooldown * 1000;
+  }
+  return cooldown;
+}
 
 async function signInFixedUser() {
   try {
     await signIn(ALLOWED_LOGIN_EMAIL, ALLOWED_LOGIN_PASSWORD);
+    loginFailCount = 0;
+    loginLockUntil = 0;
   } catch (err) {
     const msg = String(err?.message || '');
     const lower = msg.toLowerCase();
@@ -60,6 +105,8 @@ async function signInFixedUser() {
           throw new Error('Kullanici olusturuldu ancak oturum acilamadi. Lutfen daha sonra tekrar dene.');
         }
 
+        loginFailCount = 0;
+        loginLockUntil = 0;
         return;
       } catch (signUpErr) {
         const signUpMsg = String(signUpErr?.message || '').toLowerCase();
@@ -163,46 +210,70 @@ registerRoute('/eirsaliye-arsiv-gelen', async () => ({
   title: 'e-İrsaliye Arşiv — Gelen'
 }));
 
-// ── Placeholder routes for Nilvera sections ──
+// ── Functional routes (formerly placeholders) ──
+registerRoute('/firma', async () => ({
+  page: await renderCompanyInfo(),
+  title: 'Firma Bilgileri'
+}));
+
+registerRoute('/musteriler', async () => ({
+  page: await renderCustomers(),
+  title: 'Musteriler'
+}));
+
+registerRoute('/efatura-etiketler', async () => ({
+  page: await renderTagsPage(),
+  title: 'e-Fatura Etiketler'
+}));
+
+registerRoute('/efatura-sablonlar', async () => ({
+  page: await renderTemplatesPage(),
+  title: 'e-Fatura Sablonlar'
+}));
+
+registerRoute('/gib-earsiv', async () => ({
+  page: await renderGibEarsiv(),
+  title: 'GIB e-Arsiv'
+}));
+
+registerRoute('/eirsaliye-olustur', async () => ({
+  page: await renderEirsaliyeCreate(),
+  title: 'Irsaliye Olustur'
+}));
+
+// ── Remaining placeholder routes ──
 const placeholderRoutes = [
-  // Fatura İşlemleri
-  { path: '/create-export', title: 'İhracat Faturası Oluştur' },
-  { path: '/upload-xml', title: 'XML Yükle' },
-  { path: '/upload-excel', title: 'Excel Yükle' },
-  { path: '/upload-sgk', title: 'SGK Pdf Yükle' },
+  // Fatura Islemleri
+  { path: '/create-export', title: 'Ihracat Faturasi Olustur' },
+  { path: '/upload-xml', title: 'XML Yukle' },
+  { path: '/upload-excel', title: 'Excel Yukle' },
+  { path: '/upload-sgk', title: 'SGK Pdf Yukle' },
   // e-Fatura
   { path: '/efatura-eski-giden', title: 'Eski Faturalar — Giden' },
   { path: '/efatura-eski-gelen', title: 'Eski Faturalar — Gelen' },
   { path: '/efatura-seriler', title: 'e-Fatura Seriler' },
-  { path: '/efatura-sablonlar', title: 'e-Fatura Şablonlar' },
   { path: '/efatura-bildirim-giden', title: 'Giden Fatura Bildirimleri' },
   { path: '/efatura-bildirim-gelen', title: 'Gelen Fatura Bildirimleri' },
-  { path: '/efatura-etiketler', title: 'e-Fatura Etiketler' },
-  // e-Arşiv
-  
-  { path: '/earsiv-iptal', title: 'İptal Faturaları' },
+  // e-Arsiv
+  { path: '/earsiv-iptal', title: 'Iptal Faturalari' },
   { path: '/earsiv-rapor-liste', title: 'Rapor Listesi' },
-  { path: '/earsiv-rapor-olustur', title: 'Rapor Oluştur' },
-  { path: '/earsiv-eski', title: 'e-Arşiv Eski Faturalar' },
-  { path: '/earsiv-tanimlamalar', title: 'e-Arşiv Tanımlamalar' },
-  { path: '/earsiv-bildirim', title: 'e-Arşiv Bildirim Ayarları' },
-  { path: '/earsiv-etiketler', title: 'e-Arşiv Etiketler' },
-  // e-İrsaliye
-  { path: '/eirsaliye-olustur', title: 'İrsaliye Oluştur' },
-  { path: '/eirsaliye-taslaklar', title: 'İrsaliye Taslakları' },
-  { path: '/eirsaliye-dosya', title: 'İrsaliye Dosya Yükleme' },
-  { path: '/eirsaliye-tanimlamalar', title: 'e-İrsaliye Tanımlamalar' },
-  { path: '/eirsaliye-bildirim', title: 'e-İrsaliye Bildirim Ayarları' },
-  { path: '/eirsaliye-etiketler', title: 'e-İrsaliye Etiketler' },
+  { path: '/earsiv-rapor-olustur', title: 'Rapor Olustur' },
+  { path: '/earsiv-eski', title: 'e-Arsiv Eski Faturalar' },
+  { path: '/earsiv-tanimlamalar', title: 'e-Arsiv Tanimlamalar' },
+  { path: '/earsiv-bildirim', title: 'e-Arsiv Bildirim Ayarlari' },
+  { path: '/earsiv-etiketler', title: 'e-Arsiv Etiketler' },
+  // e-Irsaliye
+  { path: '/eirsaliye-taslaklar', title: 'Irsaliye Taslaklari' },
+  { path: '/eirsaliye-dosya', title: 'Irsaliye Dosya Yukleme' },
+  { path: '/eirsaliye-tanimlamalar', title: 'e-Irsaliye Tanimlamalar' },
+  { path: '/eirsaliye-bildirim', title: 'e-Irsaliye Bildirim Ayarlari' },
+  { path: '/eirsaliye-etiketler', title: 'e-Irsaliye Etiketler' },
   // Others
-  { path: '/gib-earsiv', title: 'GİB E-Arşiv' },
   { path: '/stoklar', title: 'Stoklar' },
-  { path: '/musteriler', title: 'Müşteriler' },
-  { path: '/mailing', title: 'Mailing Ayarları' },
+  { path: '/mailing', title: 'Mailing Ayarlari' },
   { path: '/raporlar', title: 'Raporlar' },
-  { path: '/firma', title: 'Firma Bilgileri' },
-  { path: '/kullanicilar', title: 'Kullanıcılar' },
-  { path: '/api-tanimlari', title: 'API Tanımları' },
+  { path: '/kullanicilar', title: 'Kullanicilar' },
+  { path: '/api-tanimlari', title: 'API Tanimlari' },
   { path: '/destek', title: 'Destek Talepleri' },
 ];
 
@@ -276,59 +347,116 @@ function setupBottomNavAutoHide(scrollContainer, navEl) {
   };
 }
 
-function renderLoginPage(info = '') {
+function renderLoginPage(info = '', infoType = 'error') {
   const app = document.getElementById('app');
   if (!app) return;
 
+  const lockedNow = isLoginLocked();
+  const remainSec = lockedNow ? Math.ceil((loginLockUntil - Date.now()) / 1000) : 0;
+
   app.innerHTML = `
     <div class="login-page">
+      <div class="login-bg-glow"></div>
       <div class="login-card">
         <div class="login-logo">
-          <div class="login-logo-icon">S</div>
+          <div class="login-logo-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>
+          </div>
           <h1>Sonvera</h1>
-          <p>Yetkili kullanıcı girişi</p>
+          <p>E-Fatura Yonetim Platformu</p>
         </div>
+        ${info ? `<div class="login-alert login-alert-${infoType}">${info}</div>` : ''}
+        ${lockedNow ? `<div class="login-alert login-alert-warning">Cok fazla basarisiz deneme. <span id="lockCountdown">${remainSec}</span> saniye bekleyin.</div>` : ''}
         <form id="authForm">
           <div class="form-group">
             <label class="form-label">E-Posta</label>
             <input type="email" id="authEmail" class="form-input" value="${ALLOWED_LOGIN_EMAIL}" readonly required />
           </div>
           <div class="form-group">
-            <label class="form-label">Şifre</label>
-            <input type="password" id="authPassword" class="form-input" placeholder="Şifre" required />
+            <label class="form-label">Sifre</label>
+            <div class="login-password-wrap">
+              <input type="password" id="authPassword" class="form-input" placeholder="Sifrenizi girin" required autocomplete="current-password" />
+              <button type="button" class="login-eye-btn" id="togglePwdBtn" tabindex="-1" aria-label="Sifreyi goster/gizle">
+                <svg id="eyeIcon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              </button>
+            </div>
           </div>
-          <button type="submit" class="btn btn-primary login-submit-btn" id="authSubmitBtn">
-            Giriş Yap
+          <button type="submit" class="btn btn-primary login-submit-btn" id="authSubmitBtn" ${lockedNow ? 'disabled' : ''}>
+            <span id="loginBtnText">Giris Yap</span>
+            <span id="loginBtnSpinner" class="login-spinner" style="display:none"></span>
           </button>
-          ${info ? `<p class="login-info">${info}</p>` : ''}
-          <p class="login-note">Oturum açık kalır. Aynı hesapla farklı telefonlardan giriş yapabilirsin.</p>
+          <p class="login-note">Oturum acik kalir. Ayni hesapla farkli cihazlardan giris yapabilirsin.</p>
         </form>
       </div>
     </div>
   `;
 
+  // Lock countdown
+  if (lockedNow) {
+    const countdownEl = app.querySelector('#lockCountdown');
+    const submitBtn = app.querySelector('#authSubmitBtn');
+    const lockTimer = setInterval(() => {
+      const left = Math.ceil((loginLockUntil - Date.now()) / 1000);
+      if (left <= 0) {
+        clearInterval(lockTimer);
+        if (countdownEl) countdownEl.parentElement.remove();
+        if (submitBtn) submitBtn.removeAttribute('disabled');
+        return;
+      }
+      if (countdownEl) countdownEl.textContent = left;
+    }, 1000);
+  }
+
+  // Password toggle
+  const pwdInput = app.querySelector('#authPassword');
+  const toggleBtn = app.querySelector('#togglePwdBtn');
+  const eyeIcon = app.querySelector('#eyeIcon');
+  toggleBtn?.addEventListener('click', () => {
+    if (!pwdInput) return;
+    const isPassword = pwdInput.type === 'password';
+    pwdInput.type = isPassword ? 'text' : 'password';
+    if (eyeIcon) {
+      eyeIcon.innerHTML = isPassword
+        ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>'
+        : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>';
+    }
+  });
+
+  // Form submit
   const form = app.querySelector('#authForm');
   const submitBtn = app.querySelector('#authSubmitBtn');
 
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (isLoginLocked()) return;
+
     const email = app.querySelector('#authEmail')?.value?.trim();
     const password = app.querySelector('#authPassword')?.value || '';
     if (!email || !password) return;
 
     submitBtn?.setAttribute('disabled', 'true');
+    const btnText = app.querySelector('#loginBtnText');
+    const btnSpinner = app.querySelector('#loginBtnSpinner');
+    if (btnText) btnText.textContent = 'Giris yapiliyor...';
+    if (btnSpinner) btnSpinner.style.display = 'inline-block';
 
     try {
       if (email !== ALLOWED_LOGIN_EMAIL || password !== ALLOWED_LOGIN_PASSWORD) {
-        renderLoginPage('Yetkisiz giriş. Mail veya şifre hatalı.');
+        const cooldown = recordLoginFail();
+        const lockMsg = cooldown > 0 ? ` ${cooldown} saniye beklemeniz gerekiyor.` : '';
+        renderLoginPage(`Yetkisiz giris. Mail veya sifre hatali.${lockMsg}`);
         return;
       }
 
       await signInFixedUser();
     } catch (err) {
-      renderLoginPage(err?.message || 'Giriş sırasında bir hata oluştu.');
+      const cooldown = recordLoginFail();
+      const lockMsg = cooldown > 0 ? ` ${cooldown} saniye beklemeniz gerekiyor.` : '';
+      renderLoginPage((err?.message || 'Giris sirasinda bir hata olustu.') + lockMsg);
     } finally {
       submitBtn?.removeAttribute('disabled');
+      if (btnText) btnText.textContent = 'Giris Yap';
+      if (btnSpinner) btnSpinner.style.display = 'none';
     }
   });
 }
@@ -497,6 +625,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 
-console.log('%c🧾 Sonvera 2.0', 'font-size:16px;font-weight:bold;color:#6366f1');
+console.log('%c🧾 Sonvera 2.0', 'font-size:16px;font-weight:bold;color:#3b82f6');
 console.log('%cE-Fatura Yönetim Platformu başlatıldı', 'color:#94a3b8');
 

@@ -56,9 +56,9 @@ async function getAuthenticatedUserId() {
 
 // ── Account Colors ──
 export const ACCOUNT_COLORS = [
-  '#6366f1', '#8b5cf6', '#ec4899', '#f43f5e',
-  '#f97316', '#eab308', '#22c55e', '#14b8a6',
-  '#06b6d4', '#3b82f6'
+  '#3b82f6', '#2563eb', '#0ea5e9', '#06b6d4',
+  '#14b8a6', '#22c55e', '#f59e0b', '#f97316',
+  '#ef4444', '#64748b'
 ];
 
 // ── List Accounts ──
@@ -88,7 +88,7 @@ export async function listAccounts() {
 }
 
 // ── Add Account ──
-export async function addAccount({ name, apiKey, environment = 'test', color = '#6366f1', companyName = '', vkn = '', invoiceSeries = '' }) {
+export async function addAccount({ name, apiKey, environment = 'test', color = '#3b82f6', companyName = '', vkn = '', invoiceSeries = '', despatchSeries = '' }) {
   const account = {
     id: crypto.randomUUID(),
     name,
@@ -99,6 +99,7 @@ export async function addAccount({ name, apiKey, environment = 'test', color = '
     company_name: companyName,
     vkn,
     invoice_series: invoiceSeries,
+    despatch_series: despatchSeries,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };

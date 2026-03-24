@@ -488,39 +488,103 @@ async function loadDashboard(page) {
 
 function drawDonut(canvas, incoming, outgoing) {
   if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const w = canvas.width, h = canvas.height;
-  const cx = w / 2, cy = h / 2, r = 70;
+  const dpr = window.devicePixelRatio || 1;
+  const size = 200;
+  canvas.width = size * dpr;
+  canvas.height = size * dpr;
+  canvas.style.width = size + 'px';
+  canvas.style.height = size + 'px';
 
-  ctx.clearRect(0, 0, w, h);
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const cx = size / 2, cy = size / 2, r = 72, lw = 22;
+  const gap = 0.04; // small gap between segments
+
+  ctx.clearRect(0, 0, size, size);
 
   const total = incoming + outgoing;
   if (total === 0) {
-    // Empty donut
+    // Empty — subtle track ring
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 28;
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = lw;
+    ctx.stroke();
+
+    // Inner subtle ring
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    ctx.strokeStyle = 'rgba(59,130,246,0.08)';
+    ctx.lineWidth = 2;
     ctx.stroke();
     return;
   }
 
-  const inAngle = (incoming / total) * 2 * Math.PI;
-  const outAngle = (outgoing / total) * 2 * Math.PI;
-
-  // Incoming (blue)
+  // Background track
   ctx.beginPath();
-  ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + inAngle);
-  ctx.strokeStyle = '#3b82f6';
-  ctx.lineWidth = 28;
-  ctx.lineCap = 'butt';
+  ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = lw;
   ctx.stroke();
 
-  // Outgoing (green)
+  const inAngle = (incoming / total) * 2 * Math.PI;
+  const outAngle = (outgoing / total) * 2 * Math.PI;
+  const startAngle = -Math.PI / 2;
+
+  // Incoming segment (blue gradient)
+  if (incoming > 0) {
+    const grad1 = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+    grad1.addColorStop(0, '#3b82f6');
+    grad1.addColorStop(1, '#06b6d4');
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle + (outgoing > 0 ? gap / 2 : 0), startAngle + inAngle - (outgoing > 0 ? gap / 2 : 0));
+    ctx.strokeStyle = grad1;
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Glow
+    ctx.save();
+    ctx.shadowColor = 'rgba(59,130,246,0.35)';
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle, startAngle + inAngle);
+    ctx.strokeStyle = 'rgba(59,130,246,0.15)';
+    ctx.lineWidth = lw + 8;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Outgoing segment (green gradient)
+  if (outgoing > 0) {
+    const grad2 = ctx.createLinearGradient(cx + r, cy - r, cx - r, cy + r);
+    grad2.addColorStop(0, '#10b981');
+    grad2.addColorStop(1, '#34d399');
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle + inAngle + (incoming > 0 ? gap / 2 : 0), startAngle + inAngle + outAngle - (incoming > 0 ? gap / 2 : 0));
+    ctx.strokeStyle = grad2;
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // Glow
+    ctx.save();
+    ctx.shadowColor = 'rgba(16,185,129,0.3)';
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, startAngle + inAngle, startAngle + inAngle + outAngle);
+    ctx.strokeStyle = 'rgba(16,185,129,0.12)';
+    ctx.lineWidth = lw + 8;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Inner decorative ring
   ctx.beginPath();
-  ctx.arc(cx, cy, r, -Math.PI / 2 + inAngle, -Math.PI / 2 + inAngle + outAngle);
-  ctx.strokeStyle = '#10b981';
-  ctx.lineWidth = 28;
+  ctx.arc(cx, cy, r - lw / 2 - 4, 0, 2 * Math.PI);
+  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+  ctx.lineWidth = 1;
   ctx.stroke();
 }
 

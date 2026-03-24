@@ -381,6 +381,32 @@ export const EArchive = {
 // ═══════════════════════════════════════
 
 export const EDespatch = {
+  // ── Draft ──
+  createDraft: (model) =>
+    request('POST', '/edespatch/Draft/Create', model),
+  listDrafts: (params = {}) =>
+    request('GET', '/edespatch/Draft', null, params),
+  getDraft: (uuid) =>
+    request('GET', `/edespatch/Draft/${uuid}`),
+  deleteDraft: (uuid) =>
+    request('DELETE', `/edespatch/Draft/${uuid}`),
+  confirmAndSend: (items) => {
+    const payload = Array.isArray(items) ? items.map(i => ({ UUID: i.UUID || i })).filter(x => x.UUID) : [];
+    return request('POST', '/edespatch/Draft/ConfirmAndSend', payload);
+  },
+
+  // ── Send ──
+  sendModel: (despatchModel) =>
+    request('POST', '/edespatch/Send/Model', despatchModel),
+  sendXmlPreview: (despatchModel) =>
+    request('POST', '/edespatch/Send/Xml/Preview', despatchModel),
+
+  // ── Series & Templates ──
+  listSeries: (params = {}) =>
+    request('GET', '/edespatch/Series', null, params),
+  listTemplates: (params = {}) =>
+    request('GET', '/edespatch/Templates', null, params),
+
   // Outgoing (Sale)
   listSales: (params = {}) =>
     request('GET', '/edespatch/Sale', null, params),

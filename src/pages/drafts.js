@@ -1,7 +1,7 @@
 import { EInvoice, EArchive } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
-import { navigate } from '../router.js';
+import { navigate, registerCacheReset } from '../router.js';
 
 const INVOICE_EDIT_CONTEXT_KEY = 'nilfatura_invoice_edit_context';
 
@@ -25,7 +25,13 @@ const ic = {
 let cachedDrafts = [];
 let selectedSource = 'einvoice';
 
+function resetDraftsCache() {
+  cachedDrafts = [];
+}
+registerCacheReset(resetDraftsCache);
+
 export async function renderDrafts() {
+  resetDraftsCache();
   const page = document.createElement('div');
   page.innerHTML = `
     <div class="nilvera-breadcrumb">

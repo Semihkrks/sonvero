@@ -6,6 +6,7 @@ import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { attachDatePicker } from '../lib/date-picker.js';
 import { getActiveAccount } from '../services/account-manager.js';
+import { registerCacheReset } from '../router.js';
 import { exportCustomerCari } from '../services/cari-export.js';
 import { addCollection, listCollections, updateCollection, deleteCollection } from '../services/tahsilat-manager.js';
 
@@ -122,11 +123,22 @@ let currentSource = 'giden'; // 'giden' or 'gelen'
 let cachedCariAccountId = '';
 let cariLoadSeq = 0;
 
+function resetCariCache() {
+  allInvoices = [];
+  allCollections = [];
+  customerMap = {};
+  cariLoadSeq++;
+  selectedCustomer = null;
+  cachedCariAccountId = '';
+}
+registerCacheReset(resetCariCache);
+
 function getCustomerKey(name, taxNo) {
   return (taxNo || name || 'bilinmeyen').toLowerCase().trim();
 }
 
 export async function renderCariPage() {
+  resetCariCache();
   const page = document.createElement('div');
   page.className = 'cari-page';
   const account = await getActiveAccount();

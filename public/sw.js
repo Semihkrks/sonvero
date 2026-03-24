@@ -2,7 +2,7 @@
 // Sonvera 2.0 — Service Worker (PWA Offline & Cache)
 // ══════════════════════════════════════════
 
-const CACHE_NAME = 'sonvera-v1';
+const CACHE_NAME = 'sonvera-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -18,16 +18,15 @@ self.addEventListener('install', (event) => {
       console.log('[SW] Caching App Shell');
       return cache.addAll(ASSETS_TO_CACHE);
     })
-  );
+  const isApiRequest =
+    reqUrl.hostname.includes('apitest.nilvera.com') ||
+    reqUrl.hostname.includes('api.nilvera.com') ||
+    reqUrl.pathname.startsWith('/nilvera-api') ||
+    reqUrl.pathname.startsWith('/nilvera-live');
   self.skipWaiting(); // Activate worker immediately
-});
+    // API: asla cache'den okuma/yazma yapma. Hesap ve API key degisimlerinde stale veri riski yaratir.
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((keyList) => {
-      return Promise.all(
-        keyList.map((key) => {
-          if (key !== CACHE_NAME) {
+      fetch(event.request)
             console.log('[SW] Removing old cache', key);
             return caches.delete(key);
           }
