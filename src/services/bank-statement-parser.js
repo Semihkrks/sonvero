@@ -160,16 +160,14 @@ export async function parseExcelStatement(file) {
 // PDF PARSER
 // ══════════════════════════════════════════
 export async function parsePdfStatement(file) {
-  // Dinamik import: pdfjs-dist
   const pdfjsLib = await import('pdfjs-dist');
 
-  // Worker setup — inline fake worker for browser bundle
-  if (typeof pdfjsLib.GlobalWorkerOptions !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
-  }
+  // Vite ?url import: sadece worker dosyasının URL'ini al, bundle etme
+  const workerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
 
   const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise;
+  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
 
   let fullText = '';
   for (let i = 1; i <= pdf.numPages; i++) {
