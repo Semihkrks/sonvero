@@ -70,8 +70,37 @@ function parseAmount(val) {
 }
 
 // ══════════════════════════════════════════
-// EXCEL PARSER (SheetJS — .xls, .xlsx, HTML-xls hepsini açar)
+// EXCEL / CSV PARSER (SheetJS — .xls, .xlsx, .csv, HTML-xls hepsini açar)
 // ══════════════════════════════════════════
+
+// Banka açıklamasından müşteri adını çıkar
+// Garanti:  "VOLKAN KARAKAŞ-KUMAş ALİM CARİ öDEME-7652110" → "VOLKAN KARAKAŞ"
+// İş Bank: "Volkan Karakaş - Enpara Bank A.ş." → "Volkan Karakaş"
+// Akbank:  "Songül Karapunar - Akbank- Komisyon" → "Songül Karapunar"
+// Genel:   "songul karapunar-FAST-CEP ŞUBE-1284000227" → "songul karapunar"
+const BANK_NOISE = /\b(garanti|akbank|is\s?bank|ziraat|yapi\s?kredi|vakif|halk|deniz|qnb|enpara|kuveyt|ing|hsbc|teb|fibabanka|odeabank|icbc|turkiye|bankasi|bank|sube|cep|fast|hvl|eft|mbl|masraf|komisyon|tahsilat|havale|virman|para\s?cekme|para\s?transferi|vergi|bsmv|ref|referans)\b/gi;
+
+function extractCustomerFromDesc(desc) {
+  if (!desc) return desc;
+  const str = desc.trim();
+
+  // Tire / çizgi ile ayır (" - " veya "-")
+  const parts = str.split(/\s*[-–—]\s*/);
+  if (parts.length >= 2) {
+    const first = parts[0].trim();
+    // İlk parça en az 3 karakter, harf içermeli, ve tamamen sayı/kod olmamalı
+    if (first.length >= 3 && /[a-zA-ZğüşöçıİĞÜŞÖÇ]{2,}/.test(first) && !/^\d+[/]/.test(first)) {
+      // Banka/işlem gürültüsünü temizle
+      const cleaned = first.replace(BANK_NOISE, '').replace(/\s+/g, ' ').trim();
+      return cleaned.length >= 3 ? cleaned : first;
+    }
+  }
+
+  // Tire yoksa: tüm açıklamadan banka gürültüsünü çıkar
+  const cleaned = str.replace(BANK_NOISE, '').replace(/\d{5,}/g, '').replace(/\s+/g, ' ').trim();
+  return cleaned.length >= 3 ? cleaned : str;
+}
+
 export async function parseExcelStatement(file) {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
@@ -83,43 +112,48 @@ export async function parseExcelStatement(file) {
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
     if (rows.length < 2) continue;
 
-    // Header tespiti: ilk 5 satırı tara
+    // Header tespiti: ilk 30 satırı tara (banka dökümleri üstte bilgi satırları olur)
     let headerRowIdx = -1;
     let colMap = {};
 
-    for (let r = 0; r < Math.min(5, rows.length); r++) {
+    for (let r = 0; r < Math.min(30, rows.length); r++) {
       const cells = (rows[r] || []).map((val, idx) => ({ col: idx, val: normalize(String(val || '')) }));
 
-      const dateCol = cells.find(c => /tarih|date|islem.?tarihi|valor/i.test(c.val));
-      const amountCol = cells.find(c => /tutar|amount|miktar|alacak|gelen|havale|kredi/i.test(c.val));
-      const descCol = cells.find(c => /aciklama|description|detay|musteri|alici|gonderen/i.test(c.val));
+      const dateCol = cells.find(c => /tarih|date|islem.?tar|valor|valut/i.test(c.val));
+      const amountCol = cells.find(c => /^tutar$|amount|miktar|^alacak$|gelen|islem.?tutar/i.test(c.val));
+      const descCol = cells.find(c => /aciklama|description|detay|musteri|alici|gonderen|referans|islem.?aciklama/i.test(c.val));
+      const labelCol = cells.find(c => /etiket|label|islem.?tip|islem.?tur|tur|type|kategori|kanal/i.test(c.val));
 
       if (dateCol && amountCol) {
         headerRowIdx = r;
         colMap.date = dateCol.col;
         colMap.amount = amountCol.col;
         colMap.desc = descCol?.col ?? null;
+        colMap.label = labelCol?.col ?? null;
 
-        const borcCol = cells.find(c => /borc|debit|giden|odeme/i.test(c.val));
+        const borcCol = cells.find(c => /borc|debit|giden/i.test(c.val));
         if (borcCol) colMap.borc = borcCol.col;
         break;
       }
     }
 
-    // Header bulunamazsa akıllı tespit
+    // Header bulunamazsa akıllı tespit (ilk veri satırından)
     if (headerRowIdx < 0) {
-      headerRowIdx = -1;
-      const sample = rows[0] || [];
-      let firstDateCol = null, firstNumCol = null, firstTextCol = null;
-      sample.forEach((val, idx) => {
-        if (firstDateCol === null && parseDate(val)) firstDateCol = idx;
-        else if (firstNumCol === null && typeof val === 'number' && val > 0) firstNumCol = idx;
-        else if (firstTextCol === null && typeof val === 'string' && val.length > 3) firstTextCol = idx;
-      });
-      if (firstDateCol !== null && firstNumCol !== null) {
-        colMap.date = firstDateCol;
-        colMap.amount = firstNumCol;
-        colMap.desc = firstTextCol;
+      for (let sr = 0; sr < Math.min(30, rows.length); sr++) {
+        const sample = rows[sr] || [];
+        let firstDateCol = null, firstNumCol = null, firstTextCol = null;
+        sample.forEach((val, idx) => {
+          if (firstDateCol === null && parseDate(val)) firstDateCol = idx;
+          else if (firstNumCol === null && typeof val === 'number') firstNumCol = idx;
+          else if (firstTextCol === null && typeof val === 'string' && val.length > 3) firstTextCol = idx;
+        });
+        if (firstDateCol !== null && firstNumCol !== null) {
+          headerRowIdx = sr - 1; // Veri bu satırdan başlıyor
+          colMap.date = firstDateCol;
+          colMap.amount = firstNumCol;
+          colMap.desc = firstTextCol;
+          break;
+        }
       }
     }
 
@@ -129,25 +163,40 @@ export async function parseExcelStatement(file) {
     for (let r = headerRowIdx + 1; r < rows.length; r++) {
       const row = rows[r] || [];
       const dateVal = row[colMap.date];
-      const amountVal = row[colMap.amount];
+      const rawAmountVal = row[colMap.amount];
       const descVal = colMap.desc !== null ? String(row[colMap.desc] || '') : '';
+      const labelVal = colMap.label !== null ? String(row[colMap.label] || '') : '';
 
       // Borç sütunu varsa, borç satırlarını atla
       if (colMap.borc !== undefined) {
         const borcVal = parseAmount(row[colMap.borc]);
-        if (borcVal > 0 && parseAmount(amountVal) === 0) continue;
+        if (borcVal > 0 && parseAmount(rawAmountVal) === 0) continue;
       }
 
       const date = parseDate(dateVal);
-      const amount = parseAmount(amountVal);
 
-      if (!date || !amount) continue;
+      // Tutar: pozitif = gelen, negatif = giden. Sadece pozitif (gelen) al
+      let rawNum = typeof rawAmountVal === 'number' ? rawAmountVal : null;
+      if (rawNum === null) {
+        // String tutar: negatif olabilir
+        const s = String(rawAmountVal || '').trim().replace(/\s/g, '').replace(/TL|₺|TRY/gi, '');
+        const cleaned = s.replace(/\./g, '').replace(/,/g, '.');
+        rawNum = parseFloat(cleaned);
+      }
+
+      // Negatif tutarları atla (giden ödeme / kesinti)
+      if (!Number.isFinite(rawNum) || rawNum <= 0) continue;
+      if (!date) continue;
+
+      // Açıklamadan müşteri adını çıkar
+      const customerName = extractCustomerFromDesc(descVal);
 
       transactions.push({
         date,
-        amount,
-        description: descVal.trim(),
+        amount: rawNum,
+        description: customerName,
         rawDescription: descVal.trim(),
+        label: labelVal,
         source: 'excel'
       });
     }
@@ -412,8 +461,10 @@ async function detectFileType(file) {
   const name = (file.name || '').toLowerCase();
   if (name.endsWith('.pdf')) return 'pdf';
   if (name.endsWith('.xlsx') || name.endsWith('.xls')) return 'xlsx';
+  if (name.endsWith('.csv')) return 'csv';
 
-  return 'unknown';
+  // Bilinmeyen formatı SheetJS'e dene (HTML-xls vs.)
+  return 'excel-fallback';
 }
 
 export async function parseStatementFile(file) {
@@ -421,7 +472,7 @@ export async function parseStatementFile(file) {
 
   const type = await detectFileType(file);
 
-  if (type === 'xlsx' || type === 'xls') {
+  if (type === 'xlsx' || type === 'xls' || type === 'csv' || type === 'excel-fallback') {
     return parseExcelStatement(file);
   }
 
@@ -429,5 +480,5 @@ export async function parseStatementFile(file) {
     return parsePdfStatement(file);
   }
 
-  throw new Error('Desteklenmeyen dosya formatı. Lütfen PDF veya Excel (.xlsx) yükleyin.');
+  throw new Error('Desteklenmeyen dosya formatı. Lütfen PDF, Excel (.xlsx/.xls) veya CSV yükleyin.');
 }

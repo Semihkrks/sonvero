@@ -157,7 +157,7 @@ export function openImportTahsilatModal(customerMap, onComplete) {
 function buildUploadStepHTML() {
   return `
     <div class="import-tabs">
-      <button class="import-tab active" data-tab="file">Dosya Yükle (PDF / Excel)</button>
+      <button class="import-tab active" data-tab="file">Dosya Yükle (PDF / Excel / CSV)</button>
       <button class="import-tab" data-tab="text">Metin Yapıştır</button>
     </div>
 
@@ -166,9 +166,9 @@ function buildUploadStepHTML() {
       <div class="import-upload-zone" id="importDropZone">
         <div class="import-upload-icon">${ic.upload}</div>
         <h3>Dosya Sürükleyin veya Seçin</h3>
-        <p>Banka dekontu (PDF) veya hesap hareketi (Excel) dosyası yükleyin</p>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">Desteklenen: .pdf, .xlsx, .xls</p>
-        <input type="file" id="importFileInput" accept=".pdf,.xlsx,.xls" style="display:none" />
+        <p>Banka dekontu (PDF), hesap hareketi (Excel) veya CSV dosyası yükleyin</p>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:4px">Desteklenen: .pdf, .xlsx, .xls, .csv</p>
+        <input type="file" id="importFileInput" accept=".pdf,.xlsx,.xls,.csv" style="display:none" />
         <button class="btn btn-sm btn-primary" id="importSelectFileBtn" style="margin-top:12px">
           ${ic.file} Dosya Seç
         </button>
