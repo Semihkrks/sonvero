@@ -21,13 +21,15 @@ function normalize(str) {
     .trim();
 }
 
-// ── Tarih parse helper ──
+// ── Tarih parse helper (timezone-safe: UTC kullanmaz, doğrudan string döner) ──
+function pad2(n) { return String(n).padStart(2, '0'); }
+
 function parseDate(val) {
   if (!val) return null;
 
   // Excel Date object
   if (val instanceof Date && !isNaN(val.getTime())) {
-    return val.toISOString().slice(0, 10);
+    return `${val.getFullYear()}-${pad2(val.getMonth() + 1)}-${pad2(val.getDate())}`;
   }
 
   const str = String(val).trim();
@@ -36,20 +38,20 @@ function parseDate(val) {
   const dmyMatch = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
   if (dmyMatch) {
     const [, d, m, y] = dmyMatch;
-    const date = new Date(Number(y), Number(m) - 1, Number(d));
-    if (!isNaN(date.getTime())) return date.toISOString().slice(0, 10);
+    return `${y}-${pad2(m)}-${pad2(d)}`;
   }
 
   // yyyy-mm-dd
   const ymdMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (ymdMatch) {
-    const date = new Date(str);
-    if (!isNaN(date.getTime())) return date.toISOString().slice(0, 10);
+    return `${ymdMatch[1]}-${ymdMatch[2]}-${ymdMatch[3]}`;
   }
 
   // Fallback
   const fallback = new Date(str);
-  if (!isNaN(fallback.getTime())) return fallback.toISOString().slice(0, 10);
+  if (!isNaN(fallback.getTime())) {
+    return `${fallback.getFullYear()}-${pad2(fallback.getMonth() + 1)}-${pad2(fallback.getDate())}`;
+  }
 
   return null;
 }
