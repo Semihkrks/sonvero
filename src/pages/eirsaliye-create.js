@@ -412,6 +412,106 @@ export async function renderEirsaliyeCreate() {
   return page;
 }
 
+// ── Helper: pick best alias from Aliases array ──
+function pickPreferredAlias(aliases, source) {
+  if (!Array.isArray(aliases) || !aliases.length) return '';
+  const despatch = aliases.find(a => a && String(a.Name || a.AliasName || '').toLowerCase().includes('irsaliye'));
+  if (despatch) return despatch.Name || despatch.AliasName || despatch.Alias || '';
+  const invoice = aliases.find(a => a && String(a.Name || a.AliasName || '').toLowerCase().includes('fatura'));
+  if (invoice) return invoice.Name || invoice.AliasName || invoice.Alias || '';
+  return aliases[0]?.Name || aliases[0]?.AliasName || aliases[0]?.Alias || '';
+}
+
+// ── Helper: resolve nested dot paths ──
+function firstNonEmpty(obj, paths = []) {
+  for (const p of paths) {
+    const val = String(p).split('.').reduce((acc, part) => (acc && acc[part] !== undefined ? acc[part] : undefined), obj);
+    if (val !== undefined && val !== null && String(val).trim() !== '') return String(val).trim();
+  }
+  return '';
+}
+
+// ── Apply receiver data to ALL form fields (like e-fatura applyCustomerToForm) ──
+function applyReceiverToForm(page, customer, fallback = {}) {
+  const src = customer && typeof customer === 'object' ? customer : {};
+  const fb = fallback && typeof fallback === 'object' ? fallback : {};
+
+  const name = firstNonEmpty(src, ['Title', 'Name', 'CustomerName']) || firstNonEmpty(fb, ['Title', 'Name']);
+  const vkn = firstNonEmpty(src, ['TaxNumber', 'Vkn', 'Tckn', 'Identifier']) || firstNonEmpty(fb, ['TaxNumber', 'Identifier']);
+  const taxOffice = firstNonEmpty(src, ['TaxDepartment', 'TaxOffice', 'TaxOfficeName', 'TaxDepartmentName']) || firstNonEmpty(fb, ['TaxDepartment', 'TaxOffice']);
+  const address = firstNonEmpty(src, ['Address', 'AddressInfo.Address', 'ContactInfo.Address']) || firstNonEmpty(fb, ['Address']);
+  const district = firstNonEmpty(src, ['District', 'DistrictName', 'AddressInfo.District', 'AddressInfo.DistrictName']) || firstNonEmpty(fb, ['District', 'DistrictName']);
+  const city = firstNonEmpty(src, ['City', 'CityName', 'AddressInfo.City', 'AddressInfo.CityName']) || firstNonEmpty(fb, ['City', 'CityName']);
+  const country = firstNonEmpty(src, ['Country', 'CountryName', 'AddressInfo.Country', 'AddressInfo.CountryName']) || firstNonEmpty(fb, ['Country']) || 'Turkiye';
+  const postalCode = firstNonEmpty(src, ['PostalCode', 'ZipCode', 'AddressInfo.PostalCode']) || firstNonEmpty(fb, ['PostalCode', 'ZipCode']);
+  const phone = firstNonEmpty(src, ['Phone', 'Telephone', 'ContactInfo.Phone']) || firstNonEmpty(fb, ['Phone', 'Telephone']);
+  const fax = firstNonEmpty(src, ['Fax', 'FaxNumber', 'ContactInfo.Fax']) || firstNonEmpty(fb, ['Fax']);
+  const email = firstNonEmpty(src, ['Email', 'ContactInfo.Email']) || firstNonEmpty(fb, ['Email']);
+  const web = firstNonEmpty(src, ['WebAddress', 'WebSite', 'ContactInfo.WebAddress']) || firstNonEmpty(fb, ['WebAddress', 'WebSite']);
+
+  const alias = pickPreferredAlias(src.Aliases || fb.Aliases, src)
+    || firstNonEmpty(src, ['Alias', 'ReceiverAlias'])
+    || firstNonEmpty(fb, ['Alias', 'ReceiverAlias']);
+
+  page.querySelector('#receiverName').value = name;
+  page.querySelector('#receiverTaxNo').value = vkn;
+  page.querySelector('#receiverTaxOffice').value = taxOffice;
+  page.querySelector('#receiverAddress').value = address;
+  page.querySelector('#receiverDistrict').value = district;
+  page.querySelector('#receiverCity').value = city;
+  page.querySelector('#receiverPostalCode').value = postalCode;
+  page.querySelector('#receiverPhone').value = phone;
+  page.querySelector('#receiverFax').value = fax;
+  page.querySelector('#receiverEmail').value = email;
+  page.querySelector('#receiverWeb').value = web;
+
+  // Alias select
+  const aliasSelect = page.querySelector('#receiverAlias');
+  if (alias) {
+    // Populate aliases dropdown if we have an array
+    const allAliases = src.Aliases || fb.Aliases || [];
+    if (Array.isArray(allAliases) && allAliases.length) {
+      aliasSelect.innerHTML = '<option value="">Lutfen Etiket Seciniz</option>' +
+        allAliases.map(a => {
+          const n = a.Name || a.AliasName || a.Alias || '';
+          return n ? `<option value="${n}" ${n === alias ? 'selected' : ''}>${n}</option>` : '';
+        }).join('');
+    } else {
+      const exists = Array.from(aliasSelect.options).some(o => o.value === alias);
+      if (!exists) {
+        const opt = document.createElement('option');
+        opt.value = alias; opt.textContent = alias; opt.selected = true;
+        aliasSelect.appendChild(opt);
+      }
+      aliasSelect.value = alias;
+    }
+  }
+
+  // Country select
+  const countrySelect = page.querySelector('#receiverCountry');
+  if (country && country !== 'Turkiye') {
+    const exists = Array.from(countrySelect.options).some(o => o.value === country);
+    if (!exists) {
+      const opt = document.createElement('option');
+      opt.value = country; opt.textContent = country;
+      countrySelect.appendChild(opt);
+    }
+    countrySelect.value = country;
+  }
+
+  // Auto-fill delivery address if checkbox is checked
+  if (page.querySelector('#useReceiverAsDelivery')?.checked) {
+    page.querySelector('#deliveryAddress').value = address;
+    page.querySelector('#deliveryDistrict').value = district;
+    page.querySelector('#deliveryCity').value = city;
+    page.querySelector('#deliveryPostalCode').value = postalCode;
+  }
+
+  // Generate ETTN
+  const ettnSpan = page.querySelector('#ettnValue');
+  if (ettnSpan) ettnSpan.textContent = crypto.randomUUID();
+}
+
 function addLine(page) {
   const tbody = page.querySelector('#linesBody');
   if (!tbody) return;

@@ -105,12 +105,11 @@ function extractItems(data) {
   return [];
 }
 
-// ── Default date range: last 3 months ──
+// ── Default date range: Jan 1st of current year → today ──
 function getDefaultRange() {
   const now = new Date();
   const e = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const s = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-  const start = `${s.getFullYear()}-${String(s.getMonth() + 1).padStart(2, '0')}-01`;
+  const start = `${now.getFullYear()}-01-01`;
   return { start, end: e };
 }
 
@@ -742,8 +741,11 @@ function renderDetailPanel(page, customer, key) {
 
   const amountInput = panel.querySelector('#tahsilatAmount');
   amountInput?.addEventListener('input', (e) => {
+    const raw = e.target.value;
+    // Virgülle biterken veya virgülden sonra rakam yazılırken formatlamayı atla
+    if (raw.endsWith(',') || /,\d{0,2}$/.test(raw)) return;
     const cursorAtEnd = e.target.selectionStart === e.target.value.length;
-    const formatted = formatAmountInput(e.target.value);
+    const formatted = formatAmountInput(raw);
     e.target.value = formatted;
     if (cursorAtEnd) {
       e.target.setSelectionRange(formatted.length, formatted.length);

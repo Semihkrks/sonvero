@@ -535,6 +535,11 @@ function bindAuthState() {
   const sb = getSupabase();
   sb.auth.onAuthStateChange((event, session) => {
     if (isAuthenticatedSession(session)) {
+      // Token yenilemelerinde sayfayı baştan render etme, sadece user ref güncelle
+      if (event === 'TOKEN_REFRESHED') {
+        currentAuthUser = session.user;
+        return;
+      }
       bootAuthedApp(session.user);
       return;
     }

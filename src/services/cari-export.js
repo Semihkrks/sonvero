@@ -334,10 +334,10 @@ function createCariWorkbook(records, titleText) {
   const maxH = startRow + targetRowCount - 1; // Hareket Girişi son satır no (örnek: 154)
 
   dashSheet.mergeCells('A4:B4'); dashSheet.getCell('A4').value = 'Toplam Satış';
-  dashSheet.mergeCells('A5:B5'); dashSheet.getCell('A5').value = { formula: `SUM('Hareket Girişi'!D5:D${maxH})` };
+  dashSheet.mergeCells('A5:B5'); dashSheet.getCell('A5').value = { formula: `SUM('Hareket Girişi'!D4:D${maxH})` };
 
   dashSheet.mergeCells('C4:D4'); dashSheet.getCell('C4').value = 'Toplam Tahsilat';
-  dashSheet.mergeCells('C5:D5'); dashSheet.getCell('C5').value = { formula: `SUM('Hareket Girişi'!E5:E${maxH})` };
+  dashSheet.mergeCells('C5:D5'); dashSheet.getCell('C5').value = { formula: `SUM('Hareket Girişi'!E4:E${maxH})` };
 
   dashSheet.mergeCells('E4:F4'); dashSheet.getCell('E4').value = 'Kapanış Bakiye';
   dashSheet.mergeCells('E5:F5'); dashSheet.getCell('E5').value = { formula: `A5-C5` };
@@ -393,8 +393,8 @@ function createCariWorkbook(records, titleText) {
     dashSheet.getCell(`${colChar}10`).alignment = { horizontal: 'center' };
 
     // Formüller: ÇOKETOPLA (SUMIFS)
-    dashSheet.getCell(`${colChar}11`).value = { formula: `SUMIFS('Hareket Girişi'!$D$5:$D$${maxH},'Hareket Girişi'!$F$5:$F$${maxH},${mNum})` };
-    dashSheet.getCell(`${colChar}12`).value = { formula: `SUMIFS('Hareket Girişi'!$E$5:$E$${maxH},'Hareket Girişi'!$F$5:$F$${maxH},${mNum})` };
+    dashSheet.getCell(`${colChar}11`).value = { formula: `SUMIFS('Hareket Girişi'!$D$4:$D$${maxH},'Hareket Girişi'!$F$4:$F$${maxH},${mNum})` };
+    dashSheet.getCell(`${colChar}12`).value = { formula: `SUMIFS('Hareket Girişi'!$E$4:$E$${maxH},'Hareket Girişi'!$F$4:$F$${maxH},${mNum})` };
     dashSheet.getCell(`${colChar}13`).value = { formula: `IF(${colChar}11="",0,${colChar}11)-IF(${colChar}12="",0,${colChar}12)` };
 
     dashSheet.getCell(`${colChar}11`).numFmt = '#,##0.00;-#,##0.00;"-"';
