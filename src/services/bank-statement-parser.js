@@ -2,7 +2,7 @@
 // Banka Dekont / Hesap Hareketi Parser
 // PDF + Excel → Otomatik Tahsilat Eşleştirme
 // ══════════════════════════════════════════
-import ExcelJS from 'exceljs';
+import * as XLSX from 'xlsx';
 
 // ── Türkçe Normalizasyon ──
 function normalize(str) {
@@ -70,79 +70,72 @@ function parseAmount(val) {
 }
 
 // ══════════════════════════════════════════
-// EXCEL PARSER
+// EXCEL PARSER (SheetJS — .xls, .xlsx, HTML-xls hepsini açar)
 // ══════════════════════════════════════════
 export async function parseExcelStatement(file) {
-  const workbook = new ExcelJS.Workbook();
   const buffer = await file.arrayBuffer();
-  await workbook.xlsx.load(buffer);
+  const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
 
   const transactions = [];
 
-  workbook.eachSheet((sheet) => {
-    if (sheet.rowCount < 2) return;
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    if (rows.length < 2) continue;
 
     // Header tespiti: ilk 5 satırı tara
-    let headerRowNum = null;
+    let headerRowIdx = -1;
     let colMap = {};
 
-    for (let r = 1; r <= Math.min(5, sheet.rowCount); r++) {
-      const row = sheet.getRow(r);
-      const cells = [];
-      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        cells.push({ col: colNumber, val: normalize(String(cell.value || '')) });
-      });
+    for (let r = 0; r < Math.min(5, rows.length); r++) {
+      const cells = (rows[r] || []).map((val, idx) => ({ col: idx, val: normalize(String(val || '')) }));
 
-      const dateCol = cells.find(c => /tarih|date|islem.?tarihi|valör/i.test(c.val));
+      const dateCol = cells.find(c => /tarih|date|islem.?tarihi|valor/i.test(c.val));
       const amountCol = cells.find(c => /tutar|amount|miktar|alacak|gelen|havale|kredi/i.test(c.val));
-      const descCol = cells.find(c => /aciklama|açıklama|description|detay|musteri|alici|gonderen/i.test(c.val));
+      const descCol = cells.find(c => /aciklama|description|detay|musteri|alici|gonderen/i.test(c.val));
 
       if (dateCol && amountCol) {
-        headerRowNum = r;
+        headerRowIdx = r;
         colMap.date = dateCol.col;
         colMap.amount = amountCol.col;
-        colMap.desc = descCol?.col || null;
+        colMap.desc = descCol?.col ?? null;
 
-        // İkinci tutar sütunu varsa (borç/alacak ayrı)
         const borcCol = cells.find(c => /borc|debit|giden|odeme/i.test(c.val));
         if (borcCol) colMap.borc = borcCol.col;
-
         break;
       }
     }
 
     // Header bulunamazsa akıllı tespit
-    if (!headerRowNum) {
-      headerRowNum = 0; // İlk satırdan başla
-      // İlk veri satırına bak
-      const sampleRow = sheet.getRow(1);
+    if (headerRowIdx < 0) {
+      headerRowIdx = -1;
+      const sample = rows[0] || [];
       let firstDateCol = null, firstNumCol = null, firstTextCol = null;
-      sampleRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-        const val = cell.value;
-        if (!firstDateCol && parseDate(val)) firstDateCol = colNumber;
-        else if (!firstNumCol && typeof val === 'number' && val > 0) firstNumCol = colNumber;
-        else if (!firstTextCol && typeof val === 'string' && val.length > 3) firstTextCol = colNumber;
+      sample.forEach((val, idx) => {
+        if (firstDateCol === null && parseDate(val)) firstDateCol = idx;
+        else if (firstNumCol === null && typeof val === 'number' && val > 0) firstNumCol = idx;
+        else if (firstTextCol === null && typeof val === 'string' && val.length > 3) firstTextCol = idx;
       });
-      if (firstDateCol && firstNumCol) {
+      if (firstDateCol !== null && firstNumCol !== null) {
         colMap.date = firstDateCol;
         colMap.amount = firstNumCol;
-        colMap.desc = firstTextCol || null;
+        colMap.desc = firstTextCol;
       }
     }
 
-    if (!colMap.date || !colMap.amount) return;
+    if (colMap.date === undefined || colMap.amount === undefined) continue;
 
     // Veri satırlarını oku
-    for (let r = headerRowNum + 1; r <= sheet.rowCount; r++) {
-      const row = sheet.getRow(r);
-      const dateVal = row.getCell(colMap.date).value;
-      const amountVal = row.getCell(colMap.amount).value;
-      const descVal = colMap.desc ? String(row.getCell(colMap.desc).value || '') : '';
+    for (let r = headerRowIdx + 1; r < rows.length; r++) {
+      const row = rows[r] || [];
+      const dateVal = row[colMap.date];
+      const amountVal = row[colMap.amount];
+      const descVal = colMap.desc !== null ? String(row[colMap.desc] || '') : '';
 
-      // Borç sütunu varsa, borç satırlarını atla (sadece gelen ödemeleri al)
-      if (colMap.borc) {
-        const borcVal = parseAmount(row.getCell(colMap.borc).value);
-        if (borcVal > 0 && parseAmount(amountVal) === 0) continue; // Borç satırı, alacak yok
+      // Borç sütunu varsa, borç satırlarını atla
+      if (colMap.borc !== undefined) {
+        const borcVal = parseAmount(row[colMap.borc]);
+        if (borcVal > 0 && parseAmount(amountVal) === 0) continue;
       }
 
       const date = parseDate(dateVal);
@@ -158,7 +151,7 @@ export async function parseExcelStatement(file) {
         source: 'excel'
       });
     }
-  });
+  }
 
   return transactions;
 }
