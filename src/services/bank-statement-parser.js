@@ -260,32 +260,45 @@ export function matchTransactionsToCustomers(transactions, customerMap) {
 
   for (const tx of transactions) {
     const normalizedDesc = normalize(tx.description);
+    // Açıklama kelimelerini de çıkar (kısaltma eşleşmesi için)
+    const descParts = normalizedDesc.split(' ').filter(p => p.length > 2);
     let bestMatch = null;
     let bestScore = 0;
 
     for (const entry of customerEntries) {
       let score = 0;
 
-      // 1. Tam isim eşleşmesi (en yüksek skor)
-      if (normalizedDesc.includes(entry.normalizedName)) {
+      // 1. Tam isim eşleşmesi (çift yönlü: açıklama müşteriyi içeriyor VEYA müşteri açıklamayı içeriyor)
+      if (normalizedDesc.includes(entry.normalizedName) || entry.normalizedName.includes(normalizedDesc)) {
         score = 100;
       }
       // 2. VKN eşleşmesi
       else if (entry.taxNo && entry.taxNo !== '—' && tx.description.includes(entry.taxNo)) {
         score = 95;
       }
-      // 3. Kısmi isim eşleşmesi: tüm parçalar açıklamada geçiyor mu
+      // 3. Kısmi eşleşme: müşterinin kelimelerinin çoğu açıklamada var mı
       else if (entry.nameParts.length >= 2) {
-        const matchedParts = entry.nameParts.filter(p => normalizedDesc.includes(p));
-        const partRatio = matchedParts.length / entry.nameParts.length;
-        if (partRatio >= 0.75) {
-          score = Math.round(partRatio * 80);
+        const fwdMatch = entry.nameParts.filter(p => normalizedDesc.includes(p));
+        const fwdRatio = fwdMatch.length / entry.nameParts.length;
+        // Ters yön: açıklamadaki kelimelerin çoğu müşteri adında var mı
+        const revMatch = descParts.filter(p => entry.normalizedName.includes(p));
+        const revRatio = descParts.length > 0 ? revMatch.length / descParts.length : 0;
+        const bestRatio = Math.max(fwdRatio, revRatio);
+        if (bestRatio >= 0.5) {
+          score = Math.round(bestRatio * 90);
         }
       }
-      // 4. Tek kelime eşleşmesi (2+ kelime olan müşteriler için dikkatli)
-      else if (entry.nameParts.length === 1 && entry.nameParts[0].length > 4) {
-        if (normalizedDesc.includes(entry.nameParts[0])) {
-          score = 50;
+      // 4. Tek kelime eşleşmesi
+      else if (entry.nameParts.length === 1 && entry.nameParts[0].length > 3) {
+        if (normalizedDesc.includes(entry.nameParts[0]) || entry.normalizedName.includes(normalizedDesc)) {
+          score = 60;
+        }
+      }
+      // 5. Açıklamadaki anlamlı kelimelerin müşteri adında geçme oranı
+      if (score === 0 && descParts.length >= 1) {
+        const hits = descParts.filter(p => p.length > 3 && entry.normalizedName.includes(p));
+        if (hits.length >= 1 && hits.length / descParts.length >= 0.4) {
+          score = Math.round((hits.length / descParts.length) * 70);
         }
       }
 
@@ -295,7 +308,7 @@ export function matchTransactionsToCustomers(transactions, customerMap) {
       }
     }
 
-    if (bestMatch && bestScore >= 50) {
+    if (bestMatch && bestScore >= 40) {
       matched.push({
         ...tx,
         matchedCustomerKey: bestMatch.key,
@@ -359,6 +372,7 @@ export function parseTextStatement(text) {
           date,
           amount,
           description: currentCustomer,
+          displayDescription: 'Gelen Ödeme',
           rawDescription: `${currentCustomer} — ${line}`,
           source: 'text'
         });
@@ -381,16 +395,44 @@ export function parseTextStatement(text) {
 // ══════════════════════════════════════════
 // ANA PARSE FONKSİYONU
 // ══════════════════════════════════════════
+async function detectFileType(file) {
+  // Önce magic bytes ile kontrol et (daha güvenilir)
+  try {
+    const slice = await file.slice(0, 8).arrayBuffer();
+    const bytes = new Uint8Array(slice);
+
+    // PDF: %PDF başlar
+    if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+      return 'pdf';
+    }
+    // ZIP (xlsx): PK başlar
+    if (bytes[0] === 0x50 && bytes[1] === 0x4B) {
+      return 'xlsx';
+    }
+    // XLS (legacy): D0 CF 11 E0
+    if (bytes[0] === 0xD0 && bytes[1] === 0xCF && bytes[2] === 0x11 && bytes[3] === 0xE0) {
+      return 'xls';
+    }
+  } catch { /* fallback to name */ }
+
+  // Fallback: dosya adı
+  const name = (file.name || '').toLowerCase();
+  if (name.endsWith('.pdf')) return 'pdf';
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) return 'xlsx';
+
+  return 'unknown';
+}
+
 export async function parseStatementFile(file) {
   if (!file) throw new Error('Dosya seçilmedi.');
 
-  const name = file.name.toLowerCase();
+  const type = await detectFileType(file);
 
-  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+  if (type === 'xlsx' || type === 'xls') {
     return parseExcelStatement(file);
   }
 
-  if (name.endsWith('.pdf')) {
+  if (type === 'pdf') {
     return parsePdfStatement(file);
   }
 

@@ -127,7 +127,7 @@ export function openImportTahsilatModal(customerMap, onComplete) {
             customer_name: tx.matchedCustomerName,
             customer_tax_no: tx.matchedCustomerTaxNo || '',
             type: 'Tahsilat',
-            description: tx.description || `${tx.matchedCustomerName} - banka tahsilat`,
+            description: tx.displayDescription || tx.description || `${tx.matchedCustomerName} - banka tahsilat`,
             amount: tx.amount,
             date: tx.date
           });
