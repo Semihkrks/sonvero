@@ -9,6 +9,7 @@ import { getActiveAccount } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 import { exportCustomerCari } from '../services/cari-export.js';
 import { addCollection, listCollections, updateCollection, deleteCollection } from '../services/tahsilat-manager.js';
+import { openImportTahsilatModal } from '../components/import-tahsilat-modal.js';
 
 // ── SVG Icons ──
 const ic = {
@@ -175,6 +176,10 @@ export async function renderCariPage() {
       </div>
       <div class="filter-actions" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:-4px;">
         <button class="btn btn-sm" id="cariApplyBtn" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--accent); color:white; border:none">${ic.search} ARA</button>
+        <button class="btn btn-sm" id="cariImportBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--warning); color:white; border:none">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Toplu Tahsilat
+        </button>
       </div>
     </div>
 
@@ -240,6 +245,22 @@ export async function renderCariPage() {
   // ── Event Bindings ──
   page.querySelector('#cariApplyBtn')?.addEventListener('click', () => loadCariData(page));
   page.querySelector('#cariSearchInput')?.addEventListener('input', () => filterCustomerList(page));
+
+  // Toplu Tahsilat Import butonu
+  page.querySelector('#cariImportBtn')?.addEventListener('click', () => {
+    if (Object.keys(customerMap).length === 0) {
+      showToast('Önce verileri yükleyin (ARA butonuna basın), sonra toplu tahsilat yükleyebilirsiniz.', 'warning');
+      return;
+    }
+    openImportTahsilatModal(customerMap, () => {
+      // Import tamamlanınca veriyi yenile
+      loadCariData(page).then(() => {
+        if (selectedCustomer && customerMap[selectedCustomer]) {
+          renderDetailPanel(page, customerMap[selectedCustomer], selectedCustomer);
+        }
+      });
+    });
+  });
 
   // Sayfa açılır açılmaz verileri listele ki müşteriler ekranı boş kalmasın ve anlık filtreleme çalışsın
   setTimeout(() => loadCariData(page), 50);

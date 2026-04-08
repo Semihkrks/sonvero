@@ -3673,6 +3673,161 @@ tbody tr:last-child td {
   border-bottom-color: rgba(15, 23, 42, 0.12);
 }
 
+/* ── Import Tahsilat Modal ── */
+.import-tahsilat-modal { min-height: 200px; }
+
+.import-upload-zone {
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  padding: 40px 24px;
+  text-align: center;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.import-upload-zone:hover,
+.import-upload-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.05);
+}
+.import-upload-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px; height: 48px;
+  border-radius: 12px;
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.import-upload-zone h3 {
+  margin: 0 0 6px; font-size: 14px; color: var(--text-primary);
+}
+.import-upload-zone p {
+  margin: 0; font-size: 12px; color: var(--text-muted);
+}
+.import-spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.import-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border-color);
+}
+.import-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+.import-summary-matched { color: var(--success); }
+.import-summary-unmatched { color: var(--text-muted); }
+.import-summary-amount {
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+.import-table-wrap {
+  max-height: 340px;
+  overflow: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.import-table th {
+  position: sticky; top: 0; z-index: 1;
+  padding: 8px 10px;
+  background: var(--bg-sidebar);
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+.import-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+.import-table-muted td { color: var(--text-muted); }
+.import-desc-cell {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.import-customer-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(34, 197, 94, 0.1);
+  color: var(--success);
+}
+.import-score {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+.import-score-high { background: rgba(34, 197, 94, 0.15); color: #16a34a; }
+.import-score-mid { background: rgba(234, 179, 8, 0.15); color: #ca8a04; }
+.import-score-low { background: rgba(239, 68, 68, 0.15); color: #dc2626; }
+
+.import-unmatched-section {
+  margin-top: 8px;
+}
+.import-unmatched-section summary {
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 0;
+}
+.import-select-all {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.import-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--border-color);
+}
+.import-tab {
+  padding: 8px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.import-tab:hover { color: var(--text-primary); }
+.import-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
 
 /* ========================================================================= */
 /*                          ?? MOBIL ARAY�Z (PWA APP)                      */

@@ -1,0 +1,398 @@
+// ══════════════════════════════════════════
+// Banka Dekont / Hesap Hareketi Parser
+// PDF + Excel → Otomatik Tahsilat Eşleştirme
+// ══════════════════════════════════════════
+import ExcelJS from 'exceljs';
+
+// ── Türkçe Normalizasyon ──
+function normalize(str) {
+  if (!str) return '';
+  return str
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ı/g, 'i')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/i̇/g, 'i')
+    .replace(/[^a-z0-9]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// ── Tarih parse helper ──
+function parseDate(val) {
+  if (!val) return null;
+
+  // Excel Date object
+  if (val instanceof Date && !isNaN(val.getTime())) {
+    return val.toISOString().slice(0, 10);
+  }
+
+  const str = String(val).trim();
+
+  // dd.mm.yyyy veya dd/mm/yyyy
+  const dmyMatch = str.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4})$/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    const date = new Date(Number(y), Number(m) - 1, Number(d));
+    if (!isNaN(date.getTime())) return date.toISOString().slice(0, 10);
+  }
+
+  // yyyy-mm-dd
+  const ymdMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymdMatch) {
+    const date = new Date(str);
+    if (!isNaN(date.getTime())) return date.toISOString().slice(0, 10);
+  }
+
+  // Fallback
+  const fallback = new Date(str);
+  if (!isNaN(fallback.getTime())) return fallback.toISOString().slice(0, 10);
+
+  return null;
+}
+
+// ── Tutar parse helper ──
+function parseAmount(val) {
+  if (typeof val === 'number') return val > 0 ? val : 0;
+  if (!val) return 0;
+  const str = String(val).trim()
+    .replace(/\s/g, '')
+    .replace(/TL|₺|TRY/gi, '')
+    .replace(/\./g, '')   // binlik ayırıcı
+    .replace(/,/g, '.');  // ondalık
+  const n = parseFloat(str);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+// ══════════════════════════════════════════
+// EXCEL PARSER
+// ══════════════════════════════════════════
+export async function parseExcelStatement(file) {
+  const workbook = new ExcelJS.Workbook();
+  const buffer = await file.arrayBuffer();
+  await workbook.xlsx.load(buffer);
+
+  const transactions = [];
+
+  workbook.eachSheet((sheet) => {
+    if (sheet.rowCount < 2) return;
+
+    // Header tespiti: ilk 5 satırı tara
+    let headerRowNum = null;
+    let colMap = {};
+
+    for (let r = 1; r <= Math.min(5, sheet.rowCount); r++) {
+      const row = sheet.getRow(r);
+      const cells = [];
+      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        cells.push({ col: colNumber, val: normalize(String(cell.value || '')) });
+      });
+
+      const dateCol = cells.find(c => /tarih|date|islem.?tarihi|valör/i.test(c.val));
+      const amountCol = cells.find(c => /tutar|amount|miktar|alacak|gelen|havale|kredi/i.test(c.val));
+      const descCol = cells.find(c => /aciklama|açıklama|description|detay|musteri|alici|gonderen/i.test(c.val));
+
+      if (dateCol && amountCol) {
+        headerRowNum = r;
+        colMap.date = dateCol.col;
+        colMap.amount = amountCol.col;
+        colMap.desc = descCol?.col || null;
+
+        // İkinci tutar sütunu varsa (borç/alacak ayrı)
+        const borcCol = cells.find(c => /borc|debit|giden|odeme/i.test(c.val));
+        if (borcCol) colMap.borc = borcCol.col;
+
+        break;
+      }
+    }
+
+    // Header bulunamazsa akıllı tespit
+    if (!headerRowNum) {
+      headerRowNum = 0; // İlk satırdan başla
+      // İlk veri satırına bak
+      const sampleRow = sheet.getRow(1);
+      let firstDateCol = null, firstNumCol = null, firstTextCol = null;
+      sampleRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        const val = cell.value;
+        if (!firstDateCol && parseDate(val)) firstDateCol = colNumber;
+        else if (!firstNumCol && typeof val === 'number' && val > 0) firstNumCol = colNumber;
+        else if (!firstTextCol && typeof val === 'string' && val.length > 3) firstTextCol = colNumber;
+      });
+      if (firstDateCol && firstNumCol) {
+        colMap.date = firstDateCol;
+        colMap.amount = firstNumCol;
+        colMap.desc = firstTextCol || null;
+      }
+    }
+
+    if (!colMap.date || !colMap.amount) return;
+
+    // Veri satırlarını oku
+    for (let r = headerRowNum + 1; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r);
+      const dateVal = row.getCell(colMap.date).value;
+      const amountVal = row.getCell(colMap.amount).value;
+      const descVal = colMap.desc ? String(row.getCell(colMap.desc).value || '') : '';
+
+      // Borç sütunu varsa, borç satırlarını atla (sadece gelen ödemeleri al)
+      if (colMap.borc) {
+        const borcVal = parseAmount(row.getCell(colMap.borc).value);
+        if (borcVal > 0 && parseAmount(amountVal) === 0) continue; // Borç satırı, alacak yok
+      }
+
+      const date = parseDate(dateVal);
+      const amount = parseAmount(amountVal);
+
+      if (!date || !amount) continue;
+
+      transactions.push({
+        date,
+        amount,
+        description: descVal.trim(),
+        rawDescription: descVal.trim(),
+        source: 'excel'
+      });
+    }
+  });
+
+  return transactions;
+}
+
+// ══════════════════════════════════════════
+// PDF PARSER
+// ══════════════════════════════════════════
+export async function parsePdfStatement(file) {
+  // Dinamik import: pdfjs-dist
+  const pdfjsLib = await import('pdfjs-dist');
+
+  // Worker setup — inline fake worker for browser bundle
+  if (typeof pdfjsLib.GlobalWorkerOptions !== 'undefined') {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+  }
+
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buffer, disableWorker: true }).promise;
+
+  let fullText = '';
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map(item => item.str).join(' ');
+    fullText += pageText + '\n';
+  }
+
+  return parseBankStatementText(fullText);
+}
+
+// ── Banka dekont metninden transaction çıkarma ──
+function parseBankStatementText(text) {
+  const transactions = [];
+  const lines = text.split('\n');
+
+  // Tarih pattern: dd.mm.yyyy veya dd/mm/yyyy
+  const dateRegex = /(\d{1,2}[./-]\d{1,2}[./-]\d{4})/g;
+  // Tutar pattern: 1.234,56 veya 1234,56 veya 1234.56
+  const amountRegex = /(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/g;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    // Tarih bul
+    const dateMatches = [...line.matchAll(dateRegex)];
+    if (dateMatches.length === 0) continue;
+
+    // Tutar bul
+    const amountMatches = [...line.matchAll(amountRegex)];
+    if (amountMatches.length === 0) continue;
+
+    const date = parseDate(dateMatches[0][1]);
+    if (!date) continue;
+
+    // En büyük tutarı al (genellikle işlem tutarı)
+    let bestAmount = 0;
+    for (const m of amountMatches) {
+      const a = parseAmount(m[1]);
+      if (a > bestAmount) bestAmount = a;
+    }
+    if (bestAmount <= 0) continue;
+
+    // Açıklama: tarih ve tutarları çıkarınca kalan metin
+    let desc = line;
+    for (const m of dateMatches) desc = desc.replace(m[0], '');
+    for (const m of amountMatches) desc = desc.replace(m[0], '');
+    desc = desc.replace(/[|]/g, ' ').replace(/\s+/g, ' ').trim();
+
+    transactions.push({
+      date,
+      amount: bestAmount,
+      description: desc,
+      rawDescription: line.trim(),
+      source: 'pdf'
+    });
+  }
+
+  return transactions;
+}
+
+// ══════════════════════════════════════════
+// MÜŞTERİ EŞLEŞTİRME
+// ══════════════════════════════════════════
+export function matchTransactionsToCustomers(transactions, customerMap) {
+  if (!transactions?.length || !customerMap) {
+    return { matched: [], unmatched: transactions || [] };
+  }
+
+  // Müşteri isimlerini normalize et
+  const customerEntries = Object.entries(customerMap).map(([key, customer]) => ({
+    key,
+    name: customer.name,
+    taxNo: customer.taxNo,
+    normalizedName: normalize(customer.name),
+    // İsim parçaları (kısmi eşleşme için)
+    nameParts: normalize(customer.name).split(' ').filter(p => p.length > 2)
+  }));
+
+  const matched = [];
+  const unmatched = [];
+
+  for (const tx of transactions) {
+    const normalizedDesc = normalize(tx.description);
+    let bestMatch = null;
+    let bestScore = 0;
+
+    for (const entry of customerEntries) {
+      let score = 0;
+
+      // 1. Tam isim eşleşmesi (en yüksek skor)
+      if (normalizedDesc.includes(entry.normalizedName)) {
+        score = 100;
+      }
+      // 2. VKN eşleşmesi
+      else if (entry.taxNo && entry.taxNo !== '—' && tx.description.includes(entry.taxNo)) {
+        score = 95;
+      }
+      // 3. Kısmi isim eşleşmesi: tüm parçalar açıklamada geçiyor mu
+      else if (entry.nameParts.length >= 2) {
+        const matchedParts = entry.nameParts.filter(p => normalizedDesc.includes(p));
+        const partRatio = matchedParts.length / entry.nameParts.length;
+        if (partRatio >= 0.75) {
+          score = Math.round(partRatio * 80);
+        }
+      }
+      // 4. Tek kelime eşleşmesi (2+ kelime olan müşteriler için dikkatli)
+      else if (entry.nameParts.length === 1 && entry.nameParts[0].length > 4) {
+        if (normalizedDesc.includes(entry.nameParts[0])) {
+          score = 50;
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = entry;
+      }
+    }
+
+    if (bestMatch && bestScore >= 50) {
+      matched.push({
+        ...tx,
+        matchedCustomerKey: bestMatch.key,
+        matchedCustomerName: bestMatch.name,
+        matchedCustomerTaxNo: bestMatch.taxNo,
+        matchScore: bestScore,
+        selected: true // Varsayılan: seçili
+      });
+    } else {
+      unmatched.push(tx);
+    }
+  }
+
+  // Skora göre sırala (yüksek skor önce)
+  matched.sort((a, b) => b.matchScore - a.matchScore);
+
+  return { matched, unmatched };
+}
+
+// ══════════════════════════════════════════
+// METİN (TEXT/PASTE) PARSER
+// ══════════════════════════════════════════
+// Format:
+//   Müşteri Adı
+//   dd/mm/yyyy: 1.234,56 TL
+//   dd/mm/yyyy: 5.678,90 TL
+//   Toplam: xxx TL   (atlanır)
+//
+//   Başka Müşteri Adı
+//   dd/mm/yyyy: 1.000,00 TL
+//   ...
+export function parseTextStatement(text) {
+  if (!text || !text.trim()) return [];
+
+  const transactions = [];
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+
+  // Tarih + tutar satırı: dd/mm/yyyy: 1.234,56 TL  veya  dd.mm.yyyy: 1.234,56
+  const txLineRegex = /^(\d{1,2}[./-]\d{1,2}[./-]\d{4})\s*[:;-]?\s*(.+)/;
+  // Toplam satırını atla
+  const totalLineRegex = /^toplam\s*[:;-]/i;
+  // Tutar: 1.234.567,89 veya 300.000,00 veya 500000,00
+  const amountInTextRegex = /(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/;
+
+  let currentCustomer = null;
+
+  for (const line of lines) {
+    // Toplam satırını atla
+    if (totalLineRegex.test(line)) continue;
+
+    // Tarih + tutar satırı mı?
+    const txMatch = line.match(txLineRegex);
+    if (txMatch) {
+      const date = parseDate(txMatch[1]);
+      const restText = txMatch[2];
+      const amountMatch = restText.match(amountInTextRegex);
+      const amount = amountMatch ? parseAmount(amountMatch[1]) : 0;
+
+      if (date && amount > 0 && currentCustomer) {
+        transactions.push({
+          date,
+          amount,
+          description: currentCustomer,
+          rawDescription: `${currentCustomer} — ${line}`,
+          source: 'text'
+        });
+      }
+      continue;
+    }
+
+    // Tarih veya tutar satırı değilse → müşteri adı olabilir
+    // En az 3 karakter ve harf içermeli
+    if (line.length >= 3 && /[a-zA-ZğüşöçıİĞÜŞÖÇ]/.test(line)) {
+      currentCustomer = line
+        .replace(/\(.*?\)/g, '')  // Parantez içini temizle opsiyonel
+        .trim() || line;
+    }
+  }
+
+  return transactions;
+}
+
+// ══════════════════════════════════════════
+// ANA PARSE FONKSİYONU
+// ══════════════════════════════════════════
+export async function parseStatementFile(file) {
+  if (!file) throw new Error('Dosya seçilmedi.');
+
+  const name = file.name.toLowerCase();
+
+  if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+    return parseExcelStatement(file);
+  }
+
+  if (name.endsWith('.pdf')) {
+    return parsePdfStatement(file);
+  }
+
+  throw new Error('Desteklenmeyen dosya formatı. Lütfen PDF veya Excel (.xlsx) yükleyin.');
+}
