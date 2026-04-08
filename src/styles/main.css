@@ -3823,6 +3823,20 @@ tbody tr:last-child td {
   cursor: pointer;
   transition: all 0.15s ease;
 }
+.import-account-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  white-space: nowrap;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .import-tab:hover { color: var(--text-primary); }
 .import-tab.active {
   color: var(--accent);

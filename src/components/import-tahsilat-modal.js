@@ -4,9 +4,9 @@
 // ══════════════════════════════════════════
 import { showModal } from './modal.js';
 import { showToast } from './toast.js';
-import { parseStatementFile, parseTextStatement, matchTransactionsToCustomers } from '../services/bank-statement-parser.js';
+import { parseStatementFile, parseTextStatement, matchTransactionsToCustomers, routeTransactionsToAccounts } from '../services/bank-statement-parser.js';
 import { addCollection } from '../services/tahsilat-manager.js';
-import { getActiveAccount } from '../services/account-manager.js';
+import { getActiveAccount, listAccounts } from '../services/account-manager.js';
 
 const ic = {
   upload: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
@@ -25,7 +25,12 @@ function fmtCur(a) {
  * @param {Object} customerMap - Mevcut müşteri haritası (cari.js'den)
  * @param {Function} onComplete - İşlem bitince çağrılacak callback (veriyi yenile)
  */
-export function openImportTahsilatModal(customerMap, onComplete) {
+export async function openImportTahsilatModal(customerMap, onComplete) {
+  // Tüm hesapları yükle (çoklu hesap routing için)
+  let allAccounts = [];
+  try { allAccounts = await listAccounts() || []; } catch { /* */ }
+  const activeAccount = await getActiveAccount();
+
   const body = document.createElement('div');
   body.className = 'import-tahsilat-modal';
   body.innerHTML = buildUploadStepHTML();
@@ -49,7 +54,28 @@ export function openImportTahsilatModal(customerMap, onComplete) {
   let currentMatched = [];
   let currentUnmatched = [];
 
-  const onParsed = (matched, unmatched) => {
+  // Parse → route → match pipeline
+  const processTransactions = (transactions) => {
+    if (!transactions || transactions.length === 0) {
+      showToast('Dosyada/metinde işlem bulunamadı.', 'warning');
+      return;
+    }
+
+    showToast(`${transactions.length} işlem bulundu, hesap ve müşteri eşleştirmesi yapılıyor...`, 'info');
+
+    // 1) Hesap routing: açıklamadaki isimlere bakarak hangi hesaba ait olduğunu belirle
+    const routed = routeTransactionsToAccounts(transactions, allAccounts);
+
+    // 2) Routing yapılmayanları aktif hesaba ata
+    routed.forEach(tx => {
+      if (!tx.routedAccountId && activeAccount?.id) {
+        tx.routedAccountId = activeAccount.id;
+        tx.routedAccountName = activeAccount.name;
+      }
+    });
+
+    // 3) Müşteri eşleştirme
+    const { matched, unmatched } = matchTransactionsToCustomers(routed, customerMap);
     currentMatched = matched;
     currentUnmatched = unmatched;
     renderResults(body, matched, unmatched);
@@ -71,7 +97,7 @@ export function openImportTahsilatModal(customerMap, onComplete) {
   });
 
   // ── File input ──
-  setupFileUpload(body, customerMap, onParsed);
+  setupFileUpload(body, allAccounts, customerMap, processTransactions);
 
   // ── Text paste parse ──
   body.querySelector('#importParseTextBtn')?.addEventListener('click', () => {
@@ -83,24 +109,15 @@ export function openImportTahsilatModal(customerMap, onComplete) {
 
     try {
       const transactions = parseTextStatement(text);
-      if (!transactions || transactions.length === 0) {
-        showToast('Metinde işlem bulunamadı. Formatı kontrol edin.', 'warning');
-        return;
-      }
-
-      showToast(`${transactions.length} işlem bulundu, müşterilerle eşleştiriliyor...`, 'info');
-      const { matched, unmatched } = matchTransactionsToCustomers(transactions, customerMap);
-
-      // Metin sekmesini gizle, sonuçları göster
       body.querySelector('#importTabText').style.display = 'none';
       body.querySelector('.import-tabs').style.display = 'none';
-      onParsed(matched, unmatched);
+      processTransactions(transactions);
     } catch (e) {
       showToast(`Parse hatası: ${e.message}`, 'error');
     }
   });
 
-  // Confirm
+  // Confirm — her işlemi doğru hesabına kaydet
   footer.querySelector('#importConfirmBtn')?.addEventListener('click', async () => {
     const selected = currentMatched.filter(tx => tx.selected);
     if (selected.length === 0) {
@@ -113,21 +130,21 @@ export function openImportTahsilatModal(customerMap, onComplete) {
     confirmBtn.textContent = 'Kaydediliyor...';
 
     try {
-      const account = await getActiveAccount();
-      if (!account?.id) throw new Error('Aktif hesap bulunamadı.');
-
       let successCount = 0;
       let failCount = 0;
 
       for (const tx of selected) {
+        const targetAccountId = tx.routedAccountId || activeAccount?.id;
+        if (!targetAccountId) { failCount++; continue; }
+
         try {
           await addCollection({
-            account_id: account.id,
+            account_id: targetAccountId,
             customer_key: tx.matchedCustomerKey,
             customer_name: tx.matchedCustomerName,
             customer_tax_no: tx.matchedCustomerTaxNo || '',
             type: 'Tahsilat',
-            description: tx.displayDescription || tx.description || `${tx.matchedCustomerName} - banka tahsilat`,
+            description: tx.displayDescription || 'Gelen Ödeme',
             amount: tx.amount,
             date: tx.date
           });
@@ -206,7 +223,7 @@ function buildUploadStepHTML() {
 }
 
 // ── File Upload Setup ──
-function setupFileUpload(container, customerMap, onParsed) {
+function setupFileUpload(container, allAccounts, customerMap, processTransactions) {
   const dropZone = container.querySelector('#importDropZone');
   const fileInput = container.querySelector('#importFileInput');
   const selectBtn = container.querySelector('#importSelectFileBtn');
@@ -238,19 +255,10 @@ function setupFileUpload(container, customerMap, onParsed) {
 
     try {
       const transactions = await parseStatementFile(file);
-
-      if (!transactions || transactions.length === 0) {
-        showToast('Dosyada işlem bulunamadı. Farklı bir dosya deneyin.', 'warning');
-        dropZone.style.display = '';
-        progressArea.style.display = 'none';
-        return;
-      }
-
-      showToast(`${transactions.length} işlem bulundu, müşterilerle eşleştiriliyor...`, 'info');
-
-      const { matched, unmatched } = matchTransactionsToCustomers(transactions, customerMap);
       progressArea.style.display = 'none';
-      onParsed(matched, unmatched);
+      container.querySelector('#importTabFile').style.display = 'none';
+      container.querySelector('.import-tabs').style.display = 'none';
+      processTransactions(transactions);
     } catch (e) {
       showToast(`Dosya parse hatası: ${e.message}`, 'error');
       dropZone.style.display = '';
@@ -292,6 +300,7 @@ function renderResults(container, matched, unmatched) {
             <tr>
               <th style="width:36px"></th>
               <th>Tarih</th>
+              <th>Hesap</th>
               <th>Müşteri Eşleşmesi</th>
               <th>Açıklama</th>
               <th>Tutar</th>
@@ -303,10 +312,11 @@ function renderResults(container, matched, unmatched) {
               <tr class="import-row-matched" data-idx="${i}">
                 <td><input type="checkbox" class="import-check" data-idx="${i}" ${tx.selected ? 'checked' : ''} /></td>
                 <td>${formatDate(tx.date)}</td>
+                <td><span class="import-account-badge" title="${escHtml(tx.routedAccountName || '')}">${escHtml(truncate(tx.routedAccountName || '—', 20))}</span></td>
                 <td>
                   <span class="import-customer-badge">${tx.matchedCustomerName}</span>
                 </td>
-                <td class="import-desc-cell" title="${escHtml(tx.rawDescription || tx.description)}">${escHtml(truncate(tx.description, 50))}</td>
+                <td class="import-desc-cell" title="${escHtml(tx.rawDescription || tx.description)}">${escHtml(truncate(tx.description, 40))}</td>
                 <td style="font-weight:600;color:var(--success)">${fmtCur(tx.amount)}</td>
                 <td><span class="import-score import-score-${scoreClass(tx.matchScore)}">${tx.matchScore}%</span></td>
               </tr>

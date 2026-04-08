@@ -195,6 +195,7 @@ export async function parseExcelStatement(file) {
         date,
         amount: rawNum,
         description: customerName,
+        displayDescription: 'Gelen Ödeme',
         rawDescription: descVal.trim(),
         label: labelVal,
         source: 'excel'
@@ -270,13 +271,70 @@ function parseBankStatementText(text) {
     transactions.push({
       date,
       amount: bestAmount,
-      description: desc,
+      description: extractCustomerFromDesc(desc),
+      displayDescription: 'Gelen Ödeme',
       rawDescription: line.trim(),
       source: 'pdf'
     });
   }
 
   return transactions;
+}
+
+// ══════════════════════════════════════════
+// HESAP ROUTING — İşlemleri doğru hesaba yönlendir
+// ══════════════════════════════════════════
+// Banka döküm açıklamasındaki isimlere bakarak hangi hesaba ait olduğunu belirle.
+// Örnek: "Ayşe Karabut - Garanti Bankası" → Ayşe Karabut hesabına yönlendir
+export function routeTransactionsToAccounts(transactions, accounts) {
+  if (!transactions?.length || !accounts?.length) return transactions;
+
+  // Hesap isimlerini normalize et
+  const accountEntries = accounts.map(acc => ({
+    id: acc.id,
+    name: acc.name || '',
+    companyName: acc.company_name || '',
+    normalizedName: normalize(acc.name || ''),
+    normalizedCompany: normalize(acc.company_name || ''),
+    nameParts: normalize(acc.name || '').split(' ').filter(p => p.length > 2),
+    companyParts: normalize(acc.company_name || '').split(' ').filter(p => p.length > 2)
+  }));
+
+  return transactions.map(tx => {
+    const rawNorm = normalize(tx.rawDescription || tx.description || '');
+
+    let bestAccount = null;
+    let bestScore = 0;
+
+    for (const acc of accountEntries) {
+      let score = 0;
+
+      // Tam isim eşleşmesi
+      if (acc.normalizedName && rawNorm.includes(acc.normalizedName)) {
+        score = 100;
+      } else if (acc.normalizedCompany && rawNorm.includes(acc.normalizedCompany)) {
+        score = 100;
+      }
+      // Kısmi isim eşleşmesi
+      else if (acc.nameParts.length >= 2) {
+        const hits = acc.nameParts.filter(p => rawNorm.includes(p));
+        if (hits.length / acc.nameParts.length >= 0.7) {
+          score = Math.round((hits.length / acc.nameParts.length) * 80);
+        }
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestAccount = acc;
+      }
+    }
+
+    if (bestAccount && bestScore >= 60) {
+      return { ...tx, routedAccountId: bestAccount.id, routedAccountName: bestAccount.name };
+    }
+
+    return tx;
+  });
 }
 
 // ══════════════════════════════════════════
