@@ -38,10 +38,24 @@ function _roundRate(raw) {
   return 20;
 }
 
+// DEBUG: İlk birkaç faturayı logla — sorun çözülünce kaldırılacak
+let _debugCount = 0;
+
 // KDV kırılımı: matrah, oran, KDV tutarı hesapla
 function _calcKdv(inv) {
   const total = parseFloat(_getAmount(inv) || 0);
   if (!total || total <= 0) return { matrah: 0, kdvOrani: 0, kdvTutar: 0 };
+
+  if (_debugCount < 3) {
+    _debugCount++;
+    console.log(`[KDV DEBUG #${_debugCount}] total=${total}, keys=`, Object.keys(inv));
+    console.log(`  TaxExclusiveAmount=`, inv.TaxExclusiveAmount, inv.taxExclusiveAmount);
+    console.log(`  TaxTotal=`, inv.TaxTotal, inv.taxTotal);
+    console.log(`  InvoiceInfo=`, inv.InvoiceInfo ? Object.keys(inv.InvoiceInfo) : 'yok');
+    console.log(`  InvoiceLines=`, inv.InvoiceLines ? inv.InvoiceLines.length + ' satır' : 'yok');
+    console.log(`  KDVPercent=`, inv.KDVPercent, `TaxPercent=`, inv.TaxPercent);
+    console.log(`  Full raw (ilk 5 field):`, JSON.stringify(inv, null, 2).slice(0, 800));
+  }
 
   let matrah = _getTaxExclusive(inv);
   let kdvTutar = _getTaxTotal(inv);
