@@ -16,6 +16,28 @@ function _getTaxTotal(inv) {
   return parseFloat(info.TaxTotal || info.taxTotal || inv.TaxTotal || inv.taxTotal || 0);
 }
 
+// Fatura objesinden KDV oranını bulmaya çalış (InvoiceLines, KDVPercent, vb.)
+function _detectKdvRate(inv) {
+  // 1. InvoiceLines → Taxes → Percent
+  const lines = inv.InvoiceLines || inv.invoiceLines || [];
+  for (const l of lines) {
+    const pct = l.KDVPercent || l.kdvPercent || l.TaxPercent || l.taxPercent
+      || l.Taxes?.[0]?.Percent || l.taxes?.[0]?.percent;
+    if (pct && pct > 0) return parseFloat(pct);
+  }
+  // 2. Top-level KDVPercent
+  if (inv.KDVPercent > 0) return parseFloat(inv.KDVPercent);
+  if (inv.kdvPercent > 0) return parseFloat(inv.kdvPercent);
+  if (inv.TaxPercent > 0) return parseFloat(inv.TaxPercent);
+  return null; // bulunamadı
+}
+
+function _roundRate(raw) {
+  if (raw <= 2) return 1;
+  if (raw <= 14) return 10;
+  return 20;
+}
+
 // KDV kırılımı: matrah, oran, KDV tutarı hesapla
 function _calcKdv(inv) {
   const total = parseFloat(_getAmount(inv) || 0);
@@ -24,34 +46,30 @@ function _calcKdv(inv) {
   let matrah = _getTaxExclusive(inv);
   let kdvTutar = _getTaxTotal(inv);
 
-  // API'den matrah veya KDV geldiyse doğrudan kullan
+  // API'den matrah ve KDV geldiyse doğrudan kullan
   if (matrah > 0 && kdvTutar > 0) {
-    const rawOran = (kdvTutar / matrah) * 100;
-    // En yakın standart orana yuvarla (%1, %10, %20)
-    let kdvOrani = 20;
-    if (rawOran <= 2) kdvOrani = 1;
-    else if (rawOran <= 14) kdvOrani = 10;
-    else kdvOrani = 20;
-    return { matrah, kdvOrani, kdvTutar };
+    return { matrah, kdvOrani: _roundRate((kdvTutar / matrah) * 100), kdvTutar };
   }
-
-  // API'den gelmediyse: toplam tutardan geriye hesapla
-  // Önce %20 dene, sonra %10, en kötü %20 varsay
-  const m20 = total / 1.20;
-  const m10 = total / 1.10;
 
   // Eğer matrah varsa ama KDV yoksa
   if (matrah > 0 && kdvTutar <= 0) {
     kdvTutar = total - matrah;
-    const rawOran = matrah > 0 ? (kdvTutar / matrah) * 100 : 20;
-    let kdvOrani = 20;
-    if (rawOran <= 2) kdvOrani = 1;
-    else if (rawOran <= 14) kdvOrani = 10;
-    return { matrah, kdvOrani, kdvTutar };
+    return { matrah, kdvOrani: _roundRate((kdvTutar / matrah) * 100), kdvTutar };
   }
 
-  // Hiçbiri yoksa varsayılan %20
-  return { matrah: m20, kdvOrani: 20, kdvTutar: total - m20 };
+  // API'den matrah/KDV gelmediyse: fatura satırlarından oranı bul
+  const detectedRate = _detectKdvRate(inv);
+  if (detectedRate !== null) {
+    const rate = _roundRate(detectedRate);
+    const m = total / (1 + rate / 100);
+    return { matrah: m, kdvOrani: rate, kdvTutar: total - m };
+  }
+
+  // Son çare: toplam tutardan geriye hesapla — oranı tahmin et
+  // %10 ise matrah = total / 1.10, %20 ise total / 1.20
+  // Varsayılan %20
+  const m = total / 1.20;
+  return { matrah: m, kdvOrani: 20, kdvTutar: total - m };
 }
 
 function _getMovementDate(item) {
@@ -92,10 +110,11 @@ function normalizeForCari(inv, source, isSpecificCustomer) {
   const borc = isCollection ? 0 : (!isGelen ? amount : 0);
   const alacak = isCollection ? amount : (isGelen ? amount : 0);
 
-  // KDV kırılımı (sadece faturalar için)
+  // KDV kırılımı (sadece faturalar için) — inv.raw varsa ham fatura objesini kullan
   let matrah = 0, kdvOrani = 0, kdvTutar = 0;
   if (!isCollection) {
-    const kdv = _calcKdv(inv);
+    const rawInv = inv.raw || inv;
+    const kdv = _calcKdv(rawInv);
     matrah = kdv.matrah;
     kdvOrani = kdv.kdvOrani;
     kdvTutar = kdv.kdvTutar;
