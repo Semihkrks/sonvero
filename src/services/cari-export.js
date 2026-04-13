@@ -7,6 +7,53 @@ function _getInvoiceDate(inv) { return inv.IssueDate || inv.issueDate || inv.Cre
 function _getReceiverName(inv) { return inv.ReceiverName || inv.receiverName || inv.CustomerName || (inv.ReceiverInfo || inv.CustomerInfo || {}).Name || ''; }
 function _getSenderName(inv) { return inv.SenderName || inv.senderName || inv.SupplierName || (inv.SenderInfo || {}).Name || ''; }
 
+function _getTaxExclusive(inv) {
+  const info = inv.InvoiceInfo || inv.invoiceInfo || inv;
+  return parseFloat(info.TaxExclusiveAmount || info.taxExclusiveAmount || inv.TaxExclusiveAmount || inv.taxExclusiveAmount || 0);
+}
+function _getTaxTotal(inv) {
+  const info = inv.InvoiceInfo || inv.invoiceInfo || inv;
+  return parseFloat(info.TaxTotal || info.taxTotal || inv.TaxTotal || inv.taxTotal || 0);
+}
+
+// KDV kırılımı: matrah, oran, KDV tutarı hesapla
+function _calcKdv(inv) {
+  const total = parseFloat(_getAmount(inv) || 0);
+  if (!total || total <= 0) return { matrah: 0, kdvOrani: 0, kdvTutar: 0 };
+
+  let matrah = _getTaxExclusive(inv);
+  let kdvTutar = _getTaxTotal(inv);
+
+  // API'den matrah veya KDV geldiyse doğrudan kullan
+  if (matrah > 0 && kdvTutar > 0) {
+    const rawOran = (kdvTutar / matrah) * 100;
+    // En yakın standart orana yuvarla (%1, %10, %20)
+    let kdvOrani = 20;
+    if (rawOran <= 2) kdvOrani = 1;
+    else if (rawOran <= 14) kdvOrani = 10;
+    else kdvOrani = 20;
+    return { matrah, kdvOrani, kdvTutar };
+  }
+
+  // API'den gelmediyse: toplam tutardan geriye hesapla
+  // Önce %20 dene, sonra %10, en kötü %20 varsay
+  const m20 = total / 1.20;
+  const m10 = total / 1.10;
+
+  // Eğer matrah varsa ama KDV yoksa
+  if (matrah > 0 && kdvTutar <= 0) {
+    kdvTutar = total - matrah;
+    const rawOran = matrah > 0 ? (kdvTutar / matrah) * 100 : 20;
+    let kdvOrani = 20;
+    if (rawOran <= 2) kdvOrani = 1;
+    else if (rawOran <= 14) kdvOrani = 10;
+    return { matrah, kdvOrani, kdvTutar };
+  }
+
+  // Hiçbiri yoksa varsayılan %20
+  return { matrah: m20, kdvOrani: 20, kdvTutar: total - m20 };
+}
+
 function _getMovementDate(item) {
   return item?.date || _getInvoiceDate(item) || '';
 }
@@ -45,10 +92,22 @@ function normalizeForCari(inv, source, isSpecificCustomer) {
   const borc = isCollection ? 0 : (!isGelen ? amount : 0);
   const alacak = isCollection ? amount : (isGelen ? amount : 0);
 
+  // KDV kırılımı (sadece faturalar için)
+  let matrah = 0, kdvOrani = 0, kdvTutar = 0;
+  if (!isCollection) {
+    const kdv = _calcKdv(inv);
+    matrah = kdv.matrah;
+    kdvOrani = kdv.kdvOrani;
+    kdvTutar = kdv.kdvTutar;
+  }
+
   return {
     Tarih: dateObj,
     Tur: tur,
     Aciklama: aciklama,
+    Matrah: matrah,
+    KdvOrani: kdvOrani,
+    KdvTutar: kdvTutar,
     Borc: borc,
     Alacak: alacak,
     AyNo: ayNo,
@@ -68,15 +127,18 @@ function createCariWorkbook(records, titleText) {
     { key: 'A', width: 13 }, // Tarih
     { key: 'B', width: 12 }, // Tür
     { key: 'C', width: 35 }, // Açıklama
-    { key: 'D', width: 18 }, // Borç (Satış)
-    { key: 'E', width: 18 }, // Alacak (Tahsilat)
-    { key: 'F', width: 10 }, // Ay No
-    { key: 'G', width: 12 }, // Ay Adı
-    { key: 'H', width: 18 }  // Kontrol
+    { key: 'D', width: 18 }, // Matrah (KDV Hariç)
+    { key: 'E', width: 10 }, // KDV %
+    { key: 'F', width: 18 }, // KDV Tutarı
+    { key: 'G', width: 18 }, // Borç (Toplam Satış)
+    { key: 'H', width: 18 }, // Alacak (Tahsilat)
+    { key: 'I', width: 10 }, // Ay No
+    { key: 'J', width: 12 }, // Ay Adı
+    { key: 'K', width: 18 }  // Kontrol
   ];
 
   // 1. Satır: Başlık (Koyu Mavi, Beyaz Yazı)
-  worksheet.mergeCells('A1:H1');
+  worksheet.mergeCells('A1:K1');
   const titleCell = worksheet.getCell('A1');
   titleCell.value = titleText;
   titleCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -90,18 +152,18 @@ function createCariWorkbook(records, titleText) {
   noteLabelCell.font = { name: 'Calibri', size: 10, bold: true };
   noteLabelCell.alignment = { vertical: 'bottom', horizontal: 'left' };
 
-  worksheet.mergeCells('B2:E2');
+  worksheet.mergeCells('B2:H2');
   const noteDescCell = worksheet.getCell('B2');
-  noteDescCell.value = 'Borç (Satış) = firmaya kesilen fatura / Alacak (Tahsilat) = firmadan gelen ödeme';
+  noteDescCell.value = 'Matrah = KDV hariç tutar / KDV = vergi tutarı / Borç (Satış) = toplam fatura / Alacak (Tahsilat) = gelen ödeme';
   noteDescCell.font = { name: 'Calibri', size: 10 };
-  noteDescCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } }; // Açık Sarı/Turuncu
+  noteDescCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
   noteDescCell.alignment = { vertical: 'bottom', horizontal: 'left' };
 
   // 3. Satır: Başlıklar
   const headerRow = worksheet.getRow(3);
-  headerRow.values = ['Tarih', 'Tür', 'Açıklama', 'Borç (Satış)', 'Alacak (Tahsilat)', 'Ay No', 'Ay Adı', 'Kontrol'];
+  headerRow.values = ['Tarih', 'Tür', 'Açıklama', 'Matrah', 'KDV %', 'KDV Tutarı', 'Borç (Satış)', 'Alacak (Tahsilat)', 'Ay No', 'Ay Adı', 'Kontrol'];
   
-  ['A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3', 'H3'].forEach(c => {
+  ['A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3', 'H3', 'I3', 'J3', 'K3'].forEach(c => {
     const cell = worksheet.getCell(c);
     cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
@@ -110,7 +172,7 @@ function createCariWorkbook(records, titleText) {
   });
 
   // Filtreleme oku
-  worksheet.autoFilter = 'A3:H3';
+  worksheet.autoFilter = 'A3:K3';
 
   // Verilerin Yazılması (4. Satır ve sonrası)
   let startRow = 4;
@@ -126,22 +188,26 @@ function createCariWorkbook(records, titleText) {
       row.getCell('B').value = record.Tur;
       row.getCell('C').value = record.Aciklama;
 
-      row.getCell('D').value = record.Borc > 0 ? record.Borc : null;
-      row.getCell('E').value = record.Alacak > 0 ? record.Alacak : null;
+      // Matrah / KDV kırılımı (sadece faturalarda dolu)
+      row.getCell('D').value = record.Matrah > 0 ? record.Matrah : null;
+      row.getCell('E').value = record.KdvOrani > 0 ? record.KdvOrani : null;
+      row.getCell('F').value = record.KdvTutar > 0 ? record.KdvTutar : null;
+
+      row.getCell('G').value = record.Borc > 0 ? record.Borc : null;
+      row.getCell('H').value = record.Alacak > 0 ? record.Alacak : null;
     }
 
-    // F (Ay No) ve G (Ay Adı) her zaman formül:
-    row.getCell('F').value = { formula: `IF(A${rowNum}="","",MONTH(A${rowNum}))` };
-    row.getCell('G').value = { formula: `IF(F${rowNum}="","",CHOOSE(F${rowNum},"Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"))` };
+    // I (Ay No) ve J (Ay Adı) her zaman formül:
+    row.getCell('I').value = { formula: `IF(A${rowNum}="","",MONTH(A${rowNum}))` };
+    row.getCell('J').value = { formula: `IF(I${rowNum}="","",CHOOSE(I${rowNum},"Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"))` };
 
-    // H sütunu Kontrol her zaman formül: =EĞER(VE(D..="";E...="");"";D...-E...)
-    // ExcelJS kütüphanesinde formüllerin İngilizce fonksiyonlarıyla yazılması gerekir (IF, AND gibi), Excel bunu TR ise Türkçe açar.
-    row.getCell('H').value = { formula: `IF(AND(D${rowNum}="",E${rowNum}=""),"",D${rowNum}-E${rowNum})` };
+    // K sütunu Kontrol formülü: Borç(G) - Alacak(H)
+    row.getCell('K').value = { formula: `IF(AND(G${rowNum}="",H${rowNum}=""),"",G${rowNum}-H${rowNum})` };
 
     // Tek / Çift satır mantığı (Açık Mavi Arka plan - Zebra deseni)
     const isEven = rowNum % 2 === 0;
 
-    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].forEach(col => {
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K'].forEach(col => {
       const cell = row.getCell(col);
 
       // Çerçeve (Açık Mavi Excel stili)
@@ -157,26 +223,28 @@ function createCariWorkbook(records, titleText) {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
       }
 
-      // Font renkleri: İlk 5 kolon tam mavi, diğerleri standart/siyah
-      if (['A', 'B', 'C', 'D', 'E'].includes(col)) {
+      // Font renkleri: İlk 8 kolon mavi, diğerleri standart
+      if (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].includes(col)) {
          cell.font = { name: 'Calibri', color: { argb: 'FF0000FF' } };
       } else {
          cell.font = { name: 'Calibri' };
       }
 
       // Formatlamalar
-      if (['D', 'E'].includes(col)) {
+      if (['D', 'F', 'G', 'H'].includes(col)) {
         cell.numFmt = '#,##0.00';
         cell.alignment = { horizontal: 'right' };
-      } else if (col === 'H') {
-        // Kontrol sütunu: 0'ın altındaysa parantez içinde ve kırmızı gösterir
+      } else if (col === 'E') {
+        cell.numFmt = '0"%"';
+        cell.alignment = { horizontal: 'center' };
+      } else if (col === 'K') {
         cell.numFmt = '#,##0.00;[Red]\\(#,##0.00\\)';
         cell.alignment = { horizontal: 'right' };
       } else if (col === 'A') {
         cell.numFmt = 'dd.mm.yyyy';
         cell.alignment = { horizontal: 'center' };
-      } else if (['F', 'G'].includes(col)) {
-        cell.alignment = { horizontal: 'right' }; // Ay No ve Ay Adı
+      } else if (['I', 'J'].includes(col)) {
+        cell.alignment = { horizontal: 'right' };
       } else {
         cell.alignment = { horizontal: 'left' };
       }
@@ -231,8 +299,8 @@ function createCariWorkbook(records, titleText) {
     row.getCell('A').value = { formula: `IF('Hareket Girişi'!A${hRow}="","",'Hareket Girişi'!A${hRow})` };
     row.getCell('B').value = { formula: `IF('Hareket Girişi'!B${hRow}="","",'Hareket Girişi'!B${hRow})` };
     row.getCell('C').value = { formula: `IF('Hareket Girişi'!C${hRow}="","",'Hareket Girişi'!C${hRow})` };
-    row.getCell('D').value = { formula: `IF('Hareket Girişi'!A${hRow}="","",IF('Hareket Girişi'!D${hRow}="",0,'Hareket Girişi'!D${hRow}))` };
-    row.getCell('E').value = { formula: `IF('Hareket Girişi'!A${hRow}="","",IF('Hareket Girişi'!E${hRow}="",0,'Hareket Girişi'!E${hRow}))` };
+    row.getCell('D').value = { formula: `IF('Hareket Girişi'!A${hRow}="","",IF('Hareket Girişi'!G${hRow}="",0,'Hareket Girişi'!G${hRow}))` };
+    row.getCell('E').value = { formula: `IF('Hareket Girişi'!A${hRow}="","",IF('Hareket Girişi'!H${hRow}="",0,'Hareket Girişi'!H${hRow}))` };
 
     // F Sütunu (Kümülatif Bakiye Formülü)
     if (i === 0) {
@@ -334,10 +402,10 @@ function createCariWorkbook(records, titleText) {
   const maxH = startRow + targetRowCount - 1; // Hareket Girişi son satır no (örnek: 154)
 
   dashSheet.mergeCells('A4:B4'); dashSheet.getCell('A4').value = 'Toplam Satış';
-  dashSheet.mergeCells('A5:B5'); dashSheet.getCell('A5').value = { formula: `SUM('Hareket Girişi'!D4:D${maxH})` };
+  dashSheet.mergeCells('A5:B5'); dashSheet.getCell('A5').value = { formula: `SUM('Hareket Girişi'!G4:G${maxH})` };
 
   dashSheet.mergeCells('C4:D4'); dashSheet.getCell('C4').value = 'Toplam Tahsilat';
-  dashSheet.mergeCells('C5:D5'); dashSheet.getCell('C5').value = { formula: `SUM('Hareket Girişi'!E4:E${maxH})` };
+  dashSheet.mergeCells('C5:D5'); dashSheet.getCell('C5').value = { formula: `SUM('Hareket Girişi'!H4:H${maxH})` };
 
   dashSheet.mergeCells('E4:F4'); dashSheet.getCell('E4').value = 'Kapanış Bakiye';
   dashSheet.mergeCells('E5:F5'); dashSheet.getCell('E5').value = { formula: `A5-C5` };
@@ -393,8 +461,8 @@ function createCariWorkbook(records, titleText) {
     dashSheet.getCell(`${colChar}10`).alignment = { horizontal: 'center' };
 
     // Formüller: ÇOKETOPLA (SUMIFS)
-    dashSheet.getCell(`${colChar}11`).value = { formula: `SUMIFS('Hareket Girişi'!$D$4:$D$${maxH},'Hareket Girişi'!$F$4:$F$${maxH},${mNum})` };
-    dashSheet.getCell(`${colChar}12`).value = { formula: `SUMIFS('Hareket Girişi'!$E$4:$E$${maxH},'Hareket Girişi'!$F$4:$F$${maxH},${mNum})` };
+    dashSheet.getCell(`${colChar}11`).value = { formula: `SUMIFS('Hareket Girişi'!$G$4:$G$${maxH},'Hareket Girişi'!$I$4:$I$${maxH},${mNum})` };
+    dashSheet.getCell(`${colChar}12`).value = { formula: `SUMIFS('Hareket Girişi'!$H$4:$H$${maxH},'Hareket Girişi'!$I$4:$I$${maxH},${mNum})` };
     dashSheet.getCell(`${colChar}13`).value = { formula: `IF(${colChar}11="",0,${colChar}11)-IF(${colChar}12="",0,${colChar}12)` };
 
     dashSheet.getCell(`${colChar}11`).numFmt = '#,##0.00;-#,##0.00;"-"';
@@ -512,8 +580,8 @@ function createCariWorkbook(records, titleText) {
             row.getCell('A').value = { formula: `IF('Hareket Girişi'!A${hRow}="","",'Hareket Girişi'!A${hRow})` };
             row.getCell('B').value = { formula: `IF('Hareket Girişi'!B${hRow}="","",'Hareket Girişi'!B${hRow})` };
             row.getCell('C').value = { formula: `IF('Hareket Girişi'!C${hRow}="","",'Hareket Girişi'!C${hRow})` };
-            row.getCell('D').value = { formula: `IF('Hareket Girişi'!D${hRow}="",0,'Hareket Girişi'!D${hRow})` };
-            row.getCell('E').value = { formula: `IF('Hareket Girişi'!E${hRow}="",0,'Hareket Girişi'!E${hRow})` };
+            row.getCell('D').value = { formula: `IF('Hareket Girişi'!G${hRow}="",0,'Hareket Girişi'!G${hRow})` };
+            row.getCell('E').value = { formula: `IF('Hareket Girişi'!H${hRow}="",0,'Hareket Girişi'!H${hRow})` };
         } else {
             // Ayın kayıtları bittiyse alt satırlar boş kalsın ama formül hatası vermesin
             row.getCell('A').value = "";
@@ -601,11 +669,11 @@ function createCariWorkbook(records, titleText) {
 
       if (i < mappedTRows.length) {
           const hRow = mappedTRows[i];
-          row.getCell('A').value = { formula: `IF('Hareket Girişi'!E${hRow}>0,'Hareket Girişi'!A${hRow},"")` };
+          row.getCell('A').value = { formula: `IF('Hareket Girişi'!H${hRow}>0,'Hareket Girişi'!A${hRow},"")` };
           row.getCell('B').value = { formula: `IF($A${dRow}="","",'Hareket Girişi'!B${hRow})` };
           row.getCell('C').value = { formula: `IF($A${dRow}="","",'Hareket Girişi'!C${hRow})` };
-          row.getCell('D').value = { formula: `IF($A${dRow}="","",IF('Hareket Girişi'!D${hRow}="",0,'Hareket Girişi'!D${hRow}))` };
-          row.getCell('E').value = { formula: `IF($A${dRow}="","",IF('Hareket Girişi'!E${hRow}="",0,'Hareket Girişi'!E${hRow}))` };
+          row.getCell('D').value = { formula: `IF($A${dRow}="","",IF('Hareket Girişi'!G${hRow}="",0,'Hareket Girişi'!G${hRow}))` };
+          row.getCell('E').value = { formula: `IF($A${dRow}="","",IF('Hareket Girişi'!H${hRow}="",0,'Hareket Girişi'!H${hRow}))` };
       } else {
           row.getCell('A').value = "";
           row.getCell('B').value = "";

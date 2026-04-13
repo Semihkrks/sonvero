@@ -429,47 +429,108 @@ export function matchTransactionsToCustomers(transactions, customerMap) {
 }
 
 // ══════════════════════════════════════════
-// METİN (TEXT/PASTE) PARSER
+// METİN (TEXT/PASTE) PARSER — Esnek Format
 // ══════════════════════════════════════════
-// Format:
+// Desteklenen formatlar (tam uyum gerekmez, akıllı tespit yapar):
+//
+// Format A (standart):
 //   Müşteri Adı
 //   dd/mm/yyyy: 1.234,56 TL
-//   dd/mm/yyyy: 5.678,90 TL
-//   Toplam: xxx TL   (atlanır)
 //
-//   Başka Müşteri Adı
-//   dd/mm/yyyy: 1.000,00 TL
-//   ...
+// Format B (tarih önce, isim sonra):
+//   05/01/2026 Yavuz Tekstil 300.000,00
+//
+// Format C (karışık, tab/space ayrılmış):
+//   Yavuz Tekstil   05.01.2026   300000,00
+//
+// Format D (sadece isim + tutar):
+//   Yavuz Tekstil 300.000,00 TL
+//
 export function parseTextStatement(text) {
   if (!text || !text.trim()) return [];
 
   const transactions = [];
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
 
-  // Tarih + tutar satırı: dd/mm/yyyy: 1.234,56 TL  veya  dd.mm.yyyy: 1.234,56
-  const txLineRegex = /^(\d{1,2}[./-]\d{1,2}[./-]\d{4})\s*[:;-]?\s*(.+)/;
-  // Toplam satırını atla
-  const totalLineRegex = /^toplam\s*[:;-]/i;
-  // Tutar: 1.234.567,89 veya 300.000,00 veya 500000,00
-  const amountInTextRegex = /(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/;
+  // Regex'ler
+  const dateRegex = /(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/;
+  const amountRegex = /(\d{1,3}(?:\.\d{3})*,\d{1,2}|\d+,\d{1,2})/;
+  const totalLineRegex = /^toplam\s*[:;=\-]/i;
+  const skipRegex = /^(toplam|genel\s*toplam|ara\s*toplam|not|aciklama|tarih|tutar|musteri|---)/i;
 
   let currentCustomer = null;
 
   for (const line of lines) {
-    // Toplam satırını atla
+    // Atlanacak satırlar
     if (totalLineRegex.test(line)) continue;
+    if (skipRegex.test(normalize(line))) continue;
 
-    // Tarih + tutar satırı mı?
-    const txMatch = line.match(txLineRegex);
-    if (txMatch) {
-      const date = parseDate(txMatch[1]);
-      const restText = txMatch[2];
-      const amountMatch = restText.match(amountInTextRegex);
-      const amount = amountMatch ? parseAmount(amountMatch[1]) : 0;
+    const hasDate = dateRegex.test(line);
+    const hasAmount = amountRegex.test(line);
 
-      if (date && amount > 0 && currentCustomer) {
+    // ─── Satırda hem tarih hem tutar var → işlem satırı ───
+    if (hasDate && hasAmount) {
+      const dateMatch = line.match(dateRegex);
+      const amountMatch = line.match(amountRegex);
+      const date = parseDate(dateMatch[1]);
+      const amount = parseAmount(amountMatch[1]);
+
+      if (date && amount > 0) {
+        // Tarih ve tutarı çıkarınca kalan metin: ya müşteri adı ya açıklama
+        let remaining = line
+          .replace(dateRegex, '')
+          .replace(amountRegex, '')
+          .replace(/TL|₺|TRY/gi, '')
+          .replace(/[:;=\-\t|]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        // Kalan metin müşteri adı olabilir (en az 3 harf karakter)
+        const hasName = remaining.length >= 3 && /[a-zA-ZğüşöçıİĞÜŞÖÇ]{2,}/.test(remaining);
+        const customer = hasName ? remaining : currentCustomer;
+
+        if (hasName && !currentCustomer) {
+          currentCustomer = remaining;
+        }
+
+        if (customer) {
+          transactions.push({
+            date,
+            amount,
+            description: customer,
+            displayDescription: 'Gelen Ödeme',
+            rawDescription: `${customer} — ${line}`,
+            source: 'text'
+          });
+        }
+      }
+      continue;
+    }
+
+    // ─── Sadece tutar var (tarih yok) → currentCustomer ile eşle, bugünü kullan ───
+    if (hasAmount && !hasDate) {
+      const amountMatch = line.match(amountRegex);
+      const amount = parseAmount(amountMatch[1]);
+
+      // Tutarı çıkarınca kalan isim olabilir
+      let remaining = line
+        .replace(amountRegex, '')
+        .replace(/TL|₺|TRY/gi, '')
+        .replace(/[:;=\-\t|]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const hasName = remaining.length >= 3 && /[a-zA-ZğüşöçıİĞÜŞÖÇ]{2,}/.test(remaining);
+      if (hasName) currentCustomer = remaining;
+
+      if (amount > 0 && currentCustomer) {
+        // Tarih yoksa bugünü kullan
+        const today = new Date();
+        const dd = String(today.getDate()).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const yyyy = today.getFullYear();
         transactions.push({
-          date,
+          date: `${yyyy}-${mm}-${dd}`,
           amount,
           description: currentCustomer,
           displayDescription: 'Gelen Ödeme',
@@ -480,11 +541,14 @@ export function parseTextStatement(text) {
       continue;
     }
 
-    // Tarih veya tutar satırı değilse → müşteri adı olabilir
-    // En az 3 karakter ve harf içermeli
-    if (line.length >= 3 && /[a-zA-ZğüşöçıİĞÜŞÖÇ]/.test(line)) {
+    // ─── Sadece tarih var (tutar yok) → bir sonraki satır tutar olabilir, atla ───
+    if (hasDate && !hasAmount) continue;
+
+    // ─── Ne tarih ne tutar → müşteri adı olabilir ───
+    if (line.length >= 3 && /[a-zA-ZğüşöçıİĞÜŞÖÇ]{2,}/.test(line) && !/^\d+$/.test(line)) {
       currentCustomer = line
-        .replace(/\(.*?\)/g, '')  // Parantez içini temizle opsiyonel
+        .replace(/\(.*?\)/g, '')
+        .replace(/[:;=]+$/, '')
         .trim() || line;
     }
   }

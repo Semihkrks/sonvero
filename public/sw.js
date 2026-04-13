@@ -18,15 +18,16 @@ self.addEventListener('install', (event) => {
       console.log('[SW] Caching App Shell');
       return cache.addAll(ASSETS_TO_CACHE);
     })
-  const isApiRequest =
-    reqUrl.hostname.includes('apitest.nilvera.com') ||
-    reqUrl.hostname.includes('api.nilvera.com') ||
-    reqUrl.pathname.startsWith('/nilvera-api') ||
-    reqUrl.pathname.startsWith('/nilvera-live');
-  self.skipWaiting(); // Activate worker immediately
-    // API: asla cache'den okuma/yazma yapma. Hesap ve API key degisimlerinde stale veri riski yaratir.
+  );
+  self.skipWaiting();
+});
 
-      fetch(event.request)
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          if (key !== CACHE_NAME) {
             console.log('[SW] Removing old cache', key);
             return caches.delete(key);
           }
