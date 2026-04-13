@@ -46,28 +46,43 @@ function _calcKdv(inv) {
   let matrah = _getTaxExclusive(inv);
   let kdvTutar = _getTaxTotal(inv);
 
-  // API'den matrah ve KDV geldiyse doğrudan kullan
+  // Case 1: Hem matrah hem KDV API'den geldi
   if (matrah > 0 && kdvTutar > 0) {
     return { matrah, kdvOrani: _roundRate((kdvTutar / matrah) * 100), kdvTutar };
   }
 
-  // Eğer matrah varsa ama KDV yoksa
+  // Case 2: Sadece matrah var → KDV = toplam - matrah
   if (matrah > 0 && kdvTutar <= 0) {
     kdvTutar = total - matrah;
-    return { matrah, kdvOrani: _roundRate((kdvTutar / matrah) * 100), kdvTutar };
+    if (kdvTutar > 0) return { matrah, kdvOrani: _roundRate((kdvTutar / matrah) * 100), kdvTutar };
+    return { matrah, kdvOrani: 0, kdvTutar: 0 };
   }
 
-  // API'den matrah/KDV gelmediyse: fatura satırlarından oranı bul
-  const detectedRate = _detectKdvRate(inv);
-  if (detectedRate !== null) {
-    const rate = _roundRate(detectedRate);
-    const m = total / (1 + rate / 100);
-    return { matrah: m, kdvOrani: rate, kdvTutar: total - m };
+  // Case 3: Sadece KDV tutarı var → matrah = toplam - KDV
+  if (matrah <= 0 && kdvTutar > 0) {
+    matrah = total - kdvTutar;
+    if (matrah > 0) return { matrah, kdvOrani: _roundRate((kdvTutar / matrah) * 100), kdvTutar };
   }
 
-  // Son çare: toplam tutardan geriye hesapla — oranı tahmin et
-  // %10 ise matrah = total / 1.10, %20 ise total / 1.20
-  // Varsayılan %20
+  // Case 4: Hiçbiri yok → fatura satırlarından oranı bul
+  const lines = inv.InvoiceLines || inv.invoiceLines || [];
+  if (lines.length > 0) {
+    let totalNet = 0, totalTax = 0;
+    for (const l of lines) {
+      const qty = l.Quantity || l.quantity || 0;
+      const price = l.UnitPrice || l.unitPrice || l.Price || l.price || 0;
+      const allowance = l.AllowanceTotal || l.allowanceTotal || 0;
+      const lineNet = (qty * price) - allowance;
+      const lineTax = l.Taxes?.[0]?.Total || l.taxes?.[0]?.total || l.KDVTotal || l.kdvTotal || 0;
+      totalNet += lineNet;
+      totalTax += parseFloat(lineTax) || 0;
+    }
+    if (totalNet > 0 && totalTax > 0) {
+      return { matrah: totalNet, kdvOrani: _roundRate((totalTax / totalNet) * 100), kdvTutar: totalTax };
+    }
+  }
+
+  // Case 5: Son çare — varsayılan %20
   const m = total / 1.20;
   return { matrah: m, kdvOrani: 20, kdvTutar: total - m };
 }
