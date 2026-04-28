@@ -893,10 +893,21 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
         const amount = parseFloat(_getAmount(inv) || 0);
         accTotal += amount;
         
+        const dateStr = _getInvoiceDate(inv);
+        let ayAdi = '';
+        if (dateStr) {
+          const d = new Date(dateStr);
+          const monthNames = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+          if (!isNaN(d.getTime())) {
+            ayAdi = monthNames[d.getMonth()];
+          }
+        }
+        const aciklama = ayAdi ? `${ayAdi} Satış` : 'Satış';
+
         row.values = [
-          _getInvoiceDate(inv) ? new Date(_getInvoiceDate(inv)) : '',
+          dateStr ? new Date(dateStr) : '',
           _getInvoiceNumber(inv),
-          _getReceiverName(inv),
+          aciklama,
           amount > 0 ? amount : null
         ];
         
@@ -948,6 +959,11 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
     gtVal.alignment = { horizontal: 'right', vertical: 'middle' };
     
     grandTotalRow.height = 25;
+
+    // Hareket Girişi sayfasını 1. sıraya, Hesap Özeti sayfasını 2. sıraya al
+    const worksheets = workbook.worksheets;
+    const lastSheet = worksheets.pop();
+    worksheets.unshift(lastSheet);
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
