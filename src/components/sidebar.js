@@ -155,6 +155,9 @@ const menuItems = [
   {
     id: 'canli-cari', label: 'Canlı Cari', icon: 'layers', route: '/cari',
   },
+  {
+    id: 'tum-hesaplar-cari', label: 'Tüm Hesaplar Cari', icon: 'layers', route: '/tum-hesaplar-cari',
+  },
 ];
 
 const adminItems = [

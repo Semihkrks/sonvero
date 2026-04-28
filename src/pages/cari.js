@@ -307,12 +307,15 @@ async function loadCariData(page) {
   }
 
   try {
-    // Fetch all pages of invoices
+    // Fetch all pages of invoices with 3x retry
     async function fetchAllPages(apiFn, baseParams) {
       let items = [];
       let pg = 1, totalPages = 1;
       do {
-        const res = await apiFn({ ...baseParams, Page: pg, PageSize: 100 });
+        let res;
+        for (let r = 0; r < 3; r++) {
+          res = await apiFn({ ...baseParams, Page: pg, PageSize: 100 });
+        }
         if (!res.success) break;
         const pageItems = extractItems(res.data);
         items.push(...pageItems);

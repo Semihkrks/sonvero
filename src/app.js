@@ -24,6 +24,7 @@ import { renderAccounts } from './pages/accounts.js';
 import { renderExportPage } from './pages/export.js';
 import { renderSettings } from './pages/settings.js';
 import { renderCariPage } from './pages/cari.js';
+import { renderMultiAccountCari } from './pages/multi-account-cari.js';
 import { renderPlaceholderPage } from './pages/placeholder-page.js';
 import { renderCompanyInfo } from './pages/company-info.js';
 import { renderCustomers } from './pages/customers.js';
@@ -178,6 +179,11 @@ registerRoute('/settings', async () => ({
 registerRoute('/cari', async () => ({
   page: await renderCariPage(),
   title: 'Canlı Cari Sistemi'
+}));
+
+registerRoute('/tum-hesaplar-cari', async () => ({
+  page: await renderMultiAccountCari(),
+  title: 'Tüm Hesaplar Cari (Satış)'
 }));
 
 registerRoute('/eirsaliye-giden', async () => ({

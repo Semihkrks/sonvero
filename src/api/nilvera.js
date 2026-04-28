@@ -90,6 +90,76 @@ async function request(method, path, data = null, params = null) {
   }
 }
 
+// ── Account-specific request (bypasses getActiveAccount) ──
+async function requestWithAccount(account, method, path, data = null, params = null) {
+  if (!account || !account.api_key) {
+    return { success: false, error: 'Hesap veya API anahtarı bulunamadı.', status: 0 };
+  }
+  const baseUrl = account.environment === 'live' ? '/nilvera-live' : '/nilvera-api';
+  const headers = {
+    'Authorization': `Bearer ${account.api_key}`,
+    'Content-Type': 'application/json'
+  };
+  const api = createApi();
+
+  try {
+    const config = {
+      method,
+      url: `${baseUrl}${path}`,
+      headers,
+      ...(data && { data }),
+      ...(params && { params })
+    };
+    const response = await api(config);
+    return { success: true, data: response.data, status: response.status };
+  } catch (error) {
+    const errData = error.response?.data;
+    const status = error.response?.status;
+    let message = 'Bilinmeyen bir hata oluştu';
+    if (errData) {
+      if (errData.Errors && errData.Errors.length > 0) {
+        message = errData.Errors.map(e => e.Message || e).join(', ');
+      } else if (errData.Message) {
+        message = errData.Message;
+      } else if (typeof errData === 'string') {
+        message = errData;
+      }
+    }
+    return { success: false, error: message, status };
+  }
+}
+
+// ── 3x Retry: Call API 3 times, use 3rd result (first 2 may return inconsistent data) ──
+async function requestRetry3(method, path, data = null, params = null) {
+  let result;
+  for (let i = 0; i < 3; i++) {
+    result = await request(method, path, data, params);
+  }
+  return result;
+}
+
+async function requestWithAccountRetry3(account, method, path, data = null, params = null) {
+  let result;
+  for (let i = 0; i < 3; i++) {
+    result = await requestWithAccount(account, method, path, data, params);
+  }
+  return result;
+}
+
+// ── Exported helpers for multi-account operations ──
+export { requestWithAccount, requestRetry3, requestWithAccountRetry3 };
+
+// ── Account-specific EInvoice & EArchive (for multi-account cari) ──
+export const EInvoiceWithAccount = {
+  listSales: (account, params = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/einvoice/Sale', null, params),
+};
+
+export const EArchiveWithAccount = {
+  listInvoices: (account, params = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/earchive/Invoices', null, params),
+};
+
 // Public generic caller for endpoints not yet wrapped with named functions.
 export async function nilveraRequest(method, path, { data = null, params = null } = {}) {
   return request(method, path, data, params);

@@ -776,3 +776,77 @@ export async function exportCustomerCari(invoices, customerName, source) {
     return { success: false, error: error.message };
   }
 }
+
+export async function exportMultiAccountCari(invoices, customerName, accountBreakdown) {
+  try {
+    const records = invoices.map(i => normalizeForCari(i, 'giden', true)).sort((a,b) => a.Tarih - b.Tarih);
+    const title = `${customerName.toUpperCase()} - TÜM HESAPLAR CARİ (SATIŞ)`;
+
+    const workbook = createCariWorkbook(records, title);
+
+    // Add Account Breakdown Sheet as the very first sheet
+    const accSheet = workbook.addWorksheet('Hesap Kırılımı', { properties: { tabColor: { argb: 'FFC000' } } });
+    
+    // Move it to the first position
+    const worksheets = workbook.worksheets;
+    const lastSheet = worksheets.pop();
+    worksheets.unshift(lastSheet);
+
+    accSheet.columns = [
+      { key: 'A', width: 35 },
+      { key: 'B', width: 20 },
+      { key: 'C', width: 25 },
+    ];
+
+    accSheet.mergeCells('A1:C1');
+    const headerCell = accSheet.getCell('A1');
+    headerCell.value = `${customerName.toUpperCase()} - HESAP BAZLI SATIŞ ÖZETİ`;
+    headerCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+    headerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+    headerCell.alignment = { vertical: 'middle', horizontal: 'center' };
+    accSheet.getRow(1).height = 25;
+
+    const colHeader = accSheet.getRow(3);
+    colHeader.values = ['Hesap Adı', 'Fatura Adedi', 'Toplam Satış (TRY)'];
+    ['A3', 'B3', 'C3'].forEach(c => {
+      const cell = accSheet.getCell(c);
+      cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    });
+
+    let rowNo = 4;
+    let totalInv = 0;
+    let totalAmt = 0;
+    Object.values(accountBreakdown).sort((a,b) => b.totalAmount - a.totalAmount).forEach(acc => {
+      const row = accSheet.getRow(rowNo++);
+      row.values = [acc.name, acc.invoiceCount, acc.totalAmount];
+      row.getCell('A').font = { bold: true };
+      row.getCell('B').alignment = { horizontal: 'center' };
+      row.getCell('C').numFmt = '#,##0.00';
+      row.getCell('C').font = { color: { argb: 'FF006600' } };
+      totalInv += acc.invoiceCount;
+      totalAmt += acc.totalAmount;
+    });
+
+    const totalRow = accSheet.getRow(rowNo);
+    totalRow.values = ['GENEL TOPLAM', totalInv, totalAmt];
+    totalRow.font = { bold: true, size: 12 };
+    totalRow.getCell('B').alignment = { horizontal: 'center' };
+    totalRow.getCell('C').numFmt = '#,##0.00';
+    totalRow.getCell('C').font = { color: { argb: 'FF006600' } };
+    totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    
+    const safeName = customerName.replace(/[^a-zA-ZğüşöçıİĞÜŞÖÇ0-9]/g, '_');
+    const fileName = `${safeName}_Tum_Hesaplar_Cari_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    saveAs(blob, fileName);
+
+    return { success: true, count: records.length };
+  } catch (error) {
+    console.error('Multi account cari export error:', error);
+    return { success: false, error: error.message };
+  }
+}
