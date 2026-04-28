@@ -889,7 +889,7 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
 
     // GENEL TOPLAM
     const grandTotalRow = detailSheet.getRow(rowNo);
-    grandTotalRow.mergeCells(`A${rowNo}:C${rowNo}`);
+    detailSheet.mergeCells(`A${rowNo}:C${rowNo}`);
     const gtLabel = detailSheet.getCell(`A${rowNo}`);
     gtLabel.value = 'TÜM HESAPLAR GENEL TOPLAMI:';
     gtLabel.font = { name: 'Calibri', size: 14, bold: true };
