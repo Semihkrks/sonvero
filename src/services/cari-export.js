@@ -780,68 +780,129 @@ export async function exportCustomerCari(invoices, customerName, source) {
 export async function exportMultiAccountCari(invoices, customerName, accountBreakdown) {
   try {
     const records = invoices.map(i => normalizeForCari(i, 'giden', true)).sort((a,b) => a.Tarih - b.Tarih);
-    const title = `${customerName.toUpperCase()} - TÜM HESAPLAR CARİ (SATIŞ)`;
+    const title = `${customerName.toUpperCase()} - CARİ`;
 
+    // Mevcut sayfaları (Hareket Girişi, Muavin vs.) standart yapıda oluşturur
     const workbook = createCariWorkbook(records, title);
 
-    // Add Account Breakdown Sheet as the very first sheet
-    const accSheet = workbook.addWorksheet('Hesap Kırılımı', { properties: { tabColor: { argb: 'FFC000' } } });
+    // 1. Sekmeye "Detaylı Cari" adında gruplu liste ekliyoruz
+    const detailSheet = workbook.addWorksheet('Detaylı Cari', { properties: { tabColor: { argb: 'FF00B050' } } });
     
-    // Move it to the first position
+    // En başa taşı
     const worksheets = workbook.worksheets;
     const lastSheet = worksheets.pop();
     worksheets.unshift(lastSheet);
 
-    accSheet.columns = [
-      { key: 'A', width: 35 },
-      { key: 'B', width: 20 },
-      { key: 'C', width: 25 },
+    detailSheet.columns = [
+      { key: 'A', width: 15 }, // Tarih
+      { key: 'B', width: 25 }, // Fatura No
+      { key: 'C', width: 45 }, // Açıklama
+      { key: 'D', width: 20 }, // Tutar
     ];
 
-    accSheet.mergeCells('A1:C1');
-    const headerCell = accSheet.getCell('A1');
-    headerCell.value = `${customerName.toUpperCase()} - HESAP BAZLI SATIŞ ÖZETİ`;
+    detailSheet.mergeCells('A1:D1');
+    const headerCell = detailSheet.getCell('A1');
+    headerCell.value = `${customerName.toUpperCase()} - DETAYLI HESAP DÖKÜMÜ`;
     headerCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
     headerCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
     headerCell.alignment = { vertical: 'middle', horizontal: 'center' };
-    accSheet.getRow(1).height = 25;
+    detailSheet.getRow(1).height = 25;
 
-    const colHeader = accSheet.getRow(3);
-    colHeader.values = ['Hesap Adı', 'Fatura Adedi', 'Toplam Satış (TRY)'];
-    ['A3', 'B3', 'C3'].forEach(c => {
-      const cell = accSheet.getCell(c);
-      cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
-      cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    let rowNo = 3;
+    let genelToplam = 0;
+
+    // Her hesap için gruplu döküm
+    Object.keys(accountBreakdown).forEach(accId => {
+      const acc = accountBreakdown[accId];
+      // Hesaba ait faturaları bul ve tarihe göre sırala
+      const accInvs = invoices.filter(inv => inv._accountId === accId).sort((a, b) => new Date(_getMovementDate(a) || 0) - new Date(_getMovementDate(b) || 0));
+      
+      if (accInvs.length === 0) return;
+
+      // Hesap Başlığı
+      detailSheet.mergeCells(`A${rowNo}:D${rowNo}`);
+      const accHeader = detailSheet.getCell(`A${rowNo}`);
+      accHeader.value = `■ ${acc.name.toUpperCase()}`;
+      accHeader.font = { name: 'Calibri', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+      accHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } };
+      accHeader.alignment = { vertical: 'middle', horizontal: 'left' };
+      detailSheet.getRow(rowNo).height = 20;
+      rowNo++;
+
+      // Kolon Başlıkları
+      const colHeader = detailSheet.getRow(rowNo);
+      colHeader.values = ['Tarih', 'Fatura No', 'Açıklama', 'Tutar (TRY)'];
+      ['A','B','C','D'].forEach(c => {
+        const cell = detailSheet.getCell(`${c}${rowNo}`);
+        cell.font = { name: 'Calibri', size: 11, bold: true };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
+        cell.border = { top: {style:'thin'}, bottom: {style:'thin'} };
+      });
+      rowNo++;
+
+      let accTotal = 0;
+
+      // Faturalar
+      accInvs.forEach(inv => {
+        const row = detailSheet.getRow(rowNo);
+        const amount = parseFloat(_getAmount(inv) || 0);
+        accTotal += amount;
+        
+        row.values = [
+          _getMovementDate(inv) ? new Date(_getMovementDate(inv)) : '',
+          _getInvoiceNumber(inv),
+          _getReceiverName(inv),
+          amount > 0 ? amount : null
+        ];
+        
+        row.getCell('A').numFmt = 'dd.mm.yyyy';
+        row.getCell('A').alignment = { horizontal: 'center' };
+        row.getCell('D').numFmt = '#,##0.00';
+        row.getCell('D').alignment = { horizontal: 'right' };
+        rowNo++;
+      });
+
+      // Hesap Ara Toplamı
+      const subTotalRow = detailSheet.getRow(rowNo);
+      subTotalRow.getCell('C').value = 'Ara Toplam:';
+      subTotalRow.getCell('C').font = { bold: true };
+      subTotalRow.getCell('C').alignment = { horizontal: 'right' };
+      
+      subTotalRow.getCell('D').value = accTotal;
+      subTotalRow.getCell('D').font = { bold: true, color: { argb: 'FFC00000' } };
+      subTotalRow.getCell('D').numFmt = '#,##0.00';
+      subTotalRow.getCell('D').alignment = { horizontal: 'right' };
+      
+      // Çizgi
+      ['A','B','C','D'].forEach(c => {
+        subTotalRow.getCell(c).border = { bottom: {style:'medium', color: {argb:'FF808080'}} };
+      });
+
+      genelToplam += accTotal;
+      rowNo += 2; // Boşluk
     });
 
-    let rowNo = 4;
-    let totalInv = 0;
-    let totalAmt = 0;
-    Object.values(accountBreakdown).sort((a,b) => b.totalAmount - a.totalAmount).forEach(acc => {
-      const row = accSheet.getRow(rowNo++);
-      row.values = [acc.name, acc.invoiceCount, acc.totalAmount];
-      row.getCell('A').font = { bold: true };
-      row.getCell('B').alignment = { horizontal: 'center' };
-      row.getCell('C').numFmt = '#,##0.00';
-      row.getCell('C').font = { color: { argb: 'FF006600' } };
-      totalInv += acc.invoiceCount;
-      totalAmt += acc.totalAmount;
-    });
-
-    const totalRow = accSheet.getRow(rowNo);
-    totalRow.values = ['GENEL TOPLAM', totalInv, totalAmt];
-    totalRow.font = { bold: true, size: 12 };
-    totalRow.getCell('B').alignment = { horizontal: 'center' };
-    totalRow.getCell('C').numFmt = '#,##0.00';
-    totalRow.getCell('C').font = { color: { argb: 'FF006600' } };
-    totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+    // GENEL TOPLAM
+    const grandTotalRow = detailSheet.getRow(rowNo);
+    grandTotalRow.mergeCells(`A${rowNo}:C${rowNo}`);
+    const gtLabel = detailSheet.getCell(`A${rowNo}`);
+    gtLabel.value = 'TÜM HESAPLAR GENEL TOPLAMI:';
+    gtLabel.font = { name: 'Calibri', size: 14, bold: true };
+    gtLabel.alignment = { horizontal: 'right', vertical: 'middle' };
+    
+    const gtVal = detailSheet.getCell(`D${rowNo}`);
+    gtVal.value = genelToplam;
+    gtVal.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF00B050' } };
+    gtVal.numFmt = '#,##0.00';
+    gtVal.alignment = { horizontal: 'right', vertical: 'middle' };
+    
+    grandTotalRow.height = 25;
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     
     const safeName = customerName.replace(/[^a-zA-ZğüşöçıİĞÜŞÖÇ0-9]/g, '_');
-    const fileName = `${safeName}_Tum_Hesaplar_Cari_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const fileName = `${safeName}_Cari_${new Date().toISOString().slice(0, 10)}.xlsx`;
     saveAs(blob, fileName);
 
     return { success: true, count: records.length };
