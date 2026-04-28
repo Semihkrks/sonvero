@@ -778,6 +778,11 @@ export async function exportCustomerCari(invoices, customerName, source) {
 }
 
 export async function exportMultiAccountCari(invoices, customerName, accountBreakdown) {
+  const _getInvoiceDate = inv => inv.IssueDate || inv.issueDate || inv.CreateDate || inv.CreatedDate || '';
+  const _getInvoiceNumber = inv => inv.InvoiceNumber || inv.invoiceNumber || inv.InvoiceSerieOrNumber || '';
+  const _getReceiverName = inv => inv.ReceiverName || inv.receiverName || inv.CustomerName || inv.customerName || (inv.CustomerInfo || {}).Name || '';
+  const _getAmount = inv => inv.PayableAmount || inv.payableAmount || inv.TotalAmount || inv.totalAmount || 0;
+
   try {
     const records = invoices.map(i => normalizeForCari(i, 'giden', true)).sort((a,b) => a.Tarih - b.Tarih);
     const title = `${customerName.toUpperCase()} - CARİ`;
@@ -815,7 +820,7 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
     Object.keys(accountBreakdown).forEach(accId => {
       const acc = accountBreakdown[accId];
       // Hesaba ait faturaları bul ve tarihe göre sırala
-      const accInvs = invoices.filter(inv => inv._accountId === accId).sort((a, b) => new Date(_getMovementDate(a) || 0) - new Date(_getMovementDate(b) || 0));
+      const accInvs = invoices.filter(inv => inv._accountId === accId).sort((a, b) => new Date(_getInvoiceDate(a) || 0) - new Date(_getInvoiceDate(b) || 0));
       
       if (accInvs.length === 0) return;
 
@@ -849,7 +854,7 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
         accTotal += amount;
         
         row.values = [
-          _getMovementDate(inv) ? new Date(_getMovementDate(inv)) : '',
+          _getInvoiceDate(inv) ? new Date(_getInvoiceDate(inv)) : '',
           _getInvoiceNumber(inv),
           _getReceiverName(inv),
           amount > 0 ? amount : null
