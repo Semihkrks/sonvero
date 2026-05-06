@@ -230,8 +230,62 @@ export async function parsePdfStatement(file) {
   return parseBankStatementText(fullText);
 }
 
+// ── Tekli Dekont (Örn: Garanti Havale Dekontu) Çıkarıcı ──
+function parseSingleDekont(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  
+  let dateStr = '';
+  let amountStr = '';
+  let senderName = '';
+  let receiverName = '';
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    
+    if (!dateStr && /(?:İŞLEM|DÜZENLENME) TARİHİ\s*:/i.test(line)) {
+      const m = line.match(/(\d{1,2}[./-]\d{1,2}[./-]\d{4})/);
+      if (m) dateStr = m[1];
+    }
+    
+    if (!amountStr && /TUTAR\s*:/i.test(line)) {
+      const m = line.match(/TUTAR\s*:\s*[-\s]*([\d.,]+)\s*(?:TL|TRY|₺)?/i);
+      if (m) amountStr = m[1];
+    }
+    
+    if (!senderName && /^SAYIN$/i.test(line)) {
+      if (lines[i+1]) senderName = lines[i+1];
+    }
+    
+    if (!receiverName && /ALACAKLI (?:HESAP|İSİM|UNVAN|AD)\s*:/i.test(line)) {
+      const afterColon = line.split(':')[1] || '';
+      receiverName = afterColon.replace(/[\d/]/g, '').trim();
+    }
+  }
+
+  const date = parseDate(dateStr);
+  const amount = parseAmount(amountStr);
+
+  if (date && amount > 0 && senderName) {
+    return [{
+      date,
+      amount,
+      description: extractCustomerFromDesc(senderName),
+      displayDescription: 'Gelen Ödeme (Dekont)',
+      rawDescription: `${senderName} - ${receiverName} - DEKONT`, 
+      source: 'pdf-dekont'
+    }];
+  }
+  return null;
+}
+
 // ── Banka dekont metninden transaction çıkarma ──
 function parseBankStatementText(text) {
+  // Önce spesifik dekont formatını dene
+  const dekontMatch = parseSingleDekont(text);
+  if (dekontMatch && dekontMatch.length > 0) {
+    return dekontMatch;
+  }
+
   const transactions = [];
   const lines = text.split('\n');
 
