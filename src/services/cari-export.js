@@ -799,6 +799,7 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
       { key: 'E', width: 10 }, // KDV %
       { key: 'F', width: 18 }, // KDV Tutarı
       { key: 'G', width: 18 }, // Borç (KDV Dahil)
+      { key: 'H', width: 18 }, // Alacak (Tahsilat)
     ];
 
     detailSheet.mergeCells('A1:G1');
@@ -811,6 +812,7 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
 
     let dRowNo = 3;
     let genelToplam = 0;
+    let genelTahsilat = 0;
 
     Object.keys(accountBreakdown).forEach(accId => {
       const acc = accountBreakdown[accId];
@@ -819,7 +821,7 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
       if (accInvs.length === 0) return;
 
       // Hesap Başlığı
-      detailSheet.mergeCells(`A${dRowNo}:G${dRowNo}`);
+      detailSheet.mergeCells(`A${dRowNo}:H${dRowNo}`);
       const accHeader = detailSheet.getCell(`A${dRowNo}`);
       accHeader.value = `■ ${acc.name.toUpperCase()}`;
       accHeader.font = { name: 'Calibri', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -830,13 +832,13 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
 
       // Kolon Başlıkları
       const detailColHeader = detailSheet.getRow(dRowNo);
-      detailColHeader.values = ['Tarih', 'Fatura No', 'Açıklama', 'Matrah', 'KDV %', 'KDV Tutarı', 'Borç (Satış)'];
-      ['A','B','C','D','E','F','G'].forEach(c => {
+      detailColHeader.values = ['Tarih', 'Fatura No', 'Açıklama', 'Matrah', 'KDV %', 'KDV Tutarı', 'Borç (Satış)', 'Alacak (Tahsilat)'];
+      ['A','B','C','D','E','F','G','H'].forEach(c => {
         const cell = detailSheet.getCell(`${c}${dRowNo}`);
         cell.font = { name: 'Calibri', size: 11, bold: true };
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9E1F2' } };
         cell.border = { top: {style:'thin'}, bottom: {style:'thin'} };
-        if (['D','E','F','G'].includes(c)) {
+        if (['D','E','F','G','H'].includes(c)) {
           cell.alignment = { horizontal: 'right', vertical: 'middle' };
         }
       });
@@ -844,14 +846,23 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
 
       let accTotal = 0;
 
-      // Faturalar
+      // Faturalar ve Tahsilatlar
+      let totalTahsilat = 0;
       accInvs.forEach(inv => {
+        const isTahsilat = inv._type === 'tahsilat';
         const row = detailSheet.getRow(dRowNo);
-        const amount = parseFloat(_getAmount(inv) || 0);
-        accTotal += amount;
+        let amount = 0;
+
+        if (isTahsilat) {
+          amount = parseFloat(inv.amount || 0);
+          totalTahsilat += amount;
+        } else {
+          amount = parseFloat(_getAmount(inv) || 0);
+          accTotal += amount;
+        }
         
         // Açıklama (Ay formatı)
-        const dateStr = _getInvoiceDate(inv);
+        const dateStr = isTahsilat ? inv.date : _getInvoiceDate(inv);
         let ayAdi = '';
         if (dateStr) {
           const d = new Date(dateStr);
@@ -860,32 +871,44 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
             ayAdi = monthNames[d.getMonth()];
           }
         }
-        const aciklama = ayAdi ? `${ayAdi} Satış` : 'Satış';
+        
+        let aciklama = '';
+        if (isTahsilat) {
+          aciklama = inv.description || (ayAdi ? `${ayAdi} Tahsilat` : 'Tahsilat');
+        } else {
+          aciklama = ayAdi ? `${ayAdi} Satış` : 'Satış';
+        }
 
-        // KDV Kırılımı hesaplama (cari-export.js içindeki _calcKdv ile)
-        const kdvInfo = typeof _calcKdv === 'function' ? _calcKdv(inv) : { matrah: 0, kdvOrani: 0, kdvTutar: 0 };
+        // KDV Kırılımı hesaplama
+        const kdvInfo = !isTahsilat && typeof _calcKdv === 'function' ? _calcKdv(inv) : { matrah: 0, kdvOrani: 0, kdvTutar: 0 };
 
         row.values = [
           dateStr ? new Date(dateStr) : '',
-          _getInvoiceNumber(inv),
+          isTahsilat ? 'TAHSİLAT' : _getInvoiceNumber(inv),
           aciklama,
           kdvInfo.matrah > 0 ? kdvInfo.matrah : null,
           kdvInfo.kdvOrani > 0 ? kdvInfo.kdvOrani : null,
           kdvInfo.kdvTutar > 0 ? kdvInfo.kdvTutar : null,
-          amount > 0 ? amount : null
+          !isTahsilat && amount > 0 ? amount : null,
+          isTahsilat && amount > 0 ? amount : null
         ];
         
         row.getCell('A').numFmt = 'dd.mm.yyyy';
         row.getCell('A').alignment = { horizontal: 'center' };
-        ['D','F','G'].forEach(col => {
+        ['D','F','G','H'].forEach(col => {
           row.getCell(col).numFmt = '#,##0.00';
           row.getCell(col).alignment = { horizontal: 'right' };
         });
         row.getCell('E').alignment = { horizontal: 'right' };
         
+        if (isTahsilat) {
+           row.getCell('H').font = { color: { argb: 'FF0000FF' } }; // Blue text for Tahsilat
+           row.getCell('B').font = { bold: true, color: { argb: 'FF0000FF' } }; 
+        }
+
         // Zebra çizgileri
         if (dRowNo % 2 === 0) {
-          ['A','B','C','D','E','F','G'].forEach(c => {
+          ['A','B','C','D','E','F','G','H'].forEach(c => {
             row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF9F9F9' } };
           });
         }
@@ -902,12 +925,18 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
       subTotalRow.getCell('G').font = { bold: true, color: { argb: 'FFC00000' } };
       subTotalRow.getCell('G').numFmt = '#,##0.00';
       subTotalRow.getCell('G').alignment = { horizontal: 'right' };
+
+      subTotalRow.getCell('H').value = totalTahsilat;
+      subTotalRow.getCell('H').font = { bold: true, color: { argb: 'FF0000FF' } };
+      subTotalRow.getCell('H').numFmt = '#,##0.00';
+      subTotalRow.getCell('H').alignment = { horizontal: 'right' };
       
-      ['A','B','C','D','E','F','G'].forEach(c => {
+      ['A','B','C','D','E','F','G','H'].forEach(c => {
         subTotalRow.getCell(c).border = { bottom: {style:'medium', color: {argb:'FF808080'}} };
       });
 
       genelToplam += accTotal;
+      genelTahsilat += totalTahsilat;
       dRowNo += 2; // Boşluk
     });
 
@@ -924,6 +953,12 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
     gtVal.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF00B050' } };
     gtVal.numFmt = '#,##0.00';
     gtVal.alignment = { horizontal: 'right', vertical: 'middle' };
+
+    const gtTahsilat = detailSheet.getCell(`H${dRowNo}`);
+    gtTahsilat.value = genelTahsilat;
+    gtTahsilat.font = { name: 'Calibri', size: 14, bold: true, color: { argb: 'FF00B050' } };
+    gtTahsilat.numFmt = '#,##0.00';
+    gtTahsilat.alignment = { horizontal: 'right', vertical: 'middle' };
     
     grandTotalRow.height = 25;
 
@@ -935,9 +970,11 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
       { key: 'A', width: 35 },
       { key: 'B', width: 20 },
       { key: 'C', width: 25 },
+      { key: 'D', width: 25 },
+      { key: 'E', width: 25 },
     ];
 
-    accSheet.mergeCells('A1:C1');
+    accSheet.mergeCells('A1:E1');
     const headerCell = accSheet.getCell('A1');
     headerCell.value = `${customerName.toUpperCase()} - HESAP BAZLI SATIŞ ÖZETİ`;
     headerCell.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
@@ -946,8 +983,8 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
     accSheet.getRow(1).height = 25;
 
     const colHeader = accSheet.getRow(3);
-    colHeader.values = ['Hesap Adı', 'Fatura Adedi', 'Toplam Satış (TRY)'];
-    ['A3', 'B3', 'C3'].forEach(c => {
+    colHeader.values = ['Hesap Adı', 'Fatura Adedi', 'Toplam Satış (TRY)', 'Toplam Tahsilat (TRY)', 'Net Bakiye (TRY)'];
+    ['A3', 'B3', 'C3', 'D3', 'E3'].forEach(c => {
       const cell = accSheet.getCell(c);
       cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
@@ -957,23 +994,34 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
     let rowNo = 4;
     let totalInv = 0;
     let totalAmt = 0;
+    let totalTah = 0;
     Object.values(accountBreakdown).sort((a,b) => b.totalAmount - a.totalAmount).forEach(acc => {
       const row = accSheet.getRow(rowNo++);
-      row.values = [acc.name, acc.invoiceCount, acc.totalAmount];
+      const tahsilatVal = acc.totalTahsilat || 0;
+      row.values = [acc.name, acc.invoiceCount, acc.totalAmount, tahsilatVal, acc.totalAmount - tahsilatVal];
       row.getCell('A').font = { bold: true };
       row.getCell('B').alignment = { horizontal: 'center' };
       row.getCell('C').numFmt = '#,##0.00';
       row.getCell('C').font = { color: { argb: 'FF006600' } };
+      row.getCell('D').numFmt = '#,##0.00';
+      row.getCell('D').font = { color: { argb: 'FF0000FF' } };
+      row.getCell('E').numFmt = '#,##0.00';
+      row.getCell('E').font = { bold: true, color: { argb: (acc.totalAmount - tahsilatVal) > 0 ? 'FFC00000' : 'FF00B050' } };
       totalInv += acc.invoiceCount;
       totalAmt += acc.totalAmount;
+      totalTah += tahsilatVal;
     });
 
     const totalRow = accSheet.getRow(rowNo);
-    totalRow.values = ['GENEL TOPLAM', totalInv, totalAmt];
+    totalRow.values = ['GENEL TOPLAM', totalInv, totalAmt, totalTah, totalAmt - totalTah];
     totalRow.font = { bold: true, size: 12 };
     totalRow.getCell('B').alignment = { horizontal: 'center' };
     totalRow.getCell('C').numFmt = '#,##0.00';
     totalRow.getCell('C').font = { color: { argb: 'FF006600' } };
+    totalRow.getCell('D').numFmt = '#,##0.00';
+    totalRow.getCell('D').font = { color: { argb: 'FF0000FF' } };
+    totalRow.getCell('E').numFmt = '#,##0.00';
+    totalRow.getCell('E').font = { color: { argb: (totalAmt - totalTah) > 0 ? 'FFC00000' : 'FF00B050' } };
     totalRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
 
     // workbook.views aktif sekmeyi kesinleştirmek için

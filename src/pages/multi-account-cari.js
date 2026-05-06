@@ -1,5 +1,6 @@
 import { EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { listAccounts } from '../services/account-manager.js';
+import { listCollections } from '../services/tahsilat-manager.js';
 import { showToast } from '../components/toast.js';
 import { attachDatePicker } from '../lib/date-picker.js';
 import { exportMultiAccountCari } from '../services/cari-export.js';
@@ -113,48 +114,75 @@ async function loadMultiAccountData(page) {
   }
 
   let totalInvoices = 0;
-  await Promise.allSettled(allAccounts.map(async (acc) => {
+  let totalTahsilats = 0;
+  
+  for (const acc of allAccounts) {
     try {
-      const [efRes, eaRes] = await Promise.allSettled([
+      const [efRes, eaRes, thRes] = await Promise.allSettled([
         fetchAllPagesForAccount(EInvoiceWithAccount.listSales, acc, { StartDate: startDate, EndDate: endDate }),
-        fetchAllPagesForAccount(EArchiveWithAccount.listInvoices, acc, { StartDate: startDate, EndDate: endDate })
+        fetchAllPagesForAccount(EArchiveWithAccount.listInvoices, acc, { StartDate: startDate, EndDate: endDate }),
+        listCollections({ accountId: acc.id, startDate, endDate })
       ]);
       const invs = [];
       if (efRes.status === 'fulfilled') invs.push(...efRes.value.map(i => ({ ...i, _type: 'efatura' })));
       if (eaRes.status === 'fulfilled') invs.push(...eaRes.value.map(i => ({ ...i, _type: 'earsiv' })));
+      if (thRes.status === 'fulfilled') invs.push(...thRes.value.map(i => ({ ...i, _type: 'tahsilat' })));
 
       invs.forEach(inv => {
-        const name = getReceiverName(inv) || 'Bilinmeyen';
-        const taxNo = getReceiverTaxNo(inv) || '—';
+        const isTahsilat = inv._type === 'tahsilat';
+        let name = 'Bilinmeyen';
+        let taxNo = '—';
+        let amount = 0;
+
+        if (isTahsilat) {
+          name = inv.customer_name || 'Bilinmeyen';
+          taxNo = inv.customer_tax_no || '—';
+          amount = parseFloat(inv.amount || 0);
+        } else {
+          name = getReceiverName(inv) || 'Bilinmeyen';
+          taxNo = getReceiverTaxNo(inv) || '—';
+          amount = parseFloat(getAmount(inv) || 0);
+        }
+
         const key = (taxNo !== '—' && taxNo ? taxNo : name).toLowerCase().trim();
-        const amount = parseFloat(getAmount(inv) || 0);
         
         if (!customerMap[key]) {
-          customerMap[key] = { name, taxNo, invoices: [], totalAmount: 0, accountBreakdown: {} };
+          customerMap[key] = { name, taxNo, invoices: [], totalAmount: 0, totalTahsilat: 0, accountBreakdown: {} };
         }
-        if (name !== 'Bilinmeyen') customerMap[key].name = name;
+        if (name !== 'Bilinmeyen' && customerMap[key].name === 'Bilinmeyen') customerMap[key].name = name;
         
         customerMap[key].invoices.push({ ...inv, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
-        customerMap[key].totalAmount += amount;
         
         if (!customerMap[key].accountBreakdown[acc.id]) {
-          customerMap[key].accountBreakdown[acc.id] = { name: acc.name, color: acc.color, invoiceCount: 0, totalAmount: 0 };
+          customerMap[key].accountBreakdown[acc.id] = { name: acc.name, color: acc.color, invoiceCount: 0, totalAmount: 0, totalTahsilat: 0 };
         }
-        customerMap[key].accountBreakdown[acc.id].invoiceCount++;
-        customerMap[key].accountBreakdown[acc.id].totalAmount += amount;
-        totalInvoices++;
+
+        if (isTahsilat) {
+          customerMap[key].totalTahsilat += amount;
+          customerMap[key].accountBreakdown[acc.id].totalTahsilat += amount;
+          totalTahsilats++;
+        } else {
+          customerMap[key].totalAmount += amount;
+          customerMap[key].accountBreakdown[acc.id].invoiceCount++;
+          customerMap[key].accountBreakdown[acc.id].totalAmount += amount;
+          totalInvoices++;
+        }
       });
     } catch (e) {
       console.error(`Error scanning account ${acc.name}:`, e);
     }
-  }));
+  }
 
   Object.values(customerMap).forEach(c => {
-    c.invoices.sort((a, b) => new Date(getInvoiceDate(b) || 0).getTime() - new Date(getInvoiceDate(a) || 0).getTime());
+    c.invoices.sort((a, b) => {
+      const dateA = a._type === 'tahsilat' ? a.date : getInvoiceDate(a);
+      const dateB = b._type === 'tahsilat' ? b.date : getInvoiceDate(b);
+      return new Date(dateB || 0).getTime() - new Date(dateA || 0).getTime();
+    });
   });
 
   isScanning = false;
-  showToast(`${allAccounts.length} hesaptan toplam ${totalInvoices} satış faturası tarandı.`, 'success');
+  showToast(`${allAccounts.length} hesaptan toplam ${totalInvoices} satış faturası ve ${totalTahsilats} tahsilat tarandı.`, 'success');
   renderCustomerList(page);
 }
 
@@ -188,9 +216,19 @@ function renderCustomerList(page) {
           <span class="cari-customer-vkn">VKN: ${c.taxNo}</span>
           <span class="cari-customer-meta">${c.invoices.length} fatura · ${Object.keys(c.accountBreakdown).length} hesap</span>
         </div>
-        <div class="cari-customer-amounts">
-          <span class="cari-customer-bakiye cari-bakiye-positive">${fmtCur(c.totalAmount)}</span>
-          <span class="cari-customer-bakiye-label">Toplam Satış</span>
+        <div class="cari-customer-amounts" style="display:flex; gap:12px; margin-top:8px;">
+          <div style="text-align:right">
+            <div class="cari-customer-bakiye cari-bakiye-positive" style="font-size:13px">${fmtCur(c.totalAmount)}</div>
+            <div class="cari-customer-bakiye-label" style="font-size:10px">Satış</div>
+          </div>
+          <div style="text-align:right">
+            <div class="cari-customer-bakiye" style="color:var(--info);font-size:13px">${fmtCur(c.totalTahsilat || 0)}</div>
+            <div class="cari-customer-bakiye-label" style="font-size:10px">Tahsilat</div>
+          </div>
+          <div style="text-align:right">
+            <div class="cari-customer-bakiye" style="color:${c.totalAmount - (c.totalTahsilat || 0) > 0 ? 'var(--warning)' : 'var(--success)'};font-size:14px;font-weight:700">${fmtCur(c.totalAmount - (c.totalTahsilat || 0))}</div>
+            <div class="cari-customer-bakiye-label" style="font-size:10px">Bakiye</div>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -210,21 +248,26 @@ function renderDetailPanel(page, customer) {
   if (!panel) return;
 
   const breakdownHtml = Object.values(customer.accountBreakdown).sort((a,b) => b.totalAmount - a.totalAmount).map(acc => `
-    <div class="cari-detail-stat" style="border-left: 4px solid ${acc.color || '#ccc'}">
+    <div class="cari-detail-stat" style="border-left: 4px solid ${acc.color || '#ccc'}; flex: 1; min-width: 140px;">
       <span class="cari-detail-stat-label">${acc.name}</span>
-      <span class="cari-detail-stat-value" style="font-size:14px">${acc.invoiceCount} fatura</span>
-      <span class="cari-detail-stat-value" style="color:var(--success)">${fmtCur(acc.totalAmount)}</span>
+      <span class="cari-detail-stat-value" style="font-size:12px">${acc.invoiceCount} fatura</span>
+      <div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">
+        <span class="cari-detail-stat-value" style="color:var(--success);font-size:13px">S: ${fmtCur(acc.totalAmount)}</span>
+        <span class="cari-detail-stat-value" style="color:var(--info);font-size:13px">T: ${fmtCur(acc.totalTahsilat || 0)}</span>
+      </div>
     </div>
   `).join('');
 
-  const rows = customer.invoices.map(inv => `
+  const rows = customer.invoices.map(inv => {
+    const isTahsilat = inv._type === 'tahsilat';
+    return `
     <tr>
-      <td>${fmtDate(getInvoiceDate(inv))}</td>
+      <td>${fmtDate(isTahsilat ? inv.date : getInvoiceDate(inv))}</td>
       <td><span class="badge" style="background:${inv._accountColor || '#666'};color:#fff">${inv._accountName}</span></td>
-      <td>${getInvoiceNumber(inv)}</td>
-      <td style="text-align:right; font-weight:600; color:var(--success)">${fmtCur(getAmount(inv))}</td>
+      <td>${isTahsilat ? '<span style="color:var(--info);font-weight:600">Tahsilat</span>' : getInvoiceNumber(inv)}</td>
+      <td style="text-align:right; font-weight:600; color:${isTahsilat ? 'var(--info)' : 'var(--success)'}">${isTahsilat ? '-' : ''}${fmtCur(isTahsilat ? inv.amount : getAmount(inv))}</td>
     </tr>
-  `).join('');
+  `}).join('');
 
   panel.innerHTML = `
     <div class="cari-detail-header">
