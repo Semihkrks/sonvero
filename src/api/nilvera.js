@@ -129,21 +129,59 @@ async function requestWithAccount(account, method, path, data = null, params = n
   }
 }
 
-// ── 3x Retry: Call API 3 times, use 3rd result (first 2 may return inconsistent data) ──
+// ── Helper to extract items for counting ──
+function _extractItemsLength(data) {
+  if (!data) return 0;
+  if (Array.isArray(data)) return data.length;
+  if (Array.isArray(data.Content)) return data.Content.length;
+  if (Array.isArray(data.Items)) return data.Items.length;
+  if (Array.isArray(data.items)) return data.items.length;
+  return 0;
+}
+
+// ── 3x Retry: Call API up to 3 times, keep the result with the most items or last success ──
 async function requestRetry3(method, path, data = null, params = null) {
-  let result;
+  let bestResult = null;
+  let maxCount = -1;
+  let lastError = null;
+  
   for (let i = 0; i < 3; i++) {
-    result = await request(method, path, data, params);
+    const result = await request(method, path, data, params);
+    if (result.success) {
+      const count = _extractItemsLength(result.data);
+      if (count > maxCount || !bestResult) {
+        maxCount = count;
+        bestResult = result;
+      }
+    } else {
+      lastError = result;
+    }
+    // Delay to avoid 429 Too Many Requests
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
-  return result;
+  return bestResult || lastError;
 }
 
 async function requestWithAccountRetry3(account, method, path, data = null, params = null) {
-  let result;
+  let bestResult = null;
+  let maxCount = -1;
+  let lastError = null;
+
   for (let i = 0; i < 3; i++) {
-    result = await requestWithAccount(account, method, path, data, params);
+    const result = await requestWithAccount(account, method, path, data, params);
+    if (result.success) {
+      const count = _extractItemsLength(result.data);
+      if (count >= maxCount || !bestResult) {
+        maxCount = count;
+        bestResult = result;
+      }
+    } else {
+      lastError = result;
+    }
+    // Delay to avoid 429 Too Many Requests
+    await new Promise(resolve => setTimeout(resolve, 300));
   }
-  return result;
+  return bestResult || lastError;
 }
 
 // ── Exported helpers for multi-account operations ──
