@@ -129,6 +129,13 @@ async function loadMultiAccountData(page) {
       if (eaRes.status === 'fulfilled') invs.push(...eaRes.value.map(i => ({ ...i, _type: 'earsiv' })));
       if (thRes.status === 'fulfilled') invs.push(...thRes.value.map(i => ({ ...i, _type: 'tahsilat' })));
 
+      // Önce faturaları işleyip müşteri haritasını (VKN ile) doldur, sonra tahsilatları eşleştir
+      invs.sort((a, b) => {
+        if (a._type === 'tahsilat' && b._type !== 'tahsilat') return 1;
+        if (a._type !== 'tahsilat' && b._type === 'tahsilat') return -1;
+        return 0;
+      });
+
       invs.forEach(inv => {
         const isTahsilat = inv._type === 'tahsilat';
         let name = 'Bilinmeyen';
@@ -145,7 +152,24 @@ async function loadMultiAccountData(page) {
           amount = parseFloat(getAmount(inv) || 0);
         }
 
-        const key = (taxNo !== '—' && taxNo ? taxNo : name).toLowerCase().trim();
+        let key = (taxNo !== '—' && taxNo ? taxNo : name).toLowerCase().trim();
+
+        // Eğer tahsilat VKN içermiyorsa (bankadan gelmişse) isim benzerliği ile mevcut fatura müşterisini bul
+        if (isTahsilat && (taxNo === '—' || !taxNo)) {
+          const normName = name.toLowerCase().trim();
+          const match = Object.entries(customerMap).find(([k, c]) => {
+            const cName = c.name.toLowerCase().trim();
+            if (cName === normName) return true;
+            if (cName.includes(normName) && normName.length > 4) return true;
+            if (normName.includes(cName) && cName.length > 4) return true;
+            return false;
+          });
+          if (match) {
+            key = match[0]; // Mevcut fatura müşterisinin anahtarını kullan
+            name = match[1].name;
+            taxNo = match[1].taxNo;
+          }
+        }
         
         if (!customerMap[key]) {
           customerMap[key] = { name, taxNo, invoices: [], totalAmount: 0, totalTahsilat: 0, accountBreakdown: {} };

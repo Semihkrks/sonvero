@@ -367,8 +367,9 @@ export function routeTransactionsToAccounts(transactions, accounts) {
       // Kısmi isim eşleşmesi
       else if (acc.nameParts.length >= 2) {
         const hits = acc.nameParts.filter(p => rawNorm.includes(p));
-        if (hits.length / acc.nameParts.length >= 0.7) {
+        if (hits.length / acc.nameParts.length >= 0.5 || hits.length >= 2) {
           score = Math.round((hits.length / acc.nameParts.length) * 80);
+          if (score < 60 && hits.length >= 2) score = 65; // En az 2 kelime eşleştiyse kabul edilebilir
         }
       }
 
