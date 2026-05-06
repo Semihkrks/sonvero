@@ -232,34 +232,29 @@ export async function parsePdfStatement(file) {
 
 // ── Tekli Dekont (Örn: Garanti Havale Dekontu) Çıkarıcı ──
 function parseSingleDekont(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  
   let dateStr = '';
   let amountStr = '';
   let senderName = '';
   let receiverName = '';
   
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    
-    if (!dateStr && /(?:İŞLEM|DÜZENLENME) TARİHİ\s*:/i.test(line)) {
-      const m = line.match(/(\d{1,2}[./-]\d{1,2}[./-]\d{4})/);
-      if (m) dateStr = m[1];
-    }
-    
-    if (!amountStr && /TUTAR\s*:/i.test(line)) {
-      const m = line.match(/TUTAR\s*:\s*[-\s]*([\d.,]+)\s*(?:TL|TRY|₺)?/i);
-      if (m) amountStr = m[1];
-    }
-    
-    if (!senderName && /^SAYIN$/i.test(line)) {
-      if (lines[i+1]) senderName = lines[i+1];
-    }
-    
-    if (!receiverName && /ALACAKLI (?:HESAP|İSİM|UNVAN|AD)\s*:/i.test(line)) {
-      const afterColon = line.split(':')[1] || '';
-      receiverName = afterColon.replace(/[\d/]/g, '').trim();
-    }
+  const dateMatch = text.match(/(?:İŞLEM|DÜZENLENME)\s*TARİHİ\s*:\s*(\d{1,2}[./-]\d{1,2}[./-]\d{4})/i);
+  if (dateMatch) dateStr = dateMatch[1];
+  
+  const amountMatch = text.match(/TUTAR\s*:\s*[-\s]*([\d.,]+)\s*(?:TL|TRY|₺)?/i);
+  if (amountMatch) amountStr = amountMatch[1];
+  
+  const sayinMatch = text.match(/SAYIN\s+([A-ZĞÜŞÖÇİa-zğüşöçı\s]+?)(?:\s+MERKEZ|\s+MAH|\s+SOK|\s+CAD|\s+BULVAR|\s+VD|\s+VERGİ|\s+CARİ|\s+ALACAKLI|$)/i);
+  if (sayinMatch) {
+    senderName = sayinMatch[1].trim();
+  } else {
+    // Fallback: take next 3 words
+    const fallbackMatch = text.match(/SAYIN\s+(\S+(?:\s+\S+){0,3})/i);
+    if (fallbackMatch) senderName = fallbackMatch[1].trim();
+  }
+  
+  const alacakliMatch = text.match(/ALACAKLI\s*(?:HESAP|İSİM|UNVAN|AD)\s*:(.*?)(?:ALACAKLI|MASRAF|IBAN|ŞUBE|$)/i);
+  if (alacakliMatch) {
+    receiverName = alacakliMatch[1].replace(/[\d/:\-]/g, '').trim();
   }
 
   const date = parseDate(dateStr);
