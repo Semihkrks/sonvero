@@ -108,6 +108,7 @@ async function loadMultiAccountData(page) {
 
   const startDate = page.querySelector('#macDateStart')?.value || '';
   const endDate = page.querySelector('#macDateEnd')?.value || '';
+  const searchText = page.querySelector('#macSearchInput')?.value.trim() || '';
 
   if (listEl) {
     listEl.innerHTML = `<div class="cari-loading-state"><div style="animation:pulse 1.5s infinite">${ic.noData}</div><p>${allAccounts.length} hesap taranıyor...</p></div>`;
@@ -119,9 +120,9 @@ async function loadMultiAccountData(page) {
   for (const acc of allAccounts) {
     try {
       const [efRes, eaRes, thRes] = await Promise.allSettled([
-        fetchAllPagesForAccount(EInvoiceWithAccount.listSales, acc, { StartDate: startDate, EndDate: endDate }),
-        fetchAllPagesForAccount(EArchiveWithAccount.listInvoices, acc, { StartDate: startDate, EndDate: endDate }),
-        listCollections({ accountId: acc.id, startDate, endDate })
+        fetchAllPagesForAccount(EInvoiceWithAccount.listSales, acc, { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) }),
+        fetchAllPagesForAccount(EArchiveWithAccount.listInvoices, acc, { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) }),
+        listCollections({ accountId: acc.id, startDate, endDate, searchText })
       ]);
       const invs = [];
       if (efRes.status === 'fulfilled') invs.push(...efRes.value.map(i => ({ ...i, _type: 'efatura' })));

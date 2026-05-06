@@ -32,7 +32,7 @@ async function ensureAccountOwnership(accountId, userId) {
   }
 }
 
-export async function listCollections({ accountId, startDate = '', endDate = '' } = {}) {
+export async function listCollections({ accountId, startDate = '', endDate = '', searchText = '' } = {}) {
   if (!accountId) return [];
 
   const userId = await requireSupabaseUserId();
@@ -49,6 +49,9 @@ export async function listCollections({ accountId, startDate = '', endDate = '' 
 
   if (startDate) query = query.gte('date', startDate);
   if (endDate) query = query.lte('date', endDate);
+  if (searchText) {
+    query = query.or(`customer_name.ilike.%${searchText}%,customer_tax_no.ilike.%${searchText}%`);
+  }
 
   const { data, error } = await query;
   if (error) throw error;
