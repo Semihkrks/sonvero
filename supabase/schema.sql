@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   company_name TEXT,
   vkn TEXT,
   invoice_series TEXT,
+  despatch_series TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );

@@ -1,45 +1,71 @@
 // ══════════════════════════════════════════
 // Account Manager — Multi-Account Nilvera API Key Management
+// ──────────────────────────────────────────
+// Tasarım ilkeleri:
+//  • Tek doğru kaynak: kimlik doğrulanmışsa Supabase otoritedir. localStorage
+//    yalnızca ilk açılış hızlandırması + offline yedeğidir.
+//  • Bellek-içi state senkron okunur: getActiveAccount() ASLA await istemez.
+//    Böylece bir API isteği aktif hesabı istek anında yeniden çözmez, hesaplar
+//    arası veri karışması olmaz.
+//  • Birleştirme (union) YOK. syncAccounts() remote'u state'e/cache'e doğrudan
+//    yazar; mutationSeq sayesinde geç dönen bir sync, araya giren bir
+//    ekleme/silme işlemini geri alamaz.
 // ══════════════════════════════════════════
 import { getSupabase, dbSelect, dbInsert, dbUpdate, dbDelete, isSupabaseConfigured } from '../lib/supabase.js';
 
 const LS_KEY = 'nilfatura_accounts';
 const LS_ACTIVE = 'nilfatura_active_account';
 
-function getLocalAccounts() {
+// ── Bellek-içi state (senkron okunan tek kaynak) ──
+let accounts = hydrateLocal();
+let activeId = (() => {
+  try { return localStorage.getItem(LS_ACTIVE); } catch { return null; }
+})();
+
+// Her yerel mutasyon (add/delete/update/setActive) bunu artırır. Arka planda
+// dönen syncAccounts, başlangıçtaki seq ile karşılaştırarak araya giren bir
+// mutasyonu ezmeyi reddeder.
+let mutationSeq = 0;
+
+function hydrateLocal() {
   try {
-    return JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+    const raw = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+    return Array.isArray(raw) ? raw : [];
   } catch {
     return [];
   }
 }
 
-function saveLocalAccounts(accounts) {
-  localStorage.setItem(LS_KEY, JSON.stringify(accounts || []));
-}
-
-function upsertLocalAccount(account) {
-  const items = getLocalAccounts();
-  const idx = items.findIndex((x) => x.id === account.id);
-  if (idx >= 0) {
-    items[idx] = { ...items[idx], ...account };
-  } else {
-    items.push(account);
+function persistLocal() {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(accounts || []));
+  } catch {
+    // no-op (storage dolu / erişilemez)
   }
-  saveLocalAccounts(items);
 }
 
-function removeLocalAccount(id) {
-  const items = getLocalAccounts().filter((x) => x.id !== id);
-  saveLocalAccounts(items);
+function emitAccountsChanged() {
+  try {
+    window.dispatchEvent(new CustomEvent('accountsChanged', { detail: { accounts: accounts.slice() } }));
+  } catch {
+    // SSR / test ortamı
+  }
 }
 
-function mergeAccounts(localItems = [], remoteItems = []) {
-  const map = new Map();
-  [...localItems, ...remoteItems].forEach((x) => {
-    if (x?.id) map.set(x.id, x);
-  });
-  return Array.from(map.values());
+function upsertState(account) {
+  if (!account?.id) return;
+  const idx = accounts.findIndex((x) => x.id === account.id);
+  if (idx >= 0) {
+    accounts[idx] = { ...accounts[idx], ...account };
+  } else {
+    accounts.push(account);
+  }
+  persistLocal();
+}
+
+function removeState(id) {
+  accounts = accounts.filter((x) => x.id !== id);
+  persistLocal();
 }
 
 async function getAuthenticatedUserId() {
@@ -61,30 +87,70 @@ export const ACCOUNT_COLORS = [
   '#ef4444', '#64748b'
 ];
 
-// ── List Accounts ──
-export async function listAccounts() {
-  const localAccounts = getLocalAccounts();
+// ── Senkron erişim ──
+export function getAllAccounts() {
+  return accounts.slice();
+}
+
+export function getAccountById(id) {
+  return accounts.find((a) => a.id === id) || null;
+}
+
+// ── Remote-authoritative senkronizasyon ──
+// Kimlik doğrulanmışsa Supabase'i çekip state'i DOĞRUDAN değiştirir (union yok).
+// Offline / hata durumunda mevcut yerel state korunur.
+export async function syncAccounts() {
   const userId = await getAuthenticatedUserId();
+  if (!userId) return accounts.slice();
 
-  if (!userId) {
-    return localAccounts;
+  const seqAtStart = mutationSeq;
+  try {
+    const remote = await dbSelect('accounts', { user_id: userId });
+    // Araya bir ekleme/silme girdiyse remote sonucu bayatladı: yazma.
+    if (seqAtStart !== mutationSeq) return accounts.slice();
+
+    const remoteList = Array.isArray(remote) ? remote : [];
+    const remoteIds = new Set(remoteList.map((a) => a.id));
+
+    // Henüz Supabase'e yazılamamış (senkron bekleyen) yerel hesapları koru.
+    // Böylece remote-authoritative değişim onları SİLMEZ. Remote'da zaten var olan
+    // (başka cihazda silinmiş) hesaplar pending değildir, dolayısıyla doğru şekilde düşer.
+    const pendingLocal = accounts.filter((a) => a._pendingSync && !remoteIds.has(a.id));
+    accounts = [...remoteList, ...pendingLocal];
+    persistLocal();
+
+    // Aktif hesap artık mevcut değilse aktif seçimi düzelt.
+    if (activeId && !accounts.some((a) => a.id === activeId)) {
+      activeId = accounts[0]?.id || null;
+      if (activeId) localStorage.setItem(LS_ACTIVE, activeId);
+      else localStorage.removeItem(LS_ACTIVE);
+    }
+    emitAccountsChanged();
+
+    // Bekleyen hesapları arka planda tekrar göndermeyi dene (sütun/şema düzelince başarılı olur).
+    if (pendingLocal.length > 0) {
+      for (const p of pendingLocal) {
+        try {
+          const { _pendingSync, ...clean } = p;
+          const inserted = await dbInsert('accounts', { ...clean, user_id: userId });
+          upsertState({ ...inserted, _pendingSync: false }); // bayrağı temizle
+        } catch (e) {
+          // Hâlâ başarısız: pending kalsın, sessiz geç.
+        }
+      }
+      emitAccountsChanged();
+    }
+  } catch (e) {
+    console.warn('Supabase sync failed, keeping local cache:', e);
   }
+  return accounts.slice();
+}
 
-  // Local varsa hızlı geri dön, arka planda Supabase ile tazele.
-  if (localAccounts.length > 0) {
-    dbSelect('accounts', { user_id: userId })
-      .then((remote) => {
-        const merged = mergeAccounts(getLocalAccounts(), remote || []);
-        saveLocalAccounts(merged);
-      })
-      .catch((e) => console.warn('Supabase refresh failed, keeping local cache:', e));
-    return localAccounts;
-  }
-
-  const remote = await dbSelect('accounts', { user_id: userId });
-  const merged = mergeAccounts(localAccounts, remote || []);
-  saveLocalAccounts(merged);
-  return merged;
+// ── List Accounts ──
+// Bellek-içi state'i anında döndürür; arka planda Supabase ile tazeler.
+export async function listAccounts() {
+  syncAccounts();
+  return accounts.slice();
 }
 
 // ── Add Account ──
@@ -104,18 +170,28 @@ export async function addAccount({ name, apiKey, environment = 'test', color = '
     updated_at: new Date().toISOString()
   };
 
-  // Hız için önce local yaz.
-  upsertLocalAccount(account);
+  mutationSeq++;
 
   const userId = await getAuthenticatedUserId();
-  if (!userId) return account;
+  if (!userId) {
+    // Offline: yalnızca yerel ekle, senkron bekliyor olarak işaretle.
+    upsertState({ ...account, _pendingSync: true });
+    emitAccountsChanged();
+    return account;
+  }
 
   try {
     const remote = await dbInsert('accounts', { ...account, user_id: userId });
-    upsertLocalAccount(remote);
+    upsertState(remote);
+    emitAccountsChanged();
     return remote;
   } catch (e) {
-    console.warn('Supabase insert failed, local copy kept:', e);
+    // Insert başarısız (ör. şema/ağ). Hesabı KAYBETME: yerelde "senkron bekliyor"
+    // olarak tut ki remote-authoritative sync onu silmesin; sütun/şema düzelince
+    // syncAccounts otomatik tekrar göndermeyi dener.
+    console.warn('Supabase insert failed, keeping local pending copy:', e);
+    upsertState({ ...account, _pendingSync: true });
+    emitAccountsChanged();
     return account;
   }
 }
@@ -123,70 +199,73 @@ export async function addAccount({ name, apiKey, environment = 'test', color = '
 // ── Update Account ──
 export async function updateAccount(id, updates) {
   updates.updated_at = new Date().toISOString();
+  mutationSeq++;
 
-  const localCurrent = getLocalAccounts().find((x) => x.id === id);
-  if (localCurrent) {
-    upsertLocalAccount({ ...localCurrent, ...updates, id });
-  }
+  const current = getAccountById(id);
+  if (current) upsertState({ ...current, ...updates, id });
 
   const userId = await getAuthenticatedUserId();
   if (!userId) {
-    return getLocalAccounts().find((x) => x.id === id) || null;
+    emitAccountsChanged();
+    return getAccountById(id);
   }
 
   try {
     const remote = await dbUpdate('accounts', id, updates);
-    if (remote) upsertLocalAccount(remote);
+    if (remote) upsertState(remote);
+    emitAccountsChanged();
     return remote;
   } catch (e) {
     console.warn('Supabase update failed, local copy kept:', e);
-    return getLocalAccounts().find((x) => x.id === id) || null;
+    emitAccountsChanged();
+    return getAccountById(id);
   }
 }
 
 // ── Delete Account ──
 export async function deleteAccount(id) {
-  removeLocalAccount(id);
+  mutationSeq++;
 
   const userId = await getAuthenticatedUserId();
   if (userId) {
-    try {
-      await dbDelete('accounts', id);
-    } catch (e) {
-      console.warn('Supabase delete failed, removed only from local:', e);
-    }
+    // Online: önce Supabase'den kesin sil. Hata olursa state'e DOKUNMA ve
+    // hatayı fırlat — silinmiş gibi gösterip geri gelmesin.
+    await dbDelete('accounts', id);
   }
 
-  // If deleted account was active, clear it
-  if (getActiveAccountId() === id) {
-    localStorage.removeItem(LS_ACTIVE);
+  removeState(id);
+
+  // Silinen hesap aktifse aktif seçimi temizle / başka hesaba geçir.
+  if (activeId === id) {
+    activeId = accounts[0]?.id || null;
+    if (activeId) localStorage.setItem(LS_ACTIVE, activeId);
+    else localStorage.removeItem(LS_ACTIVE);
   }
+
+  emitAccountsChanged();
 }
 
 // ── Active Account ──
 export function getActiveAccountId() {
-  return localStorage.getItem(LS_ACTIVE);
+  return activeId;
 }
 
 export async function setActiveAccount(id) {
+  mutationSeq++;
+  activeId = id;
   localStorage.setItem(LS_ACTIVE, id);
 
-  // Local aktif bilgisi
-  const local = getLocalAccounts();
-  const localPatched = local.map((acc) => ({
-    ...acc,
-    is_active: acc.id === id
-  }));
-  saveLocalAccounts(localPatched);
+  // Yerel is_active bayrakları
+  accounts = accounts.map((acc) => ({ ...acc, is_active: acc.id === id }));
+  persistLocal();
 
-  // Supabase senkronunu arka planda yap: UI hesap degisimini beklemeden aninda guncellensin.
+  // Supabase senkronunu arka planda yap (UI beklemeden güncellensin).
   (async () => {
     const userId = await getAuthenticatedUserId();
     if (!userId) return;
-
     try {
-      const accounts = await dbSelect('accounts', { user_id: userId });
-      for (const acc of accounts) {
+      const remote = await dbSelect('accounts', { user_id: userId });
+      for (const acc of remote) {
         if (acc.is_active && acc.id !== id) {
           await dbUpdate('accounts', acc.id, { is_active: false });
         }
@@ -198,39 +277,20 @@ export async function setActiveAccount(id) {
   })();
 }
 
-export async function getActiveAccount() {
-  const id = getActiveAccountId();
-  if (!id) return null;
-
-  const userId = await getAuthenticatedUserId();
-  if (userId) {
-    try {
-      const remote = await dbSelect('accounts', { user_id: userId, id });
-      const fresh = Array.isArray(remote) ? remote[0] : null;
-      if (fresh) {
-        upsertLocalAccount(fresh);
-        return fresh;
-      }
-    } catch (e) {
-      console.warn('Supabase active account fetch failed, using local cache:', e);
-    }
-  }
-
-  const accounts = await listAccounts();
-  return accounts.find(a => a.id === id) || null;
+// Senkron: bellek-içi state'ten aktif hesabı döndürür.
+export function getActiveAccount() {
+  if (!activeId) return null;
+  return accounts.find((a) => a.id === activeId) || null;
 }
 
 // ── Get API Key for active account ──
-export async function getActiveApiKey() {
-  const account = await getActiveAccount();
+export function getActiveApiKey() {
+  const account = getActiveAccount();
   return account ? account.api_key : null;
 }
 
 // ── Get active environment ──
-export async function getActiveEnvironment() {
-  const account = await getActiveAccount();
+export function getActiveEnvironment() {
+  const account = getActiveAccount();
   return account ? account.environment : 'test';
 }
-
-// ── Account Preferences (local) ──
-// Obsolete: Using direct columns in accounts object now

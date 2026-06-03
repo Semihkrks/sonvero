@@ -116,7 +116,12 @@ async function loadMultiAccountData(page) {
 
   let totalInvoices = 0;
   let totalTahsilats = 0;
-  
+
+  // Önce TÜM hesaplardan ham veriyi topla (hangi hesaptan geldiğini etiketleyerek).
+  // Eşleştirme/birleştirme tek hesabın değil, tüm hesapların verisi elde olunca yapılır.
+  const pendingInvoices = []; // { inv, acc }
+  const pendingTahsilats = []; // { t, acc }
+
   for (const acc of allAccounts) {
     try {
       const [efRes, eaRes, thRes] = await Promise.allSettled([
@@ -124,78 +129,78 @@ async function loadMultiAccountData(page) {
         fetchAllPagesForAccount(EArchiveWithAccount.listInvoices, acc, { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) }),
         listCollections({ accountId: acc.id, startDate, endDate, searchText })
       ]);
-      const invs = [];
-      if (efRes.status === 'fulfilled') invs.push(...efRes.value.map(i => ({ ...i, _type: 'efatura' })));
-      if (eaRes.status === 'fulfilled') invs.push(...eaRes.value.map(i => ({ ...i, _type: 'earsiv' })));
-      if (thRes.status === 'fulfilled') invs.push(...thRes.value.map(i => ({ ...i, _type: 'tahsilat' })));
-
-      // Önce faturaları işleyip müşteri haritasını (VKN ile) doldur, sonra tahsilatları eşleştir
-      invs.sort((a, b) => {
-        if (a._type === 'tahsilat' && b._type !== 'tahsilat') return 1;
-        if (a._type !== 'tahsilat' && b._type === 'tahsilat') return -1;
-        return 0;
-      });
-
-      invs.forEach(inv => {
-        const isTahsilat = inv._type === 'tahsilat';
-        let name = 'Bilinmeyen';
-        let taxNo = '—';
-        let amount = 0;
-
-        if (isTahsilat) {
-          name = inv.customer_name || 'Bilinmeyen';
-          taxNo = inv.customer_tax_no || '—';
-          amount = parseFloat(inv.amount || 0);
-        } else {
-          name = getReceiverName(inv) || 'Bilinmeyen';
-          taxNo = getReceiverTaxNo(inv) || '—';
-          amount = parseFloat(getAmount(inv) || 0);
-        }
-
-        let key = (taxNo !== '—' && taxNo ? taxNo : name).toLowerCase().trim();
-
-        // Eğer tahsilat VKN içermiyorsa (bankadan gelmişse) isim benzerliği ile mevcut fatura müşterisini bul
-        if (isTahsilat && (taxNo === '—' || !taxNo)) {
-          const normName = name.toLowerCase().trim();
-          const match = Object.entries(customerMap).find(([k, c]) => {
-            const cName = c.name.toLowerCase().trim();
-            if (cName === normName) return true;
-            if (cName.includes(normName) && normName.length > 4) return true;
-            if (normName.includes(cName) && cName.length > 4) return true;
-            return false;
-          });
-          if (match) {
-            key = match[0]; // Mevcut fatura müşterisinin anahtarını kullan
-            name = match[1].name;
-            taxNo = match[1].taxNo;
-          }
-        }
-        
-        if (!customerMap[key]) {
-          customerMap[key] = { name, taxNo, invoices: [], totalAmount: 0, totalTahsilat: 0, accountBreakdown: {} };
-        }
-        if (name !== 'Bilinmeyen' && customerMap[key].name === 'Bilinmeyen') customerMap[key].name = name;
-        
-        customerMap[key].invoices.push({ ...inv, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
-        
-        if (!customerMap[key].accountBreakdown[acc.id]) {
-          customerMap[key].accountBreakdown[acc.id] = { name: acc.name, color: acc.color, invoiceCount: 0, totalAmount: 0, totalTahsilat: 0 };
-        }
-
-        if (isTahsilat) {
-          customerMap[key].totalTahsilat += amount;
-          customerMap[key].accountBreakdown[acc.id].totalTahsilat += amount;
-          totalTahsilats++;
-        } else {
-          customerMap[key].totalAmount += amount;
-          customerMap[key].accountBreakdown[acc.id].invoiceCount++;
-          customerMap[key].accountBreakdown[acc.id].totalAmount += amount;
-          totalInvoices++;
-        }
-      });
+      if (efRes.status === 'fulfilled') efRes.value.forEach(i => pendingInvoices.push({ inv: { ...i, _type: 'efatura' }, acc }));
+      if (eaRes.status === 'fulfilled') eaRes.value.forEach(i => pendingInvoices.push({ inv: { ...i, _type: 'earsiv' }, acc }));
+      if (thRes.status === 'fulfilled') thRes.value.forEach(t => pendingTahsilats.push({ t: { ...t, _type: 'tahsilat' }, acc }));
     } catch (e) {
       console.error(`Error scanning account ${acc.name}:`, e);
     }
+  }
+
+  function ensureCustomer(key, name, taxNo) {
+    if (!customerMap[key]) {
+      customerMap[key] = { name, taxNo, invoices: [], totalAmount: 0, totalTahsilat: 0, accountBreakdown: {} };
+    }
+    if (name !== 'Bilinmeyen' && customerMap[key].name === 'Bilinmeyen') customerMap[key].name = name;
+  }
+  function ensureBreakdown(key, acc) {
+    if (!customerMap[key].accountBreakdown[acc.id]) {
+      customerMap[key].accountBreakdown[acc.id] = { name: acc.name, color: acc.color, invoiceCount: 0, totalAmount: 0, totalTahsilat: 0 };
+    }
+  }
+
+  // Müşteri anahtarı VKN bazlıdır (VKN yoksa isim): aynı VKN'li müşteri TÜM
+  // hesaplardan tek satırda BİRLEŞİK görünür; hangi hesapta ne kadar olduğu
+  // accountBreakdown'da ayrı tutulur.
+  const customerKey = (taxNo, name) =>
+    (taxNo !== '—' && taxNo ? taxNo : name).toLocaleLowerCase('tr-TR').trim();
+
+  // GEÇİŞ 1 — Tüm hesapların FATURALARI: müşteri haritasını VKN (yoksa isim) ile kur.
+  for (const { inv, acc } of pendingInvoices) {
+    const name = getReceiverName(inv) || 'Bilinmeyen';
+    const taxNo = getReceiverTaxNo(inv) || '—';
+    const amount = parseFloat(getAmount(inv) || 0);
+    const key = customerKey(taxNo, name);
+
+    ensureCustomer(key, name, taxNo);
+    customerMap[key].invoices.push({ ...inv, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
+    ensureBreakdown(key, acc);
+    customerMap[key].totalAmount += amount;
+    customerMap[key].accountBreakdown[acc.id].invoiceCount++;
+    customerMap[key].accountBreakdown[acc.id].totalAmount += amount;
+    totalInvoices++;
+  }
+
+  // GEÇİŞ 2 — Tüm hesapların TAHSİLATLARI: VKN varsa direkt, yoksa (banka dekontu)
+  // tüm hesaplardan oluşmuş müşteri haritasında isim benzerliğiyle eşleştir.
+  for (const { t, acc } of pendingTahsilats) {
+    let name = t.customer_name || 'Bilinmeyen';
+    let taxNo = t.customer_tax_no || '—';
+    const amount = parseFloat(t.amount || 0);
+    let key = customerKey(taxNo, name);
+
+    if (taxNo === '—' || !taxNo) {
+      const normName = name.toLocaleLowerCase('tr-TR').trim();
+      const match = Object.entries(customerMap).find(([k, c]) => {
+        const cName = c.name.toLocaleLowerCase('tr-TR').trim();
+        if (cName === normName) return true;
+        if (cName.includes(normName) && normName.length > 4) return true;
+        if (normName.includes(cName) && cName.length > 4) return true;
+        return false;
+      });
+      if (match) {
+        key = match[0];
+        name = match[1].name;
+        taxNo = match[1].taxNo;
+      }
+    }
+
+    ensureCustomer(key, name, taxNo);
+    customerMap[key].invoices.push({ ...t, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
+    ensureBreakdown(key, acc);
+    customerMap[key].totalTahsilat += amount;
+    customerMap[key].accountBreakdown[acc.id].totalTahsilat += amount;
+    totalTahsilats++;
   }
 
   Object.values(customerMap).forEach(c => {
@@ -233,13 +238,16 @@ function renderCustomerList(page) {
 
   listEl.innerHTML = entries.map(([key, c]) => {
     const initials = c.name.substring(0, 2).toUpperCase() || '??';
+    // "fatura" sayısı SADECE satış faturalarıdır; tahsilatlar ayrı sayılır.
+    const invoiceCount = c.invoices.filter(x => x._type !== 'tahsilat').length;
+    const tahsilatCount = c.invoices.length - invoiceCount;
     return `
       <div class="cari-customer-item ${selectedCustomerKey === key ? 'active' : ''}" data-key="${key}">
         <div class="cari-customer-avatar">${initials}</div>
         <div class="cari-customer-info">
           <span class="cari-customer-name">${c.name}</span>
           <span class="cari-customer-vkn">VKN: ${c.taxNo}</span>
-          <span class="cari-customer-meta">${c.invoices.length} fatura · ${Object.keys(c.accountBreakdown).length} hesap</span>
+          <span class="cari-customer-meta">${invoiceCount} fatura · ${tahsilatCount} tahsilat · ${Object.keys(c.accountBreakdown).length} hesap</span>
         </div>
         <div class="cari-customer-amounts" style="display:flex; gap:12px; margin-top:8px;">
           <div style="text-align:right">

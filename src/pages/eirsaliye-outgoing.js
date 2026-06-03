@@ -1,7 +1,7 @@
-import { EDespatch } from '../api/nilvera.js';
+import { EDespatch, EDespatchWithAccount } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
-import { getActiveAccount } from '../services/account-manager.js';
+import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
 const ic = {
@@ -24,11 +24,13 @@ const ic = {
 let cachedRows = [];
 let cachedOutgoingAccountId = '';
 let outgoingLoadSeq = 0;
+let outgoingAbort = null;
 
 function resetEDespatchOutgoingCache() {
   cachedRows = [];
   cachedOutgoingAccountId = '';
   outgoingLoadSeq++;
+  if (outgoingAbort) { try { outgoingAbort.abort(); } catch {} outgoingAbort = null; }
 }
 registerCacheReset(resetEDespatchOutgoingCache);
 const OUTGOING_SPECIAL_CODE_KEY = 'nilfatura_edespatch_sale_special_codes';
@@ -552,7 +554,7 @@ async function loadOutgoing(page, options = {}) {
   if (!tbody) return;
   const archivedOnly = Boolean(options.archivedOnly);
 
-  const account = await getActiveAccount();
+  const account = getActiveAccount();
   if (!account) {
     cachedRows = [];
     cachedOutgoingAccountId = '';
@@ -561,6 +563,10 @@ async function loadOutgoing(page, options = {}) {
   }
   const accountId = account.id || '';
   const seq = ++outgoingLoadSeq;
+
+  if (outgoingAbort) { try { outgoingAbort.abort(); } catch {} }
+  outgoingAbort = new AbortController();
+  const signal = outgoingAbort.signal;
 
   if (cachedOutgoingAccountId && cachedOutgoingAccountId !== accountId) {
     cachedRows = [];
@@ -572,20 +578,20 @@ async function loadOutgoing(page, options = {}) {
 
   tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div style="padding:24px;text-align:center;color:var(--text-muted)">e-İrsaliye verileri yükleniyor...</div></td></tr>`;
 
-  const res = await EDespatch.listSales({
+  const res = await EDespatchWithAccount.listSales(account, {
     StartDate: startDate,
     EndDate: endDate,
     Page: 1,
     PageSize: 150,
     ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),
-  });
+  }, { signal });
   if (!res.success) {
-    if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId) return;
+    if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId || getActiveAccountId() !== accountId) return;
     tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Hata: ${res.error}</h3></div></td></tr>`;
     return;
   }
 
-  if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId) return;
+  if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId || getActiveAccountId() !== accountId) return;
 
   cachedRows = extractItems(res.data)
     .map(normalizeRow)

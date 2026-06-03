@@ -1,7 +1,8 @@
-import { EInvoice, EArchive } from '../api/nilvera.js';
+import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { navigate, registerCacheReset } from '../router.js';
+import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 
 const INVOICE_EDIT_CONTEXT_KEY = 'nilfatura_invoice_edit_context';
 
@@ -24,9 +25,15 @@ const ic = {
 
 let cachedDrafts = [];
 let selectedSource = 'einvoice';
+let cachedDraftsAccountId = '';
+let draftsLoadSeq = 0;
+let draftsAbort = null;
 
 function resetDraftsCache() {
   cachedDrafts = [];
+  cachedDraftsAccountId = '';
+  draftsLoadSeq++;
+  if (draftsAbort) { try { draftsAbort.abort(); } catch {} draftsAbort = null; }
 }
 registerCacheReset(resetDraftsCache);
 
@@ -143,16 +150,38 @@ async function loadDrafts(page) {
   const startDate = page.querySelector('#startDate')?.value || undefined;
   const endDate = page.querySelector('#endDate')?.value || undefined;
 
+  // Aktif hesabı tek sefer yakala; bu yükleme yalnızca onu kullanır.
+  const account = getActiveAccount();
+  if (!account) {
+    cachedDrafts = [];
+    cachedDraftsAccountId = '';
+    tbody.innerHTML = emptyRow('Hesap seçilmedi. Önce bir Nilvera API hesabı ekleyin.');
+    updateFooter(page, 0);
+    return;
+  }
+
+  const accountId = account.id || '';
+  const seq = ++draftsLoadSeq;
+  if (draftsAbort) { try { draftsAbort.abort(); } catch {} }
+  draftsAbort = new AbortController();
+  const signal = draftsAbort.signal;
+  cachedDraftsAccountId = accountId;
+
   tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div style="padding:24px;text-align:center;color:var(--text-muted)">Taslaklar yükleniyor...</div></td></tr>`;
 
   try {
-    const api = selectedSource === 'earchive' ? EArchive : EInvoice;
+    const api = selectedSource === 'earchive' ? EArchiveWithAccount : EInvoiceWithAccount;
     const params = {
       StartDate: startDate ? `${startDate}T00:00:00` : undefined,
       EndDate: endDate ? `${endDate}T23:59:59` : undefined,
       PageSize: 100,
     };
-    const res = await api.listDrafts(params);
+    const res = await api.listDrafts(account, params, { signal });
+
+    // Bayatlama kontrolü: hesap değişti veya yeni yükleme başladı.
+    if (seq !== draftsLoadSeq || cachedDraftsAccountId !== accountId || getActiveAccountId() !== accountId) {
+      return;
+    }
 
     if (!res.success) {
       tbody.innerHTML = emptyRow(`Hata: ${res.error}`);
@@ -168,6 +197,9 @@ async function loadDrafts(page) {
     cachedDrafts = drafts;
     renderRows(page, drafts);
   } catch (e) {
+    if (seq !== draftsLoadSeq || cachedDraftsAccountId !== accountId || getActiveAccountId() !== accountId) {
+      return;
+    }
     tbody.innerHTML = emptyRow(`Bağlantı hatası: ${e.message}`);
     updateFooter(page, 0);
   }

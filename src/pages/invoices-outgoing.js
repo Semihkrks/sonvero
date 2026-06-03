@@ -2,12 +2,12 @@
 // Outgoing Invoices (Giden Faturalar) Page
 // Nilvera-Style with İşlemler Dropdown
 // ══════════════════════════════════════════
-import { EInvoice, EArchive } from '../api/nilvera.js';
+import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
 import { exportCariDefter } from '../services/cari-export.js';
-import { getActiveAccount } from '../services/account-manager.js';
+import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
 // ── SVG Icons ──
@@ -307,12 +307,15 @@ let cachedOutgoing = [];
 let filteredOutgoing = [];
 let cachedOutgoingAccountId = '';
 let outgoingLoadSeq = 0;
+let outgoingAbort = null;
 
 function resetOutgoingCache() {
   cachedOutgoing = [];
   filteredOutgoing = [];
   cachedOutgoingAccountId = '';
   outgoingLoadSeq++;
+  // Devam eden istekleri iptal et: eski hesabın yanıtı yeni görünüme sızmasın.
+  if (outgoingAbort) { try { outgoingAbort.abort(); } catch {} outgoingAbort = null; }
 }
 registerCacheReset(resetOutgoingCache);
 
@@ -335,7 +338,8 @@ async function loadOutgoing(page, options = {}) {
   if (!tbody) return;
   const archivedOnly = Boolean(options.archivedOnly);
 
-  const account = await getActiveAccount();
+  // Aktif hesabı TEK SEFER yakala (senkron) ve bu yükleme boyunca yalnızca onu kullan.
+  const account = getActiveAccount();
   if (!account) {
     cachedOutgoing = [];
     filteredOutgoing = [];
@@ -353,6 +357,11 @@ async function loadOutgoing(page, options = {}) {
 
   const accountId = account.id || '';
   const seq = ++outgoingLoadSeq;
+
+  // Önceki devam eden yüklemeyi iptal et, bu yükleme için yeni bir sinyal oluştur.
+  if (outgoingAbort) { try { outgoingAbort.abort(); } catch {} }
+  outgoingAbort = new AbortController();
+  const signal = outgoingAbort.signal;
 
   if (cachedOutgoingAccountId && cachedOutgoingAccountId !== accountId) {
     cachedOutgoing = [];
@@ -376,11 +385,13 @@ async function loadOutgoing(page, options = {}) {
     // YENİ EKLEDİĞİM LOG: Seçilen tarihi burada net görsün
     console.log('📌 ARA BUTONUNA BASILDI, ALGILANAN TARİHLER:', { dateStart, dateEnd });
 
+    // apiFn imzası: (account, params, options) — yakalanan hesabı ve abort sinyalini her sayfaya geçir.
     async function fetchAllPages(apiFn, baseParams) {
       let allItems = [];
       let pg = 1, totalPages = 1;
       do {
-        const res = await apiFn({ ...baseParams, Page: pg, PageSize: 100 });
+        if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
+        const res = await apiFn(account, { ...baseParams, Page: pg, PageSize: 100 }, { signal });
         if (!res.success) return { success: false, ...res };
         const items = extractItems(res.data);
         allItems.push(...items);
@@ -409,9 +420,9 @@ async function loadOutgoing(page, options = {}) {
     const draftParams = { StartDate: apiDateStart, EndDate: apiDateEnd };
 
     const [efaturaRes, earsivRes, earsivDraftRes] = await Promise.allSettled([
-      fetchAllPages(EInvoice.listSales, baseEInvoiceParams),
-      fetchAllPages(EArchive.listInvoices, baseEArchiveParams),
-      fetchAllPages(EArchive.listDrafts, draftParams)
+      fetchAllPages(EInvoiceWithAccount.listSales, baseEInvoiceParams),
+      fetchAllPages(EArchiveWithAccount.listInvoices, baseEArchiveParams),
+      fetchAllPages(EArchiveWithAccount.listDrafts, draftParams)
     ]);
 
     console.log('E-Arşiv Giden Gelen API Yanıtı:', earsivRes);
@@ -433,7 +444,7 @@ async function loadOutgoing(page, options = {}) {
       allInvoices = allInvoices.filter(isArchivedInvoice);
     }
 
-    if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId) {
+    if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
 
@@ -461,7 +472,7 @@ async function loadOutgoing(page, options = {}) {
     filteredOutgoing = cachedOutgoing;
     applyFilters(page);
   } catch (e) {
-    if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId) {
+    if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
     tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.globe}<h3>Bağlantı hatası</h3><p>${e.message || 'Sunucuya ulaşılamıyor'}</p><button class="btn btn-primary" id="retryBtn2">${ic.refresh} Tekrar Dene</button></div></td></tr>`;

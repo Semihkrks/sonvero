@@ -1,7 +1,7 @@
-import { EDespatch } from '../api/nilvera.js';
+import { EDespatch, EDespatchWithAccount } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
-import { getActiveAccount } from '../services/account-manager.js';
+import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
 const ic = {
@@ -25,11 +25,13 @@ const ic = {
 let cachedRows = [];
 let cachedIncomingAccountId = '';
 let incomingLoadSeq = 0;
+let incomingAbort = null;
 
 function resetEDespatchIncomingCache() {
   cachedRows = [];
   cachedIncomingAccountId = '';
   incomingLoadSeq++;
+  if (incomingAbort) { try { incomingAbort.abort(); } catch {} incomingAbort = null; }
 }
 registerCacheReset(resetEDespatchIncomingCache);
 
@@ -829,7 +831,7 @@ async function loadIncoming(page, options = {}) {
   if (!tbody) return;
   const archivedOnly = Boolean(options.archivedOnly);
 
-  const account = await getActiveAccount();
+  const account = getActiveAccount();
   if (!account) {
     cachedRows = [];
     cachedIncomingAccountId = '';
@@ -838,6 +840,10 @@ async function loadIncoming(page, options = {}) {
   }
   const accountId = account.id || '';
   const seq = ++incomingLoadSeq;
+
+  if (incomingAbort) { try { incomingAbort.abort(); } catch {} }
+  incomingAbort = new AbortController();
+  const signal = incomingAbort.signal;
 
   if (cachedIncomingAccountId && cachedIncomingAccountId !== accountId) {
     cachedRows = [];
@@ -849,20 +855,20 @@ async function loadIncoming(page, options = {}) {
 
   tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div style="padding:24px;text-align:center;color:var(--text-muted)">e-İrsaliye verileri yükleniyor...</div></td></tr>`;
 
-  const res = await EDespatch.listPurchases({
+  const res = await EDespatchWithAccount.listPurchases(account, {
     StartDate: startDate,
     EndDate: endDate,
     Page: 1,
     PageSize: 150,
     ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),
-  });
+  }, { signal });
   if (!res.success) {
-    if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId) return;
+    if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId || getActiveAccountId() !== accountId) return;
     tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Hata: ${res.error}</h3></div></td></tr>`;
     return;
   }
 
-  if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId) return;
+  if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId || getActiveAccountId() !== accountId) return;
 
   cachedRows = sortByNearestDate(applyAnswerEligibility(
     extractItems(res.data)

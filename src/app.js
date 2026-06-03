@@ -11,7 +11,7 @@ import { renderBottomNav } from './components/bottom-nav.js';
 import { startInvoiceNotificationMonitor } from './services/invoice-notification-monitor.js';
 import { startDatePickerAutoBind } from './lib/date-picker.js';
 import { getSession, signIn, signUp, signOut, getSupabase } from './lib/supabase.js';
-import { listAccounts, getActiveAccountId, setActiveAccount } from './services/account-manager.js';
+import { listAccounts, getActiveAccountId, setActiveAccount, syncAccounts } from './services/account-manager.js';
 
 // Pages
 import { renderDashboard } from './pages/dashboard.js';
@@ -515,8 +515,12 @@ function handleManageAccounts() {
   window.location.hash = '#/accounts';
 }
 
-function bootAuthedApp(user) {
+async function bootAuthedApp(user) {
   currentAuthUser = user;
+
+  // Hesap listesini buluttan (Supabase) tazele: yeni cihazda bellek-içi state boş
+  // olabilir. Router başlamadan önce tamamlanmalı ki ilk render doğru hesabı görsün.
+  try { await syncAccounts(); } catch (e) { console.warn('Hesap senkronu başarısız:', e?.message || e); }
 
   if (!window.location.hash || window.location.hash === '#') {
     window.location.hash = '#/dashboard';
@@ -541,8 +545,12 @@ function bindAuthState() {
   const sb = getSupabase();
   sb.auth.onAuthStateChange((event, session) => {
     if (isAuthenticatedSession(session)) {
-      // Token yenilemelerinde sayfayı baştan render etme, sadece user ref güncelle
-      if (event === 'TOKEN_REFRESHED') {
+      // Uygulama ZATEN çalışıyorsa (router aktif) sayfayı baştan render ETME.
+      // Sekmeye geri dönünce Supabase SIGNED_IN / TOKEN_REFRESHED / INITIAL_SESSION
+      // olayları tetikler; eskiden bunlar bootAuthedApp -> hashchange -> tam re-render
+      // yapıp açık sayfanın verilerini (ör. "Tüm Hesaplar Cari" taraması) sıfırlıyordu.
+      // Artık sadece kullanıcı referansını güncelliyoruz.
+      if (stopRouter) {
         currentAuthUser = session.user;
         return;
       }
@@ -628,12 +636,25 @@ window.addEventListener('beforeunload', () => {
 }, { once: true });
 
 // ── PWA & Service Worker Registration ──
+// Service Worker YALNIZCA production'da kayıtlanır. Geliştirme/test ortamında
+// (vite dev) SW statik dosyaları cache-first servis edip ESKİ kodu çalıştırır ve
+// API yanıtlarını önbellekleyip hesaplar arası veri sızdırır. Bu yüzden dev'de
+// SW'yi tamamen devre dışı bırakır ve mevcut kayıt + önbellekleri temizleriz.
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then((reg) => console.log('%cPWA Service Worker Aktif', 'color:#10b981;font-weight:bold;', reg.scope))
-      .catch((err) => console.warn('Service Worker hatası:', err));
-  });
+  if (import.meta.env.PROD) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then((reg) => console.log('%cPWA Service Worker Aktif', 'color:#10b981;font-weight:bold;', reg.scope))
+        .catch((err) => console.warn('Service Worker hatası:', err));
+    });
+  } else {
+    navigator.serviceWorker.getRegistrations()
+      .then((regs) => regs.forEach((r) => r.unregister()))
+      .catch(() => {});
+    if (window.caches) {
+      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {});
+    }
+  }
 }
 
 console.log('%c🧾 Sonvera 2.0', 'font-size:16px;font-weight:bold;color:#3b82f6');

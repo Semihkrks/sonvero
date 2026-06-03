@@ -14,17 +14,17 @@ function createApi() {
   });
 }
 
-// ── Build base URL based on active account environment ──
-async function getBaseUrl() {
-  const account = await getActiveAccount();
+// ── Build base URL for a given account (or active account) ──
+// getActiveAccount() artık SENKRON: aktif hesap istek anında yeniden çözülmez,
+// bellek-içi tek kaynaktan okunur.
+function baseUrlFor(account) {
   if (!account) throw new Error('Aktif hesap bulunamadı. Lütfen bir hesap seçin.');
   // In dev mode, use Vite proxy to bypass CORS
   return account.environment === 'live' ? '/nilvera-live' : '/nilvera-api';
 }
 
-// ── Build auth headers ──
-async function getHeaders() {
-  const account = await getActiveAccount();
+// ── Build auth headers for a given account ──
+function headersFor(account) {
   if (!account || !account.api_key) {
     throw new Error('API anahtarı bulunamadı. Lütfen hesap ayarlarını kontrol edin.');
   }
@@ -35,9 +35,11 @@ async function getHeaders() {
 }
 
 // ── Generic request wrapper with error handling ──
-async function request(method, path, data = null, params = null) {
-  const baseUrl = await getBaseUrl();
-  const headers = await getHeaders();
+// Aktif hesabı TEK SEFER yakalar; baseUrl ve header aynı hesaptan türetilir.
+async function request(method, path, data = null, params = null, options = {}) {
+  const account = getActiveAccount();
+  const baseUrl = baseUrlFor(account);
+  const headers = headersFor(account);
   const api = createApi();
 
   try {
@@ -46,7 +48,8 @@ async function request(method, path, data = null, params = null) {
       url: `${baseUrl}${path}`,
       headers,
       ...(data && { data }),
-      ...(params && { params })
+      ...(params && { params }),
+      ...(options.signal && { signal: options.signal })
     };
 
     console.log(`[Nilvera API] Request -> ${method} ${config.url}`, params);
@@ -91,7 +94,9 @@ async function request(method, path, data = null, params = null) {
 }
 
 // ── Account-specific request (bypasses getActiveAccount) ──
-async function requestWithAccount(account, method, path, data = null, params = null) {
+// Bir yükleme boyunca hesap açıkça verilir: kullanıcı arada hesap değiştirse
+// bile bu isteğin anahtarı/ortamı değişmez. options.signal ile iptal edilebilir.
+async function requestWithAccount(account, method, path, data = null, params = null, options = {}) {
   if (!account || !account.api_key) {
     return { success: false, error: 'Hesap veya API anahtarı bulunamadı.', status: 0 };
   }
@@ -108,7 +113,8 @@ async function requestWithAccount(account, method, path, data = null, params = n
       url: `${baseUrl}${path}`,
       headers,
       ...(data && { data }),
-      ...(params && { params })
+      ...(params && { params }),
+      ...(options.signal && { signal: options.signal })
     };
     const response = await api(config);
     return { success: true, data: response.data, status: response.status };
@@ -162,13 +168,14 @@ async function requestRetry3(method, path, data = null, params = null) {
   return bestResult || lastError;
 }
 
-async function requestWithAccountRetry3(account, method, path, data = null, params = null) {
+async function requestWithAccountRetry3(account, method, path, data = null, params = null, options = {}) {
   let bestResult = null;
   let maxCount = -1;
   let lastError = null;
 
   for (let i = 0; i < 3; i++) {
-    const result = await requestWithAccount(account, method, path, data, params);
+    if (options.signal?.aborted) return bestResult || lastError || { success: false, error: 'İstek iptal edildi', status: 0 };
+    const result = await requestWithAccount(account, method, path, data, params, options);
     if (result.success) {
       const count = _extractItemsLength(result.data);
       if (count >= maxCount || !bestResult) {
@@ -187,15 +194,32 @@ async function requestWithAccountRetry3(account, method, path, data = null, para
 // ── Exported helpers for multi-account operations ──
 export { requestWithAccount, requestRetry3, requestWithAccountRetry3 };
 
-// ── Account-specific EInvoice & EArchive (for multi-account cari) ──
+// ── Account-specific listeleme uçları ──
+// Sayfalar yükleme başında hesabı yakalar ve TÜM çağrılarını bu hesapla yapar.
+// Böylece hesaplar arası veri karışması imkânsızlaşır. options.signal = AbortSignal.
 export const EInvoiceWithAccount = {
-  listSales: (account, params = {}) =>
-    requestWithAccountRetry3(account, 'GET', '/einvoice/Sale', null, params),
+  listSales: (account, params = {}, options = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/einvoice/Sale', null, params, options),
+  listPurchases: (account, params = {}, options = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/einvoice/Purchase', null, params, options),
+  listDrafts: (account, params = {}, options = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/einvoice/Draft', null, params, options),
 };
 
 export const EArchiveWithAccount = {
-  listInvoices: (account, params = {}) =>
-    requestWithAccountRetry3(account, 'GET', '/earchive/Invoices', null, params),
+  listInvoices: (account, params = {}, options = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/earchive/Invoices', null, params, options),
+  listDrafts: (account, params = {}, options = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/earchive/Draft', null, params, options),
+  listGibPurchases: (account, params = {}, options = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/earchive/Gib/Purchase', null, params, options),
+};
+
+export const EDespatchWithAccount = {
+  listSales: (account, params = {}, options = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/edespatch/Sale', null, params, options),
+  listPurchases: (account, params = {}, options = {}) =>
+    requestWithAccountRetry3(account, 'GET', '/edespatch/Purchase', null, params, options),
 };
 
 // Public generic caller for endpoints not yet wrapped with named functions.

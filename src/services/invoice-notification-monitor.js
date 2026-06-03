@@ -1,4 +1,4 @@
-import { EInvoice } from '../api/nilvera.js';
+import { EInvoiceWithAccount } from '../api/nilvera.js';
 import { getActiveAccount } from './account-manager.js';
 
 const LS_SEEN_KEY = 'nilfatura_seen_incoming_v1';
@@ -49,12 +49,13 @@ function extractItems(data) {
   return [];
 }
 
-async function fetchIncomingSnapshot() {
+async function fetchIncomingSnapshot(account) {
   const end = new Date();
   const start = new Date();
   start.setDate(start.getDate() - LOOKBACK_DAYS);
 
-  const res = await EInvoice.listPurchases({
+  // Yakalanan hesabı açıkça geçir: bildirimler her zaman doğru hesaba ait olsun.
+  const res = await EInvoiceWithAccount.listPurchases(account, {
     StartDate: start.toISOString(),
     EndDate: end.toISOString(),
     Page: 1,
@@ -123,10 +124,10 @@ async function showIncomingNotification(payload) {
 }
 
 async function runCheck({ silentSeed = false } = {}) {
-  const account = await getActiveAccount();
+  const account = getActiveAccount();
   if (!account?.id) return;
 
-  const snapshot = await fetchIncomingSnapshot();
+  const snapshot = await fetchIncomingSnapshot(account);
   const uuids = snapshot.map((x) => getUuid(x)).filter(Boolean);
 
   const seenMap = loadSeenMap();

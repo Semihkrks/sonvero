@@ -1,11 +1,11 @@
 // ══════════════════════════════════════════
 // Canlı Cari Sistemi — Müşteri Bazlı Cari Takip
 // ══════════════════════════════════════════
-import { EInvoice, EArchive } from '../api/nilvera.js';
+import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { attachDatePicker } from '../lib/date-picker.js';
-import { getActiveAccount } from '../services/account-manager.js';
+import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 import { exportCustomerCari } from '../services/cari-export.js';
 import { addCollection, listCollections, updateCollection, deleteCollection } from '../services/tahsilat-manager.js';
@@ -122,6 +122,7 @@ let selectedCustomer = null;
 let currentSource = 'giden'; // 'giden' or 'gelen'
 let cachedCariAccountId = '';
 let cariLoadSeq = 0;
+let cariAbort = null;
 
 function resetCariCache() {
   allInvoices = [];
@@ -130,6 +131,7 @@ function resetCariCache() {
   cariLoadSeq++;
   selectedCustomer = null;
   cachedCariAccountId = '';
+  if (cariAbort) { try { cariAbort.abort(); } catch {} cariAbort = null; }
 }
 registerCacheReset(resetCariCache);
 
@@ -270,7 +272,7 @@ export async function renderCariPage() {
 
 // ── Load Data ──
 async function loadCariData(page) {
-  const account = await getActiveAccount();
+  const account = getActiveAccount();
   if (!account) {
     allInvoices = [];
     allCollections = [];
@@ -283,6 +285,10 @@ async function loadCariData(page) {
 
   const accountId = account.id || '';
   const seq = ++cariLoadSeq;
+
+  if (cariAbort) { try { cariAbort.abort(); } catch {} }
+  cariAbort = new AbortController();
+  const signal = cariAbort.signal;
 
   if (cachedCariAccountId && cachedCariAccountId !== accountId) {
     allInvoices = [];
@@ -308,14 +314,13 @@ async function loadCariData(page) {
 
   try {
     // Fetch all pages of invoices with 3x retry
+    // apiFn imzası: (account, params, options). Retry (3x) artık WithAccount katmanında.
     async function fetchAllPages(apiFn, baseParams) {
       let items = [];
       let pg = 1, totalPages = 1;
       do {
-        let res;
-        for (let r = 0; r < 3; r++) {
-          res = await apiFn({ ...baseParams, Page: pg, PageSize: 100 });
-        }
+        if (signal.aborted) break;
+        const res = await apiFn(account, { ...baseParams, Page: pg, PageSize: 100 }, { signal });
         if (!res.success) break;
         const pageItems = extractItems(res.data);
         items.push(...pageItems);
@@ -330,16 +335,16 @@ async function loadCariData(page) {
     if (currentSource === 'giden') {
       // Giden = Sales (E-Fatura + E-Arşiv)
       const [efRes, eaRes] = await Promise.allSettled([
-        fetchAllPages(EInvoice.listSales, { StartDate: dateStart, EndDate: dateEnd }),
-        fetchAllPages(EArchive.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
+        fetchAllPages(EInvoiceWithAccount.listSales, { StartDate: dateStart, EndDate: dateEnd }),
+        fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
       ]);
       if (efRes.status === 'fulfilled') fetchedInvoices.push(...efRes.value.map(i => ({ ...i, _source: 'efatura' })));
       if (eaRes.status === 'fulfilled') fetchedInvoices.push(...eaRes.value.map(i => ({ ...i, _source: 'earsiv' })));
     } else {
       // Gelen = Purchases
       const [efRes, eaRes] = await Promise.allSettled([
-        fetchAllPages(EInvoice.listPurchases, { StartDate: dateStart, EndDate: dateEnd }),
-        fetchAllPages(EArchive.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
+        fetchAllPages(EInvoiceWithAccount.listPurchases, { StartDate: dateStart, EndDate: dateEnd }),
+        fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
       ]);
       if (efRes.status === 'fulfilled') fetchedInvoices.push(...efRes.value.map(i => ({ ...i, _source: 'efatura' })));
       if (eaRes.status === 'fulfilled') fetchedInvoices.push(...eaRes.value.map(i => ({ ...i, _source: 'earsiv' })));
@@ -351,7 +356,7 @@ async function loadCariData(page) {
       endDate: dateEnd
     });
 
-    if (seq !== cariLoadSeq || cachedCariAccountId !== accountId) {
+    if (seq !== cariLoadSeq || cachedCariAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
 
@@ -382,7 +387,7 @@ async function loadCariData(page) {
       showToast(`Veriler güncellendi: ${allInvoices.length} fatura, ${allCollections.length} tahsilat hareketi getirildi.`, 'success');
     }
   } catch (e) {
-    if (seq !== cariLoadSeq || cachedCariAccountId !== accountId) {
+    if (seq !== cariLoadSeq || cachedCariAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
     console.error('Cari data load error:', e);

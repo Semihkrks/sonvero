@@ -2,12 +2,12 @@
 // Incoming Invoices (Gelen Faturalar) Page
 // Nilvera-Style with İşlemler & Kabul/Reddet
 // ══════════════════════════════════════════
-import { EInvoice, EArchive, nilveraRequest } from '../api/nilvera.js';
+import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount, nilveraRequest } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
 import { exportCariDefter } from '../services/cari-export.js';
-import { getActiveAccount } from '../services/account-manager.js';
+import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
 const ic = {
@@ -267,12 +267,14 @@ let cachedInvoices = [];
 let filteredInvoices = [];
 let cachedIncomingAccountId = '';
 let incomingLoadSeq = 0;
+let incomingAbort = null;
 
 function resetIncomingCache() {
   cachedInvoices = [];
   filteredInvoices = [];
   cachedIncomingAccountId = '';
   incomingLoadSeq++;
+  if (incomingAbort) { try { incomingAbort.abort(); } catch {} incomingAbort = null; }
 }
 registerCacheReset(resetIncomingCache);
 
@@ -295,7 +297,7 @@ async function loadIncoming(page, options = {}) {
   if (!tbody) return;
   const archivedOnly = Boolean(options.archivedOnly);
 
-  const account = await getActiveAccount();
+  const account = getActiveAccount();
   if (!account) {
     cachedInvoices = [];
     filteredInvoices = [];
@@ -306,6 +308,10 @@ async function loadIncoming(page, options = {}) {
 
   const accountId = account.id || '';
   const seq = ++incomingLoadSeq;
+
+  if (incomingAbort) { try { incomingAbort.abort(); } catch {} }
+  incomingAbort = new AbortController();
+  const signal = incomingAbort.signal;
 
   if (cachedIncomingAccountId && cachedIncomingAccountId !== accountId) {
     cachedInvoices = [];
@@ -322,7 +328,8 @@ async function loadIncoming(page, options = {}) {
     async function fetchAllPages(apiFn, baseParams) {
       let allItems = [], pg = 1, totalPages = 1;
       do {
-        const res = await apiFn({ ...baseParams, Page: pg, PageSize: 100 });
+        if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
+        const res = await apiFn(account, { ...baseParams, Page: pg, PageSize: 100 }, { signal });
         if (!res.success) return { success: false, ...res };
         allItems.push(...extractItems(res.data));
         totalPages = res.data?.TotalPages || 1;
@@ -332,12 +339,12 @@ async function loadIncoming(page, options = {}) {
     }
 
     const [efaturaRes, earsivRes] = await Promise.allSettled([
-      fetchAllPages(EInvoice.listPurchases, {
+      fetchAllPages(EInvoiceWithAccount.listPurchases, {
         StartDate: dateStart,
         EndDate: dateEnd,
         ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),
       }),
-      fetchAllPages(EArchive.listGibPurchases, {
+      fetchAllPages(EArchiveWithAccount.listGibPurchases, {
         StartDate: dateStart,
         EndDate: dateEnd,
         ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),
@@ -356,7 +363,7 @@ async function loadIncoming(page, options = {}) {
       allInvoices = allInvoices.filter(isArchivedInvoice);
     }
 
-    if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId) {
+    if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
 
@@ -378,7 +385,7 @@ async function loadIncoming(page, options = {}) {
     filteredInvoices = allInvoices;
     applyFilters(page);
   } catch (e) {
-    if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId) {
+    if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
     tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.globe}<h3>Bağlantı hatası</h3><p>${e.message || 'Sunucuya ulaşılamıyor'}</p><button class="btn btn-primary" id="retryBtn2">${ic.refresh} Tekrar Dene</button></div></td></tr>`;

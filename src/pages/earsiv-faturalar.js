@@ -2,12 +2,12 @@
 // E-Archive Invoices (e-Arşiv Faturaları) Page
 // Nilvera-Style with İşlemler Dropdown
 // ══════════════════════════════════════════
-import { EInvoice, EArchive } from '../api/nilvera.js';
+import { EInvoice, EArchive, EArchiveWithAccount } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
 import { exportCariDefter } from '../services/cari-export.js';
-import { getActiveAccount } from '../services/account-manager.js';
+import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
 // ── SVG Icons ──
@@ -230,10 +230,16 @@ export async function renderEArsivInvoices() {
 
 let cachedEarsiv = [];
 let filteredEarsiv = [];
+let cachedEarsivAccountId = '';
+let earsivLoadSeq = 0;
+let earsivAbort = null;
 
 function resetEarsivCache() {
   cachedEarsiv = [];
   filteredEarsiv = [];
+  cachedEarsivAccountId = '';
+  earsivLoadSeq++;
+  if (earsivAbort) { try { earsivAbort.abort(); } catch {} earsivAbort = null; }
 }
 registerCacheReset(resetEarsivCache);
 
@@ -255,8 +261,11 @@ async function loadEarsiv(page) {
   const tbody = page.querySelector('#invoiceList');
   if (!tbody) return;
 
-  const account = await getActiveAccount();
+  const account = getActiveAccount();
   if (!account) {
+    cachedEarsiv = [];
+    filteredEarsiv = [];
+    cachedEarsivAccountId = '';
     tbody.innerHTML = `<tr><td colspan="8" class="table-empty">
       <div class="empty-state">
         ${ic.key}
@@ -267,6 +276,19 @@ async function loadEarsiv(page) {
     </td></tr>`;
     return;
   }
+
+  const accountId = account.id || '';
+  const seq = ++earsivLoadSeq;
+
+  if (earsivAbort) { try { earsivAbort.abort(); } catch {} }
+  earsivAbort = new AbortController();
+  const signal = earsivAbort.signal;
+
+  if (cachedEarsivAccountId && cachedEarsivAccountId !== accountId) {
+    cachedEarsiv = [];
+    filteredEarsiv = [];
+  }
+  cachedEarsivAccountId = accountId;
 
   tbody.innerHTML = `<tr><td colspan="8" class="table-empty">
     <div style="padding:40px;text-align:center">
@@ -285,7 +307,8 @@ async function loadEarsiv(page) {
       let allItems = [];
       let pg = 1, totalPages = 1;
       do {
-        const res = await apiFn({ ...baseParams, Page: pg, PageSize: 100 });
+        if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
+        const res = await apiFn(account, { ...baseParams, Page: pg, PageSize: 100 }, { signal });
         if (!res.success) return { success: false, ...res };
         const items = extractItems(res.data);
         allItems.push(...items);
@@ -296,8 +319,8 @@ async function loadEarsiv(page) {
     }
 
     const [efaturaRes, earsivRes] = await Promise.allSettled([
-      fetchAllPages(EArchive.listInvoices, { StartDate: dateStart, EndDate: dateEnd }),
-      fetchAllPages(EArchive.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
+      fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd }),
+      fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
     ]);
 
     let allInvoices = [];
@@ -306,6 +329,11 @@ async function loadEarsiv(page) {
     }
     if (earsivRes.status === 'fulfilled' && earsivRes.value.success) {
       allInvoices.push(...extractItems(earsivRes.value.data).map(inv => ({ ...inv, _source: 'earsiv' })));
+    }
+
+    // Bu yükleme bayatladıysa (hesap değişti / yeni yükleme başladı) yazma.
+    if (seq !== earsivLoadSeq || cachedEarsivAccountId !== accountId || getActiveAccountId() !== accountId) {
+      return;
     }
 
     if (allInvoices.length === 0) {
@@ -326,6 +354,9 @@ async function loadEarsiv(page) {
     filteredEarsiv = allInvoices;
     applyFilters(page);
   } catch (e) {
+    if (seq !== earsivLoadSeq || cachedEarsivAccountId !== accountId || getActiveAccountId() !== accountId) {
+      return;
+    }
     tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.globe}<h3>Bağlantı hatası</h3><p>${e.message || 'Sunucuya ulaşılamıyor'}</p><button class="btn btn-primary" id="retryBtn2">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
     tbody.querySelector('#retryBtn2')?.addEventListener('click', () => loadEarsiv(page));
     updateFooter(page, 0);

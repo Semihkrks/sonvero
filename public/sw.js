@@ -2,7 +2,7 @@
 // Sonvera 2.0 — Service Worker (PWA Offline & Cache)
 // ══════════════════════════════════════════
 
-const CACHE_NAME = 'sonvera-v2';
+const CACHE_NAME = 'sonvera-v3';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -44,18 +44,20 @@ self.addEventListener('fetch', (event) => {
   }
 
   const reqUrl = new URL(event.request.url);
-  const isApiRequest = reqUrl.hostname.includes('apitest.nilvera.com') || reqUrl.hostname.includes('api.nilvera.com');
+  // ÖNEMLİ: API çağrıları Vite/Vercel proxy yollarından (/nilvera-api, /nilvera-live)
+  // geçer; bu durumda hostname localhost/Vercel olur. Bu yüzden hem proxy yolunu
+  // hem de doğrudan nilvera.com host'unu kontrol et.
+  const isApiRequest =
+    reqUrl.pathname.startsWith('/nilvera-api') ||
+    reqUrl.pathname.startsWith('/nilvera-live') ||
+    reqUrl.hostname.includes('nilvera.com');
 
   if (isApiRequest) {
-    // API: network-first, offline'da son cache'e don.
-    event.respondWith(
-      fetch(event.request)
-        .then((networkResponse) => {
-          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse.clone()));
-          return networkResponse;
-        })
-        .catch(() => caches.match(event.request))
-    );
+    // API yanıtları HESABA ÖZELDİR ve API anahtarı header'dadır (URL tüm
+    // hesaplarda aynı). Önbelleğe alınırsa bir hesabın yanıtı URL eşleşmesiyle
+    // başka hesaba SIZAR (rakamların birebir aynı çıkması bundandı). Bu yüzden
+    // API isteklerini ASLA önbellekleme/okuma — her zaman doğrudan ağdan getir.
+    event.respondWith(fetch(event.request));
     return;
   }
 
