@@ -19,17 +19,18 @@ function getReceiverName(inv) { return inv.ReceiverName || inv.receiverName || i
 function getReceiverTaxNo(inv) { return inv.ReceiverTaxNumber || inv.receiverTaxNumber || inv.TaxNumber || inv.taxNumber || (inv.CustomerInfo || {}).TaxNumber || ''; }
 function getAmount(inv) { return inv.PayableAmount || inv.payableAmount || inv.TotalAmount || inv.totalAmount || 0; }
 function getStatus(inv) {
-  const answer = inv?.Answer || inv?.answer;
-  if (answer) {
-    const note = String(answer.AnswerNote || answer.answerNote || '').toUpperCase().trim();
-    const code = String(answer.AnswerCode || answer.answerCode || '').toLowerCase().trim();
-    if (note === 'RED' || code === 'rejected' || code === 'rejectall') return 'rejected';
-    if (code === 'documentansweredautomatically') return 'documentAnsweredAutomatically';
-    if (note === 'KABUL' || code === 'accepted' || code === 'acceptall') return 'accepted';
-  }
+  // Alıcı cevap kodu: liste yanıtında DÜZ (inv.AnswerCode), detay/GİB yanıtında
+  // NESTED (inv.Answer.AnswerCode) gelir. Her ikisini de destekle; cevap önceliklidir.
+  const answerNote = String(inv?.Answer?.AnswerNote || inv?.answer?.answerNote || '').toUpperCase().trim();
+  const answerCode = String(
+    inv?.Answer?.AnswerCode || inv?.answer?.answerCode || inv?.AnswerCode || inv?.answerCode || ''
+  ).trim();
+  if (answerCode) return answerCode;
+  if (answerNote === 'RED') return 'rejected';
+  if (answerNote === 'KABUL') return 'accepted';
   const invoiceStatusCode = inv?.InvoiceStatus?.Code || inv?.invoiceStatus?.code || '';
   if (invoiceStatusCode) return invoiceStatusCode;
-  return inv.StatusCode || inv.statusCode || inv.AnswerCode || inv.Status || inv.status || '';
+  return inv.StatusCode || inv.statusCode || inv.Status || inv.status || '';
 }
 function isRejected(inv) {
   const s = String(getStatus(inv) || '').toLowerCase();
