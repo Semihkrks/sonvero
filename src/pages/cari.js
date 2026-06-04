@@ -56,6 +56,18 @@ function getAmount(inv) {
 function getCurrency(inv) {
   return inv.CurrencyCode || inv.currencyCode || 'TRY';
 }
+function getStatus(inv) {
+  // Alıcı cevabı (Answer.AnswerCode) önceliklidir; yoksa GİB/zarf durumuna bak.
+  const answerCode = inv?.Answer?.AnswerCode || inv?.answer?.answerCode || '';
+  if (answerCode) return answerCode;
+  const invoiceStatusCode = inv?.InvoiceStatus?.Code || inv?.invoiceStatus?.code || '';
+  if (invoiceStatusCode) return invoiceStatusCode;
+  return inv.StatusCode || inv.statusCode || inv.AnswerCode || inv.Status || inv.status || '';
+}
+function isRejected(inv) {
+  const s = String(getStatus(inv) || '').toLowerCase();
+  return s === 'rejected' || s === 'red' || s === 'reddedildi' || s === '2005' || s === 'rejectall';
+}
 
 function fmtCur(a, c) {
   if (!a && a !== 0) return '—';
@@ -408,6 +420,9 @@ function buildCustomerMap() {
   customerMap = {};
 
   allInvoices.forEach(inv => {
+    // Reddedilen faturalar cari hesabına dahil edilmez (bakiyeyi şişirir).
+    if (isRejected(inv)) return;
+
     const isGiden = currentSource === 'giden';
     const name = isGiden ? getReceiverName(inv) : getSenderName(inv);
     const taxNo = isGiden ? getReceiverTaxNo(inv) : getSenderTaxNo(inv);

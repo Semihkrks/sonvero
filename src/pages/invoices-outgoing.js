@@ -516,8 +516,16 @@ function getReceiverTaxNo(inv) {
 }
 function getAmount(inv) { return inv.PayableAmount || inv.payableAmount || inv.TotalAmount || inv.totalAmount || 0; }
 function getCurrency(inv) { return inv.CurrencyCode || inv.currencyCode || 'TRY'; }
-function getStatus(inv) { return inv.StatusCode || inv.statusCode || inv.AnswerCode || inv.Status || inv.status || ''; }
-function getStatusDetail(inv) { return inv.StatusDetail || inv.statusDetail || ''; }
+function getStatus(inv) {
+  // Alıcı cevabı (Answer.AnswerCode) her zaman önceliklidir.
+  // InvoiceStatus.Code = GİB zarflanma durumu, Answer.AnswerCode = alıcının kabul/red cevabı.
+  const answerCode = inv?.Answer?.AnswerCode || inv?.answer?.answerCode || '';
+  if (answerCode) return answerCode;
+  const invoiceStatusCode = inv?.InvoiceStatus?.Code || inv?.invoiceStatus?.code || '';
+  if (invoiceStatusCode) return invoiceStatusCode;
+  return inv.StatusCode || inv.statusCode || inv.AnswerCode || inv.Status || inv.status || '';
+}
+function getStatusDetail(inv) { return inv?.Answer?.Description || inv?.Answer?.AnswerNote || inv.StatusDetail || inv.statusDetail || ''; }
 function getEnvelopeDate(inv) { return inv.EnvelopeDate || inv.envelopeDate || ''; }
 
 function applyFilters(page) {
@@ -1225,14 +1233,31 @@ function statusDisplay(inv) {
   const s = getStatus(inv);
   const detail = getStatusDetail(inv);
   const map = {
-    succeed: ['Fatura Otomatik Onaylandı.', 'success'],
-    waiting: ['İşlem Bekliyor', 'warning'],
-    approved: ['Fatura Onaylandı.', 'success'],
-    rejected: ['Reddedildi', 'danger'],
-    cancelled: ['İptal Edildi', 'danger'],
-    sent: ['Gönderildi', 'info'],
+    // Alıcı red (önce gelir — Answer.AnswerCode'dan)
+    rejected:     ['Reddedildi', 'danger'],
+    red:          ['Reddedildi', 'danger'],
+    reddedildi:   ['Reddedildi', 'danger'],
+    rejectall:    ['Reddedildi', 'danger'],
+    '2005':       ['Reddedildi', 'danger'],
+    // Alıcı kabul
+    accepted:     ['Kabul Edildi', 'success'],
+    approved:     ['Fatura Onaylandı', 'success'],
+    kabul:        ['Kabul Edildi', 'success'],
+    kabul_edildi: ['Kabul Edildi', 'success'],
+    acceptall:    ['Kabul Edildi', 'success'],
+    '2004':       ['Kabul Edildi', 'success'],
+    // GİB/zarf durumu
+    succeed:      ['Alıcıya İletildi', 'info'],
+    success:      ['Başarılı', 'success'],
+    basarili:     ['Başarılı', 'success'],
+    // Bekliyor / iletimde
+    waiting:      ['İşlem Bekliyor', 'warning'],
+    bekleyen:     ['Bekliyor', 'warning'],
+    // Diğer
+    cancelled:    ['İptal Edildi', 'danger'],
+    sent:         ['Gönderildi', 'info'],
   };
-  const [text, color] = map[s] || map[s?.toLowerCase()] || [detail || s || '—', 'default'];
+  const [text, color] = map[String(s).toLowerCase()] || [detail || s || '—', 'default'];
   const icon = color === 'success'
     ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
     : color === 'danger'

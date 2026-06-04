@@ -18,6 +18,17 @@ function getInvoiceNumber(inv) { return inv.InvoiceNumber || inv.invoiceNumber |
 function getReceiverName(inv) { return inv.ReceiverName || inv.receiverName || inv.CustomerName || inv.customerName || (inv.CustomerInfo || {}).Name || ''; }
 function getReceiverTaxNo(inv) { return inv.ReceiverTaxNumber || inv.receiverTaxNumber || inv.TaxNumber || inv.taxNumber || (inv.CustomerInfo || {}).TaxNumber || ''; }
 function getAmount(inv) { return inv.PayableAmount || inv.payableAmount || inv.TotalAmount || inv.totalAmount || 0; }
+function getStatus(inv) {
+  const answerCode = inv?.Answer?.AnswerCode || inv?.answer?.answerCode || '';
+  if (answerCode) return answerCode;
+  const invoiceStatusCode = inv?.InvoiceStatus?.Code || inv?.invoiceStatus?.code || '';
+  if (invoiceStatusCode) return invoiceStatusCode;
+  return inv.StatusCode || inv.statusCode || inv.AnswerCode || inv.Status || inv.status || '';
+}
+function isRejected(inv) {
+  const s = String(getStatus(inv) || '').toLowerCase();
+  return s === 'rejected' || s === 'red' || s === 'reddedildi' || s === '2005' || s === 'rejectall';
+}
 function fmtCur(a) { try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(a); } catch { return `${a} TRY`; } }
 function fmtDate(d) { try { return new Date(d).toLocaleDateString('tr-TR'); } catch { return d; } }
 function getDefaultRange() { const now = new Date(); return { start: `${now.getFullYear()}-01-01`, end: now.toISOString().slice(0,10) }; }
@@ -157,6 +168,9 @@ async function loadMultiAccountData(page) {
 
   // GEÇİŞ 1 — Tüm hesapların FATURALARI: müşteri haritasını VKN (yoksa isim) ile kur.
   for (const { inv, acc } of pendingInvoices) {
+    // Reddedilen faturalar bakiye ve fatura sayacına dahil edilmez.
+    if (isRejected(inv)) continue;
+
     const name = getReceiverName(inv) || 'Bilinmeyen';
     const taxNo = getReceiverTaxNo(inv) || '—';
     const amount = parseFloat(getAmount(inv) || 0);
