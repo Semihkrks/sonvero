@@ -96,10 +96,16 @@ function _getMovementDate(item) {
  */
 function normalizeForCari(inv, source, isSpecificCustomer) {
   const isCollection = !!inv?._isCollection;
-  const isGelen = source === 'gelen';
-  const name = isGelen ? _getSenderName(inv) : _getReceiverName(inv);
+  // Yön ÖĞE bazında belirlenir: önce hareketin/faturanın kendi _direction'ı,
+  // yoksa global source. Böylece "tumu" modunda alım faturaları "alış",
+  // satışlar "satış" olarak doğru gider.
+  const itemDirection = inv?._direction || inv?.raw?._direction || source;
+  const isGelen = !isCollection && itemDirection === 'gelen';
+  // Alan çıkarımı ham fatura üzerinden (hareket nesnesi .raw taşır).
+  const rawInv = inv?.raw || inv;
+  const name = isGelen ? _getSenderName(rawInv) : _getReceiverName(rawInv);
   const dateStr = _getMovementDate(inv);
-  const amount = parseFloat(isCollection ? (inv.amount || 0) : (_getAmount(inv) || 0));
+  const amount = parseFloat(isCollection ? (inv.amount || 0) : (_getAmount(rawInv) || 0));
 
   let dateObj = new Date();
   let ayAdi = 'Bilinmeyen';
@@ -121,14 +127,13 @@ function normalizeForCari(inv, source, isSpecificCustomer) {
     ? (inv.description || `${prefix}${ayAdi} tahsilat`)
     : `${prefix}${ayAdi} ${isGelen ? 'alış' : 'satış'}`;
 
-  const tur = isCollection ? (inv.type || 'Tahsilat') : 'Fatura';
+  const tur = isCollection ? (inv.type || 'Tahsilat') : (isGelen ? 'Alış Faturası' : 'Satış Faturası');
   const borc = isCollection ? 0 : (!isGelen ? amount : 0);
   const alacak = isCollection ? amount : (isGelen ? amount : 0);
 
-  // KDV kırılımı (sadece faturalar için) — inv.raw varsa ham fatura objesini kullan
+  // KDV kırılımı (sadece faturalar için) — ham fatura objesi (rawInv) üzerinden
   let matrah = 0, kdvOrani = 0, kdvTutar = 0;
   if (!isCollection) {
-    const rawInv = inv.raw || inv;
     const kdv = _calcKdv(rawInv);
     matrah = kdv.matrah;
     kdvOrani = kdv.kdvOrani;
@@ -188,14 +193,14 @@ function createCariWorkbook(records, titleText) {
 
   worksheet.mergeCells('B2:H2');
   const noteDescCell = worksheet.getCell('B2');
-  noteDescCell.value = 'Matrah = KDV hariç tutar / KDV = vergi tutarı / Borç (Satış) = toplam fatura / Alacak (Tahsilat) = gelen ödeme';
+  noteDescCell.value = 'Matrah = KDV hariç tutar / KDV = vergi tutarı / Borç (Satış) = satış faturaları / Alacak (Alış+Tahsilat) = alış faturaları + tahsilatlar';
   noteDescCell.font = { name: 'Calibri', size: 10 };
   noteDescCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFE699' } };
   noteDescCell.alignment = { vertical: 'bottom', horizontal: 'left' };
 
   // 3. Satır: Başlıklar
   const headerRow = worksheet.getRow(3);
-  headerRow.values = ['Tarih', 'Tür', 'Açıklama', 'Matrah', 'KDV %', 'KDV Tutarı', 'Borç (Satış)', 'Alacak (Tahsilat)', 'Ay No', 'Ay Adı', 'Kontrol'];
+  headerRow.values = ['Tarih', 'Tür', 'Açıklama', 'Matrah', 'KDV %', 'KDV Tutarı', 'Borç (Satış)', 'Alacak (Alış+Tahsilat)', 'Ay No', 'Ay Adı', 'Kontrol'];
   
   ['A3', 'B3', 'C3', 'D3', 'E3', 'F3', 'G3', 'H3', 'I3', 'J3', 'K3'].forEach(c => {
     const cell = worksheet.getCell(c);
@@ -310,7 +315,7 @@ function createCariWorkbook(records, titleText) {
 
   // 3. Satır: Başlıklar
   const muHeader = muavinSheet.getRow(3);
-  muHeader.values = ['Tarih', 'Tür', 'Açıklama', 'Borç (Satış)', 'Alacak (Tahsilat)', 'Bakiye'];
+  muHeader.values = ['Tarih', 'Tür', 'Açıklama', 'Borç (Satış)', 'Alacak (Alış+Tahsilat)', 'Bakiye'];
   
   ['A3', 'B3', 'C3', 'D3', 'E3', 'F3'].forEach(c => {
     const cell = muavinSheet.getCell(c);
