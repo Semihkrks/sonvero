@@ -57,9 +57,14 @@ function getCurrency(inv) {
   return inv.CurrencyCode || inv.currencyCode || 'TRY';
 }
 function getStatus(inv) {
-  // Alıcı cevabı (Answer.AnswerCode) önceliklidir; yoksa GİB/zarf durumuna bak.
-  const answerCode = inv?.Answer?.AnswerCode || inv?.answer?.answerCode || '';
-  if (answerCode) return answerCode;
+  const answer = inv?.Answer || inv?.answer;
+  if (answer) {
+    const note = String(answer.AnswerNote || answer.answerNote || '').toUpperCase().trim();
+    const code = String(answer.AnswerCode || answer.answerCode || '').toLowerCase().trim();
+    if (note === 'RED' || code === 'rejected' || code === 'rejectall') return 'rejected';
+    if (code === 'documentansweredautomatically') return 'documentAnsweredAutomatically';
+    if (note === 'KABUL' || code === 'accepted' || code === 'acceptall') return 'accepted';
+  }
   const invoiceStatusCode = inv?.InvoiceStatus?.Code || inv?.invoiceStatus?.code || '';
   if (invoiceStatusCode) return invoiceStatusCode;
   return inv.StatusCode || inv.statusCode || inv.AnswerCode || inv.Status || inv.status || '';
