@@ -137,7 +137,7 @@ let allInvoices = [];
 let allCollections = [];
 let customerMap = {};  // { customerKey: { name, taxNo, invoices: [], totalBorc, totalAlacak } }
 let selectedCustomer = null;
-let currentSource = 'giden'; // 'giden' or 'gelen'
+let currentSource = 'tumu'; // 'tumu' (giden+gelen) | 'giden' | 'gelen'
 let cachedCariAccountId = '';
 let cariLoadSeq = 0;
 let cariAbort = null;
@@ -178,7 +178,8 @@ export async function renderCariPage() {
       <div class="filter-group">
         <label class="filter-label">Kaynak</label>
         <select class="filter-input" id="cariSourceFilter">
-          <option value="giden" selected>Giden Kutusu (Satış)</option>
+          <option value="tumu" selected>Tümü (Giden + Gelen)</option>
+          <option value="giden">Giden Kutusu (Satış)</option>
           <option value="gelen">Gelen Kutusu (Alım)</option>
         </select>
       </div>
@@ -316,7 +317,7 @@ async function loadCariData(page) {
   }
   cachedCariAccountId = accountId;
 
-  currentSource = page.querySelector('#cariSourceFilter')?.value || 'giden';
+  currentSource = page.querySelector('#cariSourceFilter')?.value || 'tumu';
   const dateStart = page.querySelector('#cariDateStart')?.value || '';
   const dateEnd = page.querySelector('#cariDateEnd')?.value || '';
 
@@ -326,7 +327,7 @@ async function loadCariData(page) {
       <div class="cari-loading-state">
         <div style="animation:pulse 1.5s infinite">${ic.noData}</div>
         <p>Faturalar yükleniyor...</p>
-        <p style="font-size:11px;color:var(--text-muted)">${account.name} · ${currentSource === 'giden' ? 'Giden Kutusu' : 'Gelen Kutusu'}</p>
+        <p style="font-size:11px;color:var(--text-muted)">${account.name} · ${currentSource === 'tumu' ? 'Giden + Gelen' : (currentSource === 'giden' ? 'Giden Kutusu' : 'Gelen Kutusu')}</p>
       </div>`;
   }
 
@@ -349,24 +350,29 @@ async function loadCariData(page) {
     }
 
     let fetchedInvoices = [];
+    const wantGiden = currentSource === 'giden' || currentSource === 'tumu';
+    const wantGelen = currentSource === 'gelen' || currentSource === 'tumu';
 
-    if (currentSource === 'giden') {
-      // Giden = Sales (E-Fatura + E-Arşiv)
-      const [efRes, eaRes] = await Promise.allSettled([
-        fetchAllPages(EInvoiceWithAccount.listSales, { StartDate: dateStart, EndDate: dateEnd }),
-        fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
-      ]);
-      if (efRes.status === 'fulfilled') fetchedInvoices.push(...efRes.value.map(i => ({ ...i, _source: 'efatura' })));
-      if (eaRes.status === 'fulfilled') fetchedInvoices.push(...eaRes.value.map(i => ({ ...i, _source: 'earsiv' })));
-    } else {
-      // Gelen = Purchases
-      const [efRes, eaRes] = await Promise.allSettled([
-        fetchAllPages(EInvoiceWithAccount.listPurchases, { StartDate: dateStart, EndDate: dateEnd }),
-        fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
-      ]);
-      if (efRes.status === 'fulfilled') fetchedInvoices.push(...efRes.value.map(i => ({ ...i, _source: 'efatura' })));
-      if (eaRes.status === 'fulfilled') fetchedInvoices.push(...eaRes.value.map(i => ({ ...i, _source: 'earsiv' })));
+    // Her faturayı yönüyle (_direction) etiketliyoruz: giden=satış (borç), gelen=alım (alacak).
+    // Böylece bir müşterinin hem giden hem gelen faturaları aynı cari'de birleşir.
+    const tasks = [];
+    if (wantGiden) {
+      // Giden = Satış (E-Fatura Sale + E-Arşiv — e-arşiv daima giden/satıştır)
+      tasks.push(fetchAllPages(EInvoiceWithAccount.listSales, { StartDate: dateStart, EndDate: dateEnd })
+        .then(r => r.map(i => ({ ...i, _source: 'efatura', _direction: 'giden' }))));
+      tasks.push(fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
+        .then(r => r.map(i => ({ ...i, _source: 'earsiv', _direction: 'giden' }))));
     }
+    if (wantGelen) {
+      // Gelen = Alım (E-Fatura Purchase)
+      tasks.push(fetchAllPages(EInvoiceWithAccount.listPurchases, { StartDate: dateStart, EndDate: dateEnd })
+        .then(r => r.map(i => ({ ...i, _source: 'efatura', _direction: 'gelen' }))));
+    }
+
+    const results = await Promise.allSettled(tasks);
+    results.forEach(res => {
+      if (res.status === 'fulfilled' && Array.isArray(res.value)) fetchedInvoices.push(...res.value);
+    });
 
     const fetchedCollections = await listCollections({
       accountId: account.id,
@@ -429,7 +435,9 @@ function buildCustomerMap() {
     // Reddedilen faturalar cari hesabına dahil edilmez (bakiyeyi şişirir).
     if (isRejected(inv)) return;
 
-    const isGiden = currentSource === 'giden';
+    // Yön faturanın kendi etiketinden gelir (_direction). 'tumu' modunda her fatura
+    // kendi yönüne göre işlenir: giden→alıcı/borç, gelen→gönderici/alacak.
+    const isGiden = (inv._direction || currentSource) === 'giden';
     const name = isGiden ? getReceiverName(inv) : getSenderName(inv);
     const taxNo = isGiden ? getReceiverTaxNo(inv) : getSenderTaxNo(inv);
     const key = getCustomerKey(name, taxNo);
@@ -754,7 +762,7 @@ function renderDetailPanel(page, customer, key) {
         <span class="cari-detail-stat-value" style="color:var(--info)">${fmtCur(customer.totalBorc, 'TRY')}</span>
       </div>
       <div class="cari-detail-stat">
-        <span class="cari-detail-stat-label">Toplam Alacak (Tahsilat)</span>
+        <span class="cari-detail-stat-label">Toplam Alacak (Alım + Tahsilat)</span>
         <span class="cari-detail-stat-value" style="color:var(--success)">${fmtCur(customer.totalAlacak, 'TRY')}</span>
       </div>
       <div class="cari-detail-stat">
@@ -776,7 +784,7 @@ function renderDetailPanel(page, customer, key) {
             <th>Tür</th>
             <th>Fatura No / Açıklama</th>
             <th>Borç (Satış)</th>
-            <th>Alacak (Tahsilat)</th>
+            <th>Alacak (Alım + Tahsilat)</th>
             <th>Bakiye</th>
           </tr>
         </thead>
