@@ -194,7 +194,11 @@ export async function renderIncomingInvoices(options = {}) {
     </div>
   `;
 
-  page.querySelector('#applyFilter')?.addEventListener('click', () => applyFilters(page));
+  page.querySelector('#applyFilter')?.addEventListener('click', () => {
+    // Önbelleği temizle ve yeni tarih aralığıyla API'ye git
+    resetIncomingCache();
+    loadIncoming(page, options);
+  });
   page.querySelector('#searchInput')?.addEventListener('input', () => applyFilters(page));
   setupFilterToggle(page);
 
