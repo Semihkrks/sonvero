@@ -946,6 +946,84 @@ function _writeTitle(ws, text, cols = 'L') {
   ws.getRow(1).height = 25;
 }
 
+// Satırları müşteri/firma (VKN, yoksa isim) bazında topla.
+function _aggregateCustomers(rows) {
+  const map = {};
+  rows.forEach(r => {
+    const key = ((r.vkn && r.vkn !== '—' ? r.vkn : r.name) || 'bilinmeyen').toLocaleLowerCase('tr-TR').trim();
+    if (!map[key]) map[key] = { name: r.name || 'Bilinmeyen', vkn: r.vkn || '—', satisAdet: 0, alisAdet: 0, tahAdet: 0, satisMatrah: 0, satisKdv: 0, satisToplam: 0, alisToplam: 0, tahsilat: 0, rows: [] };
+    const c = map[key];
+    if (r.name && c.name === 'Bilinmeyen') c.name = r.name;
+    if (r.vkn && r.vkn !== '—' && c.vkn === '—') c.vkn = r.vkn;
+    c.rows.push(r);
+    if (r.tur === 'Satış') { c.satisAdet++; c.satisMatrah += r.matrah; c.satisKdv += r.kdvTutar; c.satisToplam += r.borc; }
+    else if (r.tur === 'Alış') { c.alisAdet++; c.alisToplam += r.alacak; }
+    else if (r.tur === 'Tahsilat') { c.tahAdet++; c.tahsilat += r.alacak; }
+  });
+  return map;
+}
+
+// SAYFA 1: Müşteri Özeti — her firma tek satır, sadece toplamlar.
+function _writeCustomerSummarySheet(workbook, customers, titleText) {
+  const ws = workbook.addWorksheet('Müşteri Özeti', { properties: { tabColor: { argb: 'FF1F4E78' } } });
+  ws.columns = [
+    { key: 'A', width: 34 }, { key: 'B', width: 16 }, { key: 'C', width: 10 },
+    { key: 'D', width: 16 }, { key: 'E', width: 14 }, { key: 'F', width: 17 },
+    { key: 'G', width: 16 }, { key: 'H', width: 16 }, { key: 'I', width: 17 }
+  ];
+  _writeTitle(ws, titleText, 'I');
+
+  const headers = ['Firma / Müşteri', 'VKN/TCKN', 'Satış Adet', 'Matrah', 'KDV', 'Toplam Satış', 'Alış', 'Tahsilat', 'Bakiye'];
+  const hr = ws.getRow(3);
+  hr.values = headers;
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].forEach(c => {
+    const cell = ws.getCell(`${c}3`);
+    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  });
+  ws.autoFilter = 'A3:I3';
+
+  let r = 4;
+  let tMatrah = 0, tKdv = 0, tSatis = 0, tAlis = 0, tTah = 0, tAdet = 0;
+  customers.forEach(c => {
+    const bakiye = c.satisToplam - c.alisToplam - c.tahsilat;
+    const row = ws.getRow(r);
+    row.values = [c.name, c.vkn, c.satisAdet, c.satisMatrah, c.satisKdv, c.satisToplam, c.alisToplam, c.tahsilat, bakiye];
+    const isEven = r % 2 === 0;
+    ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].forEach(col => {
+      const cell = row.getCell(col);
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFB4C6E7' } }, bottom: { style: 'thin', color: { argb: 'FFB4C6E7' } },
+        left: { style: 'thin', color: { argb: 'FFB4C6E7' } }, right: { style: 'thin', color: { argb: 'FFB4C6E7' } }
+      };
+      if (isEven) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F6FC' } };
+      if (['D', 'E', 'F', 'G', 'H', 'I'].includes(col)) { cell.numFmt = '#,##0.00;-#,##0.00;"-"'; cell.alignment = { horizontal: 'right' }; }
+      else if (col === 'C') cell.alignment = { horizontal: 'center' };
+      else cell.alignment = { horizontal: 'left' };
+    });
+    row.getCell('A').font = { name: 'Calibri', bold: true };
+    row.getCell('F').font = { name: 'Calibri', color: { argb: 'FF00B050' } };
+    row.getCell('G').font = { name: 'Calibri', color: { argb: 'FFC00000' } };
+    row.getCell('H').font = { name: 'Calibri', color: { argb: 'FF0000FF' } };
+    row.getCell('I').font = { name: 'Calibri', bold: true, color: { argb: bakiye > 0 ? 'FFC00000' : 'FF00B050' } };
+    tMatrah += c.satisMatrah; tKdv += c.satisKdv; tSatis += c.satisToplam; tAlis += c.alisToplam; tTah += c.tahsilat; tAdet += c.satisAdet;
+    r++;
+  });
+
+  const tr = ws.getRow(r);
+  tr.values = ['GENEL TOPLAM', '', tAdet, tMatrah, tKdv, tSatis, tAlis, tTah, tSatis - tAlis - tTah];
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'].forEach(col => {
+    const cell = tr.getCell(col);
+    cell.font = { name: 'Calibri', bold: true, size: 12 };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF1DE' } };
+    if (['D', 'E', 'F', 'G', 'H', 'I'].includes(col)) { cell.numFmt = '#,##0.00;-#,##0.00;"-"'; cell.alignment = { horizontal: 'right' }; }
+    else if (col === 'C') cell.alignment = { horizontal: 'center' };
+  });
+  ws.getRow(r).height = 20;
+}
+
 export async function exportAllTransactions(items, accounts, opts = {}) {
   const { layout = 'tum', direction = 'both', withTahsilat = true } = opts;
   try {
@@ -968,24 +1046,33 @@ export async function exportAllTransactions(items, accounts, opts = {}) {
     const dirLabel = direction === 'satis' ? 'Satış' : direction === 'alis' ? 'Alış' : 'Satış+Alış';
     const tahLabel = withTahsilat ? ' +Tahsilat' : '';
 
-    if (layout === 'ayri') {
-      // ── Her hesap ayrı sekme ──
-      const summary = [];
-      accList.forEach(a => {
-        const rows = rowsByAccount[a.id] || [];
-        if (rows.length === 0) return;
-        const safeTab = (a.name || 'Hesap').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 28);
-        const ws = workbook.addWorksheet(safeTab || 'Hesap', { properties: { tabColor: { argb: _normalizeHex(a.color) } } });
-        _setupTxColumns(ws);
-        _writeTitle(ws, `${(a.name || '').toUpperCase()} — TÜM İŞLEMLER (${dirLabel}${tahLabel})`);
-        const res = _writeTxBlock(ws, 3, rows);
-        summary.push({ name: a.name, borc: res.totalBorc, alacak: res.totalAlacak, adet: rows.length });
-      });
+    // Tüm satırları düz listede topla (müşteri bazlı sayfalar için)
+    const allRows = [];
+    Object.values(rowsByAccount).forEach(arr => allRows.push(...arr));
 
-      // ── Genel Özet sekmesi (en başa al) ──
-      const ws = workbook.addWorksheet('Genel Özet', { properties: { tabColor: { argb: 'FF1F4E78' } } });
+    // ── SAYFA 1: MÜŞTERİ ÖZETİ (sadece firma isimleri + toplamlar) ──
+    const custMap = _aggregateCustomers(allRows);
+    const custSorted = Object.values(custMap)
+      .sort((a, b) => (b.satisToplam + b.alisToplam) - (a.satisToplam + a.alisToplam));
+    _writeCustomerSummarySheet(workbook, custSorted, `MÜŞTERİ ÖZETİ (${dirLabel}${tahLabel})`);
+
+    // ── SAYFA 2: MÜŞTERİ DETAY (her firma ayrı blok, fatura no + matrah) ──
+    const custDetail = workbook.addWorksheet('Müşteri Detay', { properties: { tabColor: { argb: 'FF4472C4' } } });
+    _setupTxColumns(custDetail);
+    _writeTitle(custDetail, `MÜŞTERİ DETAY — FATURA BAZLI (${dirLabel}${tahLabel})`);
+    let cr = 3;
+    custSorted.forEach(c => {
+      const rws = c.rows.slice().sort((a, b) => (a.dateObj || 0) - (b.dateObj || 0));
+      const res = _writeTxBlock(custDetail, cr, rws, { groupTitle: `${c.name}   (VKN: ${c.vkn})`, groupColor: '1F4E78' });
+      cr = res.nextRow;
+    });
+
+    // ── HESAP BAZLI SAYFALAR (layout seçimine göre) ──
+    if (layout === 'ayri') {
+      // Genel Özet (hesap bazlı) — müşteri sayfalarından sonra
+      const ws = workbook.addWorksheet('Hesap Özeti', { properties: { tabColor: { argb: 'FFFFC000' } } });
       ws.columns = [{ key: 'A', width: 32 }, { key: 'B', width: 14 }, { key: 'C', width: 20 }, { key: 'D', width: 22 }, { key: 'E', width: 18 }];
-      _writeTitle(ws, `TÜM İŞLEMLER — GENEL ÖZET (${dirLabel}${tahLabel})`, 'E');
+      _writeTitle(ws, `HESAP BAZLI ÖZET (${dirLabel}${tahLabel})`, 'E');
       const hr = ws.getRow(3);
       hr.values = ['Hesap', 'Hareket', 'Borç (Satış)', 'Alacak (Alış+Tahsilat)', 'Bakiye'];
       ['A3', 'B3', 'C3', 'D3', 'E3'].forEach(c => {
@@ -995,14 +1082,18 @@ export async function exportAllTransactions(items, accounts, opts = {}) {
         cell.alignment = { vertical: 'middle', horizontal: 'center' };
       });
       let rr = 4, tb = 0, ta = 0, tc = 0;
-      summary.forEach(s => {
+      accList.forEach(a => {
+        const rows = rowsByAccount[a.id] || [];
+        if (rows.length === 0) return;
+        const borc = rows.reduce((s, x) => s + x.borc, 0);
+        const alacak = rows.reduce((s, x) => s + x.alacak, 0);
         const row = ws.getRow(rr++);
-        row.values = [s.name, s.adet, s.borc, s.alacak, s.borc - s.alacak];
+        row.values = [a.name, rows.length, borc, alacak, borc - alacak];
         row.getCell('A').font = { bold: true };
         row.getCell('B').alignment = { horizontal: 'center' };
         ['C', 'D', 'E'].forEach(col => { row.getCell(col).numFmt = '#,##0.00;-#,##0.00;"-"'; row.getCell(col).alignment = { horizontal: 'right' }; });
-        row.getCell('E').font = { bold: true, color: { argb: (s.borc - s.alacak) > 0 ? 'FFC00000' : 'FF00B050' } };
-        tb += s.borc; ta += s.alacak; tc += s.adet;
+        row.getCell('E').font = { bold: true, color: { argb: (borc - alacak) > 0 ? 'FFC00000' : 'FF00B050' } };
+        tb += borc; ta += alacak; tc += rows.length;
       });
       const total = ws.getRow(rr);
       total.values = ['GENEL TOPLAM', tc, tb, ta, tb - ta];
@@ -1010,25 +1101,33 @@ export async function exportAllTransactions(items, accounts, opts = {}) {
       total.getCell('B').alignment = { horizontal: 'center' };
       ['C', 'D', 'E'].forEach(col => { total.getCell(col).numFmt = '#,##0.00;-#,##0.00;"-"'; total.getCell(col).alignment = { horizontal: 'right' }; });
       total.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
-      // Özet sekmesini ilk sıraya taşı
-      workbook.worksheets.unshift(workbook.worksheets.pop());
+
+      // Her hesap ayrı sekme (fatura no + matrah dahil)
+      accList.forEach(a => {
+        const rows = (rowsByAccount[a.id] || []).slice().sort((x, y) => (x.dateObj || 0) - (y.dateObj || 0));
+        if (rows.length === 0) return;
+        const safeTab = (a.name || 'Hesap').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 28);
+        const aws = workbook.addWorksheet(safeTab || 'Hesap', { properties: { tabColor: { argb: _normalizeHex(a.color) } } });
+        _setupTxColumns(aws);
+        _writeTitle(aws, `${(a.name || '').toUpperCase()} — TÜM İŞLEMLER (${dirLabel}${tahLabel})`);
+        _writeTxBlock(aws, 3, rows);
+      });
       workbook.views = [{ activeTab: 0, firstSheet: 0 }];
     } else {
-      // ── Tek sayfa, hesaplara göre gruplu ──
-      const ws = workbook.addWorksheet('Tüm Hareketler', { properties: { tabColor: { argb: 'FF00B050' } } });
+      // Tek sayfa, hesaplara göre gruplu
+      const ws = workbook.addWorksheet('Hesaplara Göre', { properties: { tabColor: { argb: 'FF00B050' } } });
       _setupTxColumns(ws);
-      _writeTitle(ws, `TÜM İŞLEMLER — HESAPLARA GÖRE (${dirLabel}${tahLabel})`);
+      _writeTitle(ws, `HESAPLARA GÖRE — TÜM HAREKETLER (${dirLabel}${tahLabel})`);
       let r = 3;
       let grandB = 0, grandA = 0;
       accList.forEach(a => {
-        const rows = rowsByAccount[a.id] || [];
+        const rows = (rowsByAccount[a.id] || []).slice().sort((x, y) => (x.dateObj || 0) - (y.dateObj || 0));
         if (rows.length === 0) return;
         const res = _writeTxBlock(ws, r, rows, { groupTitle: a.name, groupColor: a.color });
         r = res.nextRow;
         grandB += res.totalBorc;
         grandA += res.totalAlacak;
       });
-      // Genel toplam
       ws.mergeCells(`A${r}:I${r}`);
       const gl = ws.getCell(`A${r}`);
       gl.value = 'TÜM HESAPLAR GENEL TOPLAMI:';
@@ -1046,6 +1145,7 @@ export async function exportAllTransactions(items, accounts, opts = {}) {
       ws.getCell(`J${r}`).font = { size: 14, bold: true, color: { argb: 'FF00B050' } };
       ws.getCell(`L${r}`).font = { size: 14, bold: true, color: { argb: (grandB - grandA) > 0 ? 'FFC00000' : 'FF00B050' } };
       ws.getRow(r).height = 25;
+      workbook.views = [{ activeTab: 0, firstSheet: 0 }];
     }
 
     const buffer = await workbook.xlsx.writeBuffer();
