@@ -782,6 +782,284 @@ export async function exportCustomerCari(invoices, customerName, source) {
   }
 }
 
+// ════════════════════════════════════════════════════════════════
+// TÜM İŞLEMLER EXPORT — Seçili Hesaplar Cari sayfası için
+// Satış + Alış + Tahsilat hareketlerini, iki farklı layout ile aktarır:
+//   layout 'tum'  → tek sayfa, hesaplara göre gruplanmış (kime ait belli)
+//   layout 'ayri' → her hesap ayrı sekme + "Genel Özet" sekmesi
+// ════════════════════════════════════════════════════════════════
+function _getInvoiceNumberAll(inv) { return inv.InvoiceNumber || inv.invoiceNumber || inv.InvoiceSerieOrNumber || ''; }
+function _getReceiverTaxNo(inv) { return inv.ReceiverTaxNumber || inv.receiverTaxNumber || inv.TaxNumber || inv.taxNumber || (inv.CustomerInfo || {}).TaxNumber || ''; }
+function _getSenderTaxNo(inv) { return inv.SenderTaxNumber || inv.senderTaxNumber || inv.TaxNumber || inv.taxNumber || (inv.SenderInfo || {}).TaxNumber || ''; }
+
+// Tek bir ham hareketi (fatura/tahsilat) export satırına çevirir.
+function _buildTxRow(item) {
+  const isTahsilat = item._type === 'tahsilat';
+  const isGelen = !isTahsilat && (item._direction === 'gelen');
+  const rawInv = item.raw || item;
+
+  const dateStr = isTahsilat ? item.date : _getInvoiceDate(rawInv);
+  const dateObj = dateStr && !isNaN(new Date(dateStr).getTime()) ? new Date(dateStr) : null;
+
+  const name = isTahsilat ? (item.customer_name || '')
+    : (isGelen ? _getSenderName(rawInv) : _getReceiverName(rawInv)) || '';
+  const vkn = isTahsilat ? (item.customer_tax_no || '')
+    : (isGelen ? _getSenderTaxNo(rawInv) : _getReceiverTaxNo(rawInv)) || '';
+  const faturaNo = isTahsilat ? (item.description || item.type || 'Tahsilat') : _getInvoiceNumberAll(rawInv);
+  const amount = parseFloat(isTahsilat ? (item.amount || 0) : (_getAmount(rawInv) || 0));
+
+  let matrah = 0, kdvOrani = 0, kdvTutar = 0;
+  if (!isTahsilat) { const k = _calcKdv(rawInv); matrah = k.matrah; kdvOrani = k.kdvOrani; kdvTutar = k.kdvTutar; }
+
+  const tur = isTahsilat ? 'Tahsilat' : (isGelen ? 'Alış' : 'Satış');
+  // Borç = bizim alacağımız (satış) ; Alacak = bizim borcumuz (alış) + tahsilat
+  const borc = (!isTahsilat && !isGelen) ? amount : 0;
+  const alacak = isTahsilat ? amount : (isGelen ? amount : 0);
+
+  return {
+    dateObj, hesapId: item._accountId || '', hesapAdi: item._accountName || '',
+    hesapColor: item._accountColor || 'FF808080', tur, name, vkn, faturaNo,
+    matrah, kdvOrani, kdvTutar, borc, alacak
+  };
+}
+
+const _TX_HEADERS = ['Tarih', 'Hesap', 'Tür', 'Müşteri / Tedarikçi', 'VKN/TCKN', 'Fatura No', 'Matrah', 'KDV %', 'KDV Tutarı', 'Borç (Satış)', 'Alacak (Alış+Tahsilat)', 'Bakiye'];
+const _TX_COLS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+
+function _setupTxColumns(ws) {
+  ws.columns = [
+    { key: 'A', width: 12 }, { key: 'B', width: 18 }, { key: 'C', width: 11 },
+    { key: 'D', width: 32 }, { key: 'E', width: 15 }, { key: 'F', width: 20 },
+    { key: 'G', width: 15 }, { key: 'H', width: 8 }, { key: 'I', width: 15 },
+    { key: 'J', width: 17 }, { key: 'K', width: 20 }, { key: 'L', width: 17 }
+  ];
+}
+
+function _normalizeHex(c) {
+  // '#3b82f6' → 'FF3B82F6' ; zaten 8 haneli ise dokunma
+  if (!c) return 'FF808080';
+  let h = String(c).replace('#', '').toUpperCase();
+  if (h.length === 6) h = 'FF' + h;
+  if (h.length === 8) return h;
+  return 'FF808080';
+}
+
+// Bir blok yazar: opsiyonel grup başlığı + kolon başlıkları + satırlar + ara/genel toplam.
+// Döner: { nextRow, totalBorc, totalAlacak }
+function _writeTxBlock(ws, fromRow, rows, opts = {}) {
+  const { groupTitle = null, groupColor = null } = opts;
+  let r = fromRow;
+
+  if (groupTitle) {
+    ws.mergeCells(`A${r}:L${r}`);
+    const gc = ws.getCell(`A${r}`);
+    gc.value = `■ ${groupTitle}`;
+    gc.font = { name: 'Calibri', size: 13, bold: true, color: { argb: 'FFFFFFFF' } };
+    gc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: _normalizeHex(groupColor) || 'FF4472C4' } };
+    gc.alignment = { vertical: 'middle', horizontal: 'left' };
+    ws.getRow(r).height = 20;
+    r++;
+  }
+
+  // Kolon başlıkları
+  const headerRow = ws.getRow(r);
+  headerRow.values = _TX_HEADERS;
+  _TX_COLS.forEach(c => {
+    const cell = ws.getCell(`${c}${r}`);
+    cell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+    cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+  });
+  ws.autoFilter = `A${r}:L${r}`;
+  r++;
+
+  let running = 0, totalBorc = 0, totalAlacak = 0;
+  rows.forEach(row => {
+    running += (row.borc - row.alacak);
+    totalBorc += row.borc;
+    totalAlacak += row.alacak;
+    const xr = ws.getRow(r);
+    xr.getCell('A').value = row.dateObj;
+    xr.getCell('B').value = row.hesapAdi;
+    xr.getCell('C').value = row.tur;
+    xr.getCell('D').value = row.name;
+    xr.getCell('E').value = row.vkn;
+    xr.getCell('F').value = row.faturaNo;
+    xr.getCell('G').value = row.matrah > 0 ? row.matrah : null;
+    xr.getCell('H').value = row.kdvOrani > 0 ? row.kdvOrani : null;
+    xr.getCell('I').value = row.kdvTutar > 0 ? row.kdvTutar : null;
+    xr.getCell('J').value = row.borc > 0 ? row.borc : null;
+    xr.getCell('K').value = row.alacak > 0 ? row.alacak : null;
+    xr.getCell('L').value = running;
+
+    const isEven = r % 2 === 0;
+    _TX_COLS.forEach(col => {
+      const cell = xr.getCell(col);
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFB4C6E7' } }, bottom: { style: 'thin', color: { argb: 'FFB4C6E7' } },
+        left: { style: 'thin', color: { argb: 'FFB4C6E7' } }, right: { style: 'thin', color: { argb: 'FFB4C6E7' } }
+      };
+      if (isEven) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F6FC' } };
+      if (col === 'A') { cell.numFmt = 'dd.mm.yyyy'; cell.alignment = { horizontal: 'center' }; }
+      else if (col === 'H') { cell.numFmt = '0"%"'; cell.alignment = { horizontal: 'center' }; }
+      else if (['G', 'I', 'J', 'K', 'L'].includes(col)) { cell.numFmt = '#,##0.00;-#,##0.00;"-"'; cell.alignment = { horizontal: 'right' }; }
+      else cell.alignment = { horizontal: 'left' };
+    });
+    // Tür renklendirme
+    const turCell = xr.getCell('C');
+    if (row.tur === 'Tahsilat') turCell.font = { name: 'Calibri', bold: true, color: { argb: 'FF0000FF' } };
+    else if (row.tur === 'Alış') turCell.font = { name: 'Calibri', bold: true, color: { argb: 'FFC00000' } };
+    else turCell.font = { name: 'Calibri', bold: true, color: { argb: 'FF00B050' } };
+    r++;
+  });
+
+  // Ara/Genel toplam
+  const tr = ws.getRow(r);
+  tr.getCell('F').value = 'TOPLAM:';
+  tr.getCell('F').font = { name: 'Calibri', bold: true };
+  tr.getCell('F').alignment = { horizontal: 'right' };
+  tr.getCell('J').value = totalBorc;
+  tr.getCell('K').value = totalAlacak;
+  tr.getCell('L').value = totalBorc - totalAlacak;
+  ['J', 'K', 'L'].forEach(col => {
+    const c = tr.getCell(col);
+    c.numFmt = '#,##0.00;-#,##0.00;"-"';
+    c.font = { name: 'Calibri', bold: true, size: 11 };
+    c.alignment = { horizontal: 'right' };
+    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEBF1DE' } };
+  });
+  tr.getCell('L').font = { name: 'Calibri', bold: true, color: { argb: (totalBorc - totalAlacak) > 0 ? 'FFC00000' : 'FF00B050' } };
+  _TX_COLS.forEach(c => { tr.getCell(c).border = { top: { style: 'medium', color: { argb: 'FF808080' } } }; });
+  r += 2;
+
+  return { nextRow: r, totalBorc, totalAlacak };
+}
+
+function _writeTitle(ws, text, cols = 'L') {
+  ws.mergeCells(`A1:${cols}1`);
+  const t = ws.getCell('A1');
+  t.value = text;
+  t.font = { name: 'Calibri', size: 16, bold: true, color: { argb: 'FFFFFFFF' } };
+  t.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+  t.alignment = { vertical: 'middle', horizontal: 'center' };
+  ws.getRow(1).height = 25;
+}
+
+export async function exportAllTransactions(items, accounts, opts = {}) {
+  const { layout = 'tum', direction = 'both', withTahsilat = true } = opts;
+  try {
+    const workbook = new ExcelJS.Workbook();
+
+    // Hesap sırası: verilen accounts listesi (id/name/color). Yoksa item'lerden çıkar.
+    let accList = (accounts && accounts.length) ? accounts.map(a => ({ id: a.id, name: a.name, color: a.color }))
+      : [...new Map(items.map(i => [i._accountId, { id: i._accountId, name: i._accountName, color: i._accountColor }])).values()];
+
+    // Tüm satırları üret, tarihe göre sırala (hesap içinde)
+    const rowsByAccount = {};
+    accList.forEach(a => { rowsByAccount[a.id] = []; });
+    items.forEach(it => {
+      const row = _buildTxRow(it);
+      if (!rowsByAccount[row.hesapId]) rowsByAccount[row.hesapId] = [];
+      rowsByAccount[row.hesapId].push(row);
+    });
+    Object.values(rowsByAccount).forEach(arr => arr.sort((a, b) => (a.dateObj || 0) - (b.dateObj || 0)));
+
+    const dirLabel = direction === 'satis' ? 'Satış' : direction === 'alis' ? 'Alış' : 'Satış+Alış';
+    const tahLabel = withTahsilat ? ' +Tahsilat' : '';
+
+    if (layout === 'ayri') {
+      // ── Her hesap ayrı sekme ──
+      const summary = [];
+      accList.forEach(a => {
+        const rows = rowsByAccount[a.id] || [];
+        if (rows.length === 0) return;
+        const safeTab = (a.name || 'Hesap').replace(/[\\/?*\[\]:]/g, ' ').slice(0, 28);
+        const ws = workbook.addWorksheet(safeTab || 'Hesap', { properties: { tabColor: { argb: _normalizeHex(a.color) } } });
+        _setupTxColumns(ws);
+        _writeTitle(ws, `${(a.name || '').toUpperCase()} — TÜM İŞLEMLER (${dirLabel}${tahLabel})`);
+        const res = _writeTxBlock(ws, 3, rows);
+        summary.push({ name: a.name, borc: res.totalBorc, alacak: res.totalAlacak, adet: rows.length });
+      });
+
+      // ── Genel Özet sekmesi (en başa al) ──
+      const ws = workbook.addWorksheet('Genel Özet', { properties: { tabColor: { argb: 'FF1F4E78' } } });
+      ws.columns = [{ key: 'A', width: 32 }, { key: 'B', width: 14 }, { key: 'C', width: 20 }, { key: 'D', width: 22 }, { key: 'E', width: 18 }];
+      _writeTitle(ws, `TÜM İŞLEMLER — GENEL ÖZET (${dirLabel}${tahLabel})`, 'E');
+      const hr = ws.getRow(3);
+      hr.values = ['Hesap', 'Hareket', 'Borç (Satış)', 'Alacak (Alış+Tahsilat)', 'Bakiye'];
+      ['A3', 'B3', 'C3', 'D3', 'E3'].forEach(c => {
+        const cell = ws.getCell(c);
+        cell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F4E78' } };
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      });
+      let rr = 4, tb = 0, ta = 0, tc = 0;
+      summary.forEach(s => {
+        const row = ws.getRow(rr++);
+        row.values = [s.name, s.adet, s.borc, s.alacak, s.borc - s.alacak];
+        row.getCell('A').font = { bold: true };
+        row.getCell('B').alignment = { horizontal: 'center' };
+        ['C', 'D', 'E'].forEach(col => { row.getCell(col).numFmt = '#,##0.00;-#,##0.00;"-"'; row.getCell(col).alignment = { horizontal: 'right' }; });
+        row.getCell('E').font = { bold: true, color: { argb: (s.borc - s.alacak) > 0 ? 'FFC00000' : 'FF00B050' } };
+        tb += s.borc; ta += s.alacak; tc += s.adet;
+      });
+      const total = ws.getRow(rr);
+      total.values = ['GENEL TOPLAM', tc, tb, ta, tb - ta];
+      total.font = { bold: true, size: 12 };
+      total.getCell('B').alignment = { horizontal: 'center' };
+      ['C', 'D', 'E'].forEach(col => { total.getCell(col).numFmt = '#,##0.00;-#,##0.00;"-"'; total.getCell(col).alignment = { horizontal: 'right' }; });
+      total.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+      // Özet sekmesini ilk sıraya taşı
+      workbook.worksheets.unshift(workbook.worksheets.pop());
+      workbook.views = [{ activeTab: 0, firstSheet: 0 }];
+    } else {
+      // ── Tek sayfa, hesaplara göre gruplu ──
+      const ws = workbook.addWorksheet('Tüm Hareketler', { properties: { tabColor: { argb: 'FF00B050' } } });
+      _setupTxColumns(ws);
+      _writeTitle(ws, `TÜM İŞLEMLER — HESAPLARA GÖRE (${dirLabel}${tahLabel})`);
+      let r = 3;
+      let grandB = 0, grandA = 0;
+      accList.forEach(a => {
+        const rows = rowsByAccount[a.id] || [];
+        if (rows.length === 0) return;
+        const res = _writeTxBlock(ws, r, rows, { groupTitle: a.name, groupColor: a.color });
+        r = res.nextRow;
+        grandB += res.totalBorc;
+        grandA += res.totalAlacak;
+      });
+      // Genel toplam
+      ws.mergeCells(`A${r}:I${r}`);
+      const gl = ws.getCell(`A${r}`);
+      gl.value = 'TÜM HESAPLAR GENEL TOPLAMI:';
+      gl.font = { name: 'Calibri', size: 14, bold: true };
+      gl.alignment = { horizontal: 'right', vertical: 'middle' };
+      ws.getCell(`J${r}`).value = grandB;
+      ws.getCell(`K${r}`).value = grandA;
+      ws.getCell(`L${r}`).value = grandB - grandA;
+      ['J', 'K', 'L'].forEach(col => {
+        const c = ws.getCell(`${col}${r}`);
+        c.numFmt = '#,##0.00;-#,##0.00;"-"';
+        c.font = { name: 'Calibri', size: 14, bold: true };
+        c.alignment = { horizontal: 'right', vertical: 'middle' };
+      });
+      ws.getCell(`J${r}`).font = { size: 14, bold: true, color: { argb: 'FF00B050' } };
+      ws.getCell(`L${r}`).font = { size: 14, bold: true, color: { argb: (grandB - grandA) > 0 ? 'FFC00000' : 'FF00B050' } };
+      ws.getRow(r).height = 25;
+    }
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const fileName = `Tum_Islemler_${layout === 'ayri' ? 'Ayri' : 'TekSayfa'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    saveAs(blob, fileName);
+
+    return { success: true, count: items.length };
+  } catch (error) {
+    console.error('exportAllTransactions error:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 export async function exportMultiAccountCari(invoices, customerName, accountBreakdown) {
   const _getInvoiceDate = inv => inv.IssueDate || inv.issueDate || inv.CreateDate || inv.CreatedDate || '';
   const _getInvoiceNumber = inv => inv.InvoiceNumber || inv.invoiceNumber || inv.InvoiceSerieOrNumber || '';

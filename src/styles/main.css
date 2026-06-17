@@ -3844,6 +3844,48 @@ tbody tr:last-child td {
 }
 
 /* ========================================================================= */
+/*            SECILI HESAPLAR CARI — hesap secici / yon / tahsilat          */
+/* ========================================================================= */
+.sac-link {
+  background: none; border: none; cursor: pointer; padding: 0;
+  color: var(--accent); font-size: 11px; font-weight: 600;
+}
+.sac-link:hover { text-decoration: underline; }
+
+.sac-chips {
+  display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px;
+}
+.sac-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border-radius: 20px; cursor: pointer;
+  border: 1.5px solid var(--chip-color, #3b82f6);
+  background: color-mix(in srgb, var(--chip-color, #3b82f6) 10%, transparent);
+  font-size: 12px; font-weight: 600; user-select: none;
+  transition: opacity .15s, filter .15s;
+}
+.sac-chip input { display: none; }
+.sac-chip .sac-dot { width: 9px; height: 9px; border-radius: 50%; }
+.sac-chip.off { opacity: .45; filter: grayscale(0.8); border-color: var(--border, #d1d5db); }
+
+.sac-segment {
+  display: inline-flex; border: 1px solid var(--border, #d1d5db);
+  border-radius: 7px; overflow: hidden; height: 34px;
+}
+.sac-segment button {
+  background: transparent; border: none; cursor: pointer;
+  padding: 0 14px; font-size: 12px; font-weight: 600;
+  color: var(--text-muted); border-right: 1px solid var(--border, #d1d5db);
+}
+.sac-segment button:last-child { border-right: none; }
+.sac-segment button.active { background: var(--accent); color: #fff; }
+
+.sac-toggle {
+  display: inline-flex; align-items: center; gap: 7px; height: 34px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.sac-toggle input { width: 16px; height: 16px; cursor: pointer; }
+
+/* ========================================================================= */
 /*                          ?? MOBIL ARAY�Z (PWA APP)                      */
 /* ========================================================================= */
 
