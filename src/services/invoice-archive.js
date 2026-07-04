@@ -34,7 +34,10 @@ function parseDateOnly(s) {
 }
 
 function getIssueDateStr(inv) {
-  const raw = inv?.IssueDate || inv?.issueDate || inv?.CreateDate || inv?.CreatedDate || '';
+  const raw = inv?.IssueDate || inv?.issueDate
+    // e-İrsaliye alanları (düz veya DespatchInfo altında nested)
+    || inv?.DespatchDate || inv?.DespatchInfo?.IssueDate || inv?.DespatchInfo?.DespatchDate
+    || inv?.CreateDate || inv?.CreatedDate || '';
   const d = parseDateOnly(raw);
   return d ? fmtDateParam(d) : null;
 }
@@ -179,6 +182,7 @@ function isMonthArchived(mStart, syncedAtStr) {
  * @param {Function} apiFn    (account, params, options) imzalı liste ucu
  * @param {Object}   account  Nilvera hesabı (id = Supabase accounts.id)
  * @param {string}   docType  'efatura_sale' | 'efatura_purchase' | 'earsiv' | 'earsiv_gib'
+ *                            | 'eirsaliye_sale' | 'eirsaliye_purchase'
  * @param {Object}   params   { StartDate, EndDate, ...API filtreleri }
  * @param {Object}   options  { signal, onProgress, stats: { failed } }
  */

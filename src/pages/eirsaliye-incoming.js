@@ -1,5 +1,5 @@
 import { EDespatch, EDespatchWithAccount } from '../api/nilvera.js';
-import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
+import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
@@ -856,9 +856,10 @@ async function loadIncoming(page, options = {}) {
 
   tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div style="padding:24px;text-align:center;color:var(--text-muted)">e-İrsaliye verileri yükleniyor...</div></td></tr>`;
 
-  // 6 ay limiti + tam sayfalama: merkezi fetcher dilimleyip birleştirir.
+  // Arşiv destekli fetch: kesinleşmiş aylar Supabase'den, son dönem API'den + arşive yazılır.
+  // 6 ay limiti chunking ile aşılır; IsArchived filtresi varsa arşiv otomatik bypass olur.
   const stats = { failed: false };
-  const fetchedItems = await fetchAllPagesChunked(EDespatchWithAccount.listPurchases, account, {
+  const fetchedItems = await fetchInvoicesSmart(EDespatchWithAccount.listPurchases, account, 'eirsaliye_purchase', {
     StartDate: startDate,
     EndDate: endDate,
     ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),

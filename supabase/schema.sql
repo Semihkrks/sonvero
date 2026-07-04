@@ -127,7 +127,7 @@ CREATE TABLE IF NOT EXISTS invoice_archive (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   account_id UUID REFERENCES accounts(id) ON DELETE CASCADE NOT NULL,
-  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv', 'earsiv_gib')),
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv', 'earsiv_gib', 'eirsaliye_sale', 'eirsaliye_purchase')),
   invoice_uuid TEXT NOT NULL,
   issue_date DATE,
   payload JSONB NOT NULL DEFAULT '{}',
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS invoice_archive_sync (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   account_id UUID REFERENCES accounts(id) ON DELETE CASCADE NOT NULL,
-  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv', 'earsiv_gib')),
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv', 'earsiv_gib', 'eirsaliye_sale', 'eirsaliye_purchase')),
   month DATE NOT NULL, -- ayın ilk günü
   synced_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE (account_id, doc_type, month)

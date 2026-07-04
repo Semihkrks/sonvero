@@ -41,7 +41,9 @@ export function extractItems(data) {
 }
 
 export function getInvoiceUuid(inv) {
-  return inv?.UUID || inv?.uuid || inv?.InvoiceUUID || inv?.invoiceUUID || inv?.Uuid || '';
+  return inv?.UUID || inv?.uuid || inv?.InvoiceUUID || inv?.invoiceUUID || inv?.Uuid
+    // e-İrsaliye liste yanıtlarında UUID nested gelebilir
+    || inv?.DespatchInfo?.UUID || inv?.DespatchInfo?.Uuid || '';
 }
 
 function dedupeKey(inv) {
