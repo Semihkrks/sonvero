@@ -3,7 +3,7 @@
 // Nilvera-Style with İşlemler & Kabul/Reddet
 // ══════════════════════════════════════════
 import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount, nilveraRequest } from '../api/nilvera.js';
-import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
+import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
@@ -330,22 +330,24 @@ async function loadIncoming(page, options = {}) {
     const dateStart = page.querySelector('#dateStart')?.value;
     const dateEnd = page.querySelector('#dateEnd')?.value;
 
-    // 6 ay limiti: uzun aralıklar merkezi fetcher'da dilimlenip birleştirilir.
-    async function fetchAllPages(apiFn, baseParams) {
+    // Arşiv destekli fetch: kesinleşmiş aylar Supabase'den, son dönem API'den + arşive yazılır.
+    // 6 ay limiti chunking ile aşılır. IsArchived gibi ek filtre varsa arşiv katmanı
+    // kendini otomatik devre dışı bırakıp salt-API (chunked) çalışır.
+    async function fetchAllPagesArchived(apiFn, docType, baseParams) {
       const stats = { failed: false };
-      const allItems = await fetchAllPagesChunked(apiFn, account, baseParams, { signal, stats, maxPages: 10 });
+      const allItems = await fetchInvoicesSmart(apiFn, account, docType, baseParams, { signal, stats, maxPages: 10 });
       if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
       if (allItems.length === 0 && stats.failed) return { success: false, error: 'Veri alınamadı' };
       return { success: true, data: allItems };
     }
 
     const [efaturaRes, earsivRes] = await Promise.allSettled([
-      fetchAllPages(EInvoiceWithAccount.listPurchases, {
+      fetchAllPagesArchived(EInvoiceWithAccount.listPurchases, 'efatura_purchase', {
         StartDate: dateStart,
         EndDate: dateEnd,
         ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),
       }),
-      fetchAllPages(EArchiveWithAccount.listGibPurchases, {
+      fetchAllPagesArchived(EArchiveWithAccount.listGibPurchases, 'earsiv_gib', {
         StartDate: dateStart,
         EndDate: dateEnd,
         ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),

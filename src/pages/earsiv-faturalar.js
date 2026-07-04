@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════
 import { EInvoice, EArchive, EArchiveWithAccount } from '../api/nilvera.js';
 import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
+import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
@@ -313,8 +314,16 @@ async function loadEarsiv(page) {
       return { success: true, data: allItems };
     }
 
+    // İlk çağrı arşiv destekli (Supabase'e de yazar); ikinci çağrı aynı uç olduğu için
+    // arşiv yazma yarışı olmasın diye salt-API (chunked) kalır.
     const [efaturaRes, earsivRes] = await Promise.allSettled([
-      fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd }),
+      (async () => {
+        const stats = { failed: false };
+        const items = await fetchInvoicesSmart(EArchiveWithAccount.listInvoices, account, 'earsiv', { StartDate: dateStart, EndDate: dateEnd }, { signal, stats, maxPages: 10 });
+        if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
+        if (items.length === 0 && stats.failed) return { success: false, error: 'Veri alınamadı' };
+        return { success: true, data: items };
+      })(),
       fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
     ]);
 

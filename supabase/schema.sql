@@ -119,15 +119,15 @@ END $$;
 
 -- ══════════════════════════════════════════
 -- Fatura Arşivi — Nilvera 6 ay limiti + kalıcı yerel kopya
--- Faturalar kesildikten sonra en fazla ~1 ay içinde iptal/silinebilir.
--- Bu yüzden ay sonu + 35 gün geçmiş aylar "kesinleşmiş" sayılır ve
+-- Faturalar kesildikten sonra kısa süre içinde iptal/silinebilir.
+-- Bu yüzden ay sonu + 20 gün geçmiş aylar "kesinleşmiş" sayılır ve
 -- arşivden okunur; son dönem her zaman API'den taze çekilir.
 -- ══════════════════════════════════════════
 CREATE TABLE IF NOT EXISTS invoice_archive (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   account_id UUID REFERENCES accounts(id) ON DELETE CASCADE NOT NULL,
-  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv')),
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv', 'earsiv_gib')),
   invoice_uuid TEXT NOT NULL,
   issue_date DATE,
   payload JSONB NOT NULL DEFAULT '{}',
@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS invoice_archive_sync (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   account_id UUID REFERENCES accounts(id) ON DELETE CASCADE NOT NULL,
-  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv')),
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv', 'earsiv_gib')),
   month DATE NOT NULL, -- ayın ilk günü
   synced_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE (account_id, doc_type, month)

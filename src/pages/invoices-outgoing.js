@@ -4,6 +4,7 @@
 // ══════════════════════════════════════════
 import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
+import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
@@ -395,6 +396,16 @@ async function loadOutgoing(page, options = {}) {
       return { success: true, data: allItems };
     }
 
+    // Arşiv destekli: kesinleşmiş aylar Supabase'den, son dönem API'den + arşive yazılır.
+    // (Filtre parametresi varsa — IsArchived vb. — arşiv katmanı kendini otomatik devre dışı bırakır.)
+    async function fetchAllPagesArchived(apiFn, docType, baseParams) {
+      const stats = { failed: false };
+      const allItems = await fetchInvoicesSmart(apiFn, account, docType, baseParams, { signal, stats, maxPages: 10 });
+      if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
+      if (allItems.length === 0 && stats.failed) return { success: false, error: 'Veri alınamadı' };
+      return { success: true, data: allItems };
+    }
+
     // E-Arşiv için de aynı date formatını ve DateFilterType eklemeliyiz. .NET api bunu bekliyor
     const apiDateStart = dateStart ? (dateStart + 'T00:00:00') : undefined;
     const apiDateEnd = dateEnd ? (dateEnd + 'T23:59:59') : undefined;
@@ -413,9 +424,10 @@ async function loadOutgoing(page, options = {}) {
     };
     const draftParams = { StartDate: apiDateStart, EndDate: apiDateEnd };
 
+    // Taslaklar arşivlenmez (her an değişebilir/silinebilir), diğerleri arşiv destekli.
     const [efaturaRes, earsivRes, earsivDraftRes] = await Promise.allSettled([
-      fetchAllPages(EInvoiceWithAccount.listSales, baseEInvoiceParams),
-      fetchAllPages(EArchiveWithAccount.listInvoices, baseEArchiveParams),
+      fetchAllPagesArchived(EInvoiceWithAccount.listSales, 'efatura_sale', baseEInvoiceParams),
+      fetchAllPagesArchived(EArchiveWithAccount.listInvoices, 'earsiv', baseEArchiveParams),
       fetchAllPages(EArchiveWithAccount.listDrafts, draftParams)
     ]);
 

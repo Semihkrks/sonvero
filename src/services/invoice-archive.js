@@ -1,11 +1,11 @@
 // ══════════════════════════════════════════
 // Fatura Arşivi — Supabase destekli akıllı veri katmanı
 //
-// Kural: Fatura kesildikten sonra iptal/silme en fazla ~1 ay içinde
-// yapılabilir. Bu yüzden "ay sonu + 35 gün" geçmiş aylar KESİNLEŞMİŞ
+// Kural: Fatura kesildikten sonra iptal/silme kısa süre içinde
+// yapılabilir. Bu yüzden "ay sonu + 20 gün" geçmiş aylar KESİNLEŞMİŞ
 // sayılır → bir kez API'den çekilip arşive yazıldıysa artık hep
 // arşivden okunur (hızlı + Nilvera 6 ay limitinden bağımsız).
-// Son ~35 günü kapsayan aylar HER ZAMAN API'den taze çekilir ve
+// Son ~20 günü kapsayan aylar HER ZAMAN API'den taze çekilir ve
 // arşivdeki kopyaları güncellenir (silinen fatura arşivden de düşer).
 //
 // Supabase erişilemezse sessizce salt-API (chunked) moduna düşer.
@@ -14,7 +14,7 @@ import { getSupabase } from '../lib/supabase.js';
 import { fetchAllPagesChunked, getInvoiceUuid, fmtDateParam } from './nilvera-fetcher.js';
 
 // Kesinleşme penceresi: ay sonundan sonra bu kadar gün geçtiyse ay artık değişmez
-const FINAL_AFTER_DAYS = 35;
+const FINAL_AFTER_DAYS = 20;
 const INSERT_BATCH = 400;
 const READ_BATCH = 1000;
 
@@ -159,7 +159,7 @@ async function markMonthsSynced(userId, accountId, docType, months) {
 }
 
 // Bir ay arşivden okunabilir mi?
-// 1) Ay kesinleşmiş olmalı, 2) senkron kaydı olmalı,
+// 1) Ay kesinleşmiş olmalı (ay sonu + 20 gün geçmiş), 2) senkron kaydı olmalı,
 // 3) senkron, ayın kesinleşme anından SONRA yapılmış olmalı
 //    (kesinleşmeden önce senkronlanan ayda sonradan iptal olmuş olabilir).
 function isMonthArchived(mStart, syncedAtStr) {
@@ -178,18 +178,21 @@ function isMonthArchived(mStart, syncedAtStr) {
  *
  * @param {Function} apiFn    (account, params, options) imzalı liste ucu
  * @param {Object}   account  Nilvera hesabı (id = Supabase accounts.id)
- * @param {string}   docType  'efatura_sale' | 'efatura_purchase' | 'earsiv'
+ * @param {string}   docType  'efatura_sale' | 'efatura_purchase' | 'earsiv' | 'earsiv_gib'
  * @param {Object}   params   { StartDate, EndDate, ...API filtreleri }
- * @param {Object}   options  { signal, onProgress }
+ * @param {Object}   options  { signal, onProgress, stats: { failed } }
  */
 export async function fetchInvoicesSmart(apiFn, account, docType, params = {}, options = {}) {
   const { StartDate, EndDate, ...rest } = params;
   const plainFetch = () => fetchAllPagesChunked(apiFn, account, params, options);
 
-  // Tarih aralığı yoksa veya API-tarafı arama filtresi varsa arşiv devre dışı
+  // Tarih aralığı yoksa veya tarih dışı API filtresi varsa (Search, IsArchived vb.)
+  // arşiv devre dışı: filtreli sonuçlar arşive/arşivden yazılamaz/okunamaz.
+  // DateFilterType=IssueDate zararsızdır (arşiv de issue_date bazlıdır).
   const start = parseDateOnly(StartDate);
   const end = parseDateOnly(EndDate);
-  if (!start || !end || start > end || rest.Search) return plainFetch();
+  const extraFilters = Object.keys(rest).filter(k => k !== 'DateFilterType');
+  if (!start || !end || start > end || extraFilters.length > 0) return plainFetch();
 
   const userId = await getUserId();
   if (!userId || !account?.id) return plainFetch();
@@ -247,6 +250,8 @@ export async function fetchInvoicesSmart(apiFn, account, docType, params = {}, o
           { ...rest, StartDate: fetchStart, EndDate: fetchEnd },
           { ...options, stats }
         );
+        // Çağıranın stats nesnesine de hatayı yansıt (sayfalar hata UI'ı için kullanır)
+        if (stats.failed && options.stats) options.stats.failed = true;
 
         // Görüntü: sadece istenen pencere içindekiler
         items.forEach(inv => {
