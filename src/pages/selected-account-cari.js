@@ -1,4 +1,5 @@
 import { EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
+import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { listAccounts } from '../services/account-manager.js';
 import { listCollections } from '../services/tahsilat-manager.js';
 import { showToast } from '../components/toast.js';
@@ -158,28 +159,6 @@ export async function renderSelectedAccountCari() {
   return page;
 }
 
-function extractItems(data) {
-  if (!data) return [];
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data.Content)) return data.Content;
-  if (Array.isArray(data.Items)) return data.Items;
-  if (Array.isArray(data.items)) return data.items;
-  return [];
-}
-
-async function fetchAllPagesForAccount(apiFn, account, baseParams) {
-  let items = [];
-  let pg = 1, totalPages = 1;
-  do {
-    const res = await apiFn(account, { ...baseParams, Page: pg, PageSize: 100 });
-    if (!res.success) break;
-    items.push(...extractItems(res.data));
-    totalPages = res.data?.TotalPages || 1;
-    pg++;
-  } while (pg <= totalPages && pg <= 20);
-  return items;
-}
-
 async function loadData(page) {
   if (isScanning) return;
   if (selectedIds.size === 0) { showToast('En az bir hesap seçin.', 'error'); return; }
@@ -213,14 +192,15 @@ async function loadData(page) {
 
   for (const acc of accountsToScan) {
     try {
+      // Akıllı fetch: 6 ay limiti chunking ile aşılır, kesin aylar arşivden gelir.
       const baseParams = { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) };
       const tasks = [];
       if (wantSatis) {
-        tasks.push(['satis-ef', fetchAllPagesForAccount(EInvoiceWithAccount.listSales, acc, baseParams)]);
-        tasks.push(['satis-ea', fetchAllPagesForAccount(EArchiveWithAccount.listInvoices, acc, baseParams)]);
+        tasks.push(['satis-ef', fetchInvoicesSmart(EInvoiceWithAccount.listSales, acc, 'efatura_sale', baseParams)]);
+        tasks.push(['satis-ea', fetchInvoicesSmart(EArchiveWithAccount.listInvoices, acc, 'earsiv', baseParams)]);
       }
       if (wantAlis) {
-        tasks.push(['alis-ef', fetchAllPagesForAccount(EInvoiceWithAccount.listPurchases, acc, baseParams)]);
+        tasks.push(['alis-ef', fetchInvoicesSmart(EInvoiceWithAccount.listPurchases, acc, 'efatura_purchase', baseParams)]);
       }
       if (withTahsilat) {
         tasks.push(['tahsilat', listCollections({ accountId: acc.id, startDate, endDate, searchText })]);

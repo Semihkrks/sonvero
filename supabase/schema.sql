@@ -117,12 +117,57 @@ BEGIN
   END IF;
 END $$;
 
+-- ══════════════════════════════════════════
+-- Fatura Arşivi — Nilvera 6 ay limiti + kalıcı yerel kopya
+-- Faturalar kesildikten sonra en fazla ~1 ay içinde iptal/silinebilir.
+-- Bu yüzden ay sonu + 35 gün geçmiş aylar "kesinleşmiş" sayılır ve
+-- arşivden okunur; son dönem her zaman API'den taze çekilir.
+-- ══════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS invoice_archive (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  account_id UUID REFERENCES accounts(id) ON DELETE CASCADE NOT NULL,
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv')),
+  invoice_uuid TEXT NOT NULL,
+  issue_date DATE,
+  payload JSONB NOT NULL DEFAULT '{}',
+  updated_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (account_id, doc_type, invoice_uuid)
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_archive_lookup
+  ON invoice_archive (account_id, doc_type, issue_date);
+
+-- Ay bazlı senkron kaydı: hangi hesap+belge türü+ay tam olarak arşivlendi?
+CREATE TABLE IF NOT EXISTS invoice_archive_sync (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+  account_id UUID REFERENCES accounts(id) ON DELETE CASCADE NOT NULL,
+  doc_type TEXT NOT NULL CHECK (doc_type IN ('efatura_sale', 'efatura_purchase', 'earsiv')),
+  month DATE NOT NULL, -- ayın ilk günü
+  synced_at TIMESTAMPTZ DEFAULT now(),
+  UNIQUE (account_id, doc_type, month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_archive_sync_lookup
+  ON invoice_archive_sync (account_id, doc_type, month);
+
 -- Row Level Security
 ALTER TABLE accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoice_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE export_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE customer_collections ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_archive ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invoice_archive_sync ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own invoice archive" ON invoice_archive;
+CREATE POLICY "Users can manage own invoice archive" ON invoice_archive
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can manage own archive sync" ON invoice_archive_sync;
+CREATE POLICY "Users can manage own archive sync" ON invoice_archive_sync
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- RLS Policies
 DROP POLICY IF EXISTS "Users can manage own accounts" ON accounts;

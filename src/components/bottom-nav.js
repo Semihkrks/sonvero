@@ -4,14 +4,18 @@
 
 const ROUTE_GROUPS = {
   incoming: ['/incoming', '/eirsaliye-gelen'],
-  outgoing: ['/outgoing', '/eirsaliye-giden']
+  outgoing: ['/outgoing', '/eirsaliye-giden'],
+  cari: ['/cari', '/secili-hesaplar-cari', '/tum-hesaplar-cari']
 };
 
 const SOURCE_LABELS = {
   '/incoming': 'e-Fatura',
   '/eirsaliye-gelen': 'e-Irsaliye',
   '/outgoing': 'e-Fatura',
-  '/eirsaliye-giden': 'e-Irsaliye'
+  '/eirsaliye-giden': 'e-Irsaliye',
+  '/cari': 'Canli Cari',
+  '/secili-hesaplar-cari': 'Secili Hesap',
+  '/tum-hesaplar-cari': 'Tum Hesap'
 };
 
 
@@ -63,8 +67,10 @@ function getToggleTarget(group, currentRoute) {
   if (!isGroupActive(group, route)) {
     return getPreferredRoute(group);
   }
+  // Grup içinde sıradaki rotaya geç (2+ elemanlı gruplar döngüsel çalışır)
   const routes = ROUTE_GROUPS[group];
-  return route === routes[0] ? routes[1] : routes[0];
+  const idx = routes.indexOf(route);
+  return routes[(idx + 1) % routes.length];
 }
 
 function navigateHash(path) {
@@ -83,6 +89,7 @@ export function renderBottomNav(currentRoute) {
 
   const incomingMeta = resolveSourceMeta('incoming', currentRoute);
   const outgoingMeta = resolveSourceMeta('outgoing', currentRoute);
+  const cariMeta = resolveSourceMeta('cari', currentRoute);
 
   const menuItems = [
     {
@@ -115,9 +122,11 @@ export function renderBottomNav(currentRoute) {
       sourceLabel: outgoingMeta.sourceLabel
     },
     {
-      label: 'Canli Veri',
+      label: 'Cari',
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>',
-      path: '/cari'
+      path: cariMeta.currentPath,
+      group: 'cari',
+      sourceLabel: cariMeta.sourceLabel
     }
   ];
 

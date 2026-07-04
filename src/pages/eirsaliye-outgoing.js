@@ -1,4 +1,5 @@
 import { EDespatch, EDespatchWithAccount } from '../api/nilvera.js';
+import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
@@ -578,22 +579,22 @@ async function loadOutgoing(page, options = {}) {
 
   tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div style="padding:24px;text-align:center;color:var(--text-muted)">e-İrsaliye verileri yükleniyor...</div></td></tr>`;
 
-  const res = await EDespatchWithAccount.listSales(account, {
+  // 6 ay limiti + tam sayfalama: merkezi fetcher dilimleyip birleştirir.
+  const stats = { failed: false };
+  const fetchedItems = await fetchAllPagesChunked(EDespatchWithAccount.listSales, account, {
     StartDate: startDate,
     EndDate: endDate,
-    Page: 1,
-    PageSize: 150,
     ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),
-  }, { signal });
-  if (!res.success) {
+  }, { signal, stats, maxPages: 10 });
+  if (fetchedItems.length === 0 && stats.failed) {
     if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId || getActiveAccountId() !== accountId) return;
-    tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Hata: ${res.error}</h3></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Hata: Veri alınamadı</h3></div></td></tr>`;
     return;
   }
 
   if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId || getActiveAccountId() !== accountId) return;
 
-  cachedRows = extractItems(res.data)
+  cachedRows = fetchedItems
     .map(normalizeRow)
     .filter((row) => (archivedOnly ? row.isArchived : true))
     .sort((a, b) => rowDateTs(b) - rowDateTs(a));

@@ -671,7 +671,16 @@
     font-size: 15px;
   }
 
+  /* Detay tablosu: varsayılan görünür + yatay kaydırılabilir
+     (Seçili Hesaplar / Tüm Hesaplar panellerinde tablo tek görünüm) */
   .cari-detail-table-wrap {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Canlı Cari'de mobil hareket kartları varken tabloyu gizle */
+  .cari-detail-panel:has(.cari-mobile-movements) .cari-detail-table-wrap {
     display: none;
   }
 
@@ -855,6 +864,93 @@
   .cari-tahsilat-actions .btn {
     width: 100%;
     justify-content: center;
+  }
+
+  /* ── Seçili Hesaplar Cari (app hissiyatı) ── */
+  .sac-chips {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+    margin: 4px -2px 0;
+  }
+
+  .sac-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sac-chip {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 6px 14px;
+    font-size: 12px;
+  }
+
+  .sac-segment {
+    display: flex;
+    width: 100%;
+    height: 38px;
+    border-radius: 10px;
+  }
+
+  .sac-segment button {
+    flex: 1;
+    padding: 0 6px;
+    font-size: 12px;
+  }
+
+  .sac-toggle {
+    height: 38px;
+    width: 100%;
+    justify-content: flex-start;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0 12px;
+    background: var(--bg-card);
+  }
+
+  .sac-export-bar {
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding: 10px !important;
+    border-radius: 12px !important;
+  }
+
+  .sac-export-bar > span:first-child {
+    flex: 1 1 100%;
+  }
+
+  .sac-export-bar .btn {
+    flex: 1 1 calc(50% - 8px);
+    min-height: 40px;
+    justify-content: center;
+  }
+
+  .sac-export-bar #sacExportInfo {
+    flex: 1 1 100%;
+    margin-left: 0 !important;
+    text-align: center;
+  }
+
+  /* Cari sayfalarındaki ana tarama/ara butonları: tam genişlik, parmak dostu */
+  .cari-page .filter-actions {
+    width: 100%;
+  }
+
+  .cari-page .filter-actions .btn {
+    min-height: 42px !important;
+    flex: 1;
+  }
+
+  /* Cari detay tablo hücreleri mobilde sıkışmasın */
+  .cari-page .cari-detail-table th,
+  .cari-page .cari-detail-table td {
+    white-space: nowrap;
+    font-size: 12px;
+    padding: 8px 10px;
   }
 
   .invoice-create-header {

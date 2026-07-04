@@ -3,6 +3,7 @@
 // Nilvera-Style with İşlemler Dropdown
 // ══════════════════════════════════════════
 import { EInvoice, EArchive, EArchiveWithAccount } from '../api/nilvera.js';
+import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
@@ -303,18 +304,12 @@ async function loadEarsiv(page) {
     const dateStart = page.querySelector('#dateStart')?.value || start;
     const dateEnd = page.querySelector('#dateEnd')?.value || end;
 
+    // 6 ay limiti: uzun aralıklar merkezi fetcher'da dilimlenip birleştirilir.
     async function fetchAllPages(apiFn, baseParams) {
-      let allItems = [];
-      let pg = 1, totalPages = 1;
-      do {
-        if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
-        const res = await apiFn(account, { ...baseParams, Page: pg, PageSize: 100 }, { signal });
-        if (!res.success) return { success: false, ...res };
-        const items = extractItems(res.data);
-        allItems.push(...items);
-        totalPages = res.data?.TotalPages || 1;
-        pg++;
-      } while (pg <= totalPages && pg <= 10);
+      const stats = { failed: false };
+      const allItems = await fetchAllPagesChunked(apiFn, account, baseParams, { signal, stats, maxPages: 10 });
+      if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
+      if (allItems.length === 0 && stats.failed) return { success: false, error: 'Veri alınamadı' };
       return { success: true, data: allItems };
     }
 

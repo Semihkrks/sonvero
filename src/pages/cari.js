@@ -2,6 +2,7 @@
 // Canlı Cari Sistemi — Müşteri Bazlı Cari Takip
 // ══════════════════════════════════════════
 import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
+import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { attachDatePicker } from '../lib/date-picker.js';
@@ -332,23 +333,8 @@ async function loadCariData(page) {
   }
 
   try {
-    // Fetch all pages of invoices with 3x retry
-    // apiFn imzası: (account, params, options). Retry (3x) artık WithAccount katmanında.
-    async function fetchAllPages(apiFn, baseParams) {
-      let items = [];
-      let pg = 1, totalPages = 1;
-      do {
-        if (signal.aborted) break;
-        const res = await apiFn(account, { ...baseParams, Page: pg, PageSize: 100 }, { signal });
-        if (!res.success) break;
-        const pageItems = extractItems(res.data);
-        items.push(...pageItems);
-        totalPages = res.data?.TotalPages || 1;
-        pg++;
-      } while (pg <= totalPages && pg <= 20);
-      return items;
-    }
-
+    // Akıllı fetch: 6 aydan uzun aralıklar otomatik dilimlenir (chunking),
+    // kesinleşmiş aylar Supabase arşivinden okunur, son dönem API'den taze gelir.
     let fetchedInvoices = [];
     const wantGiden = currentSource === 'giden' || currentSource === 'tumu';
     const wantGelen = currentSource === 'gelen' || currentSource === 'tumu';
@@ -358,14 +344,14 @@ async function loadCariData(page) {
     const tasks = [];
     if (wantGiden) {
       // Giden = Satış (E-Fatura Sale + E-Arşiv — e-arşiv daima giden/satıştır)
-      tasks.push(fetchAllPages(EInvoiceWithAccount.listSales, { StartDate: dateStart, EndDate: dateEnd })
+      tasks.push(fetchInvoicesSmart(EInvoiceWithAccount.listSales, account, 'efatura_sale', { StartDate: dateStart, EndDate: dateEnd }, { signal })
         .then(r => r.map(i => ({ ...i, _source: 'efatura', _direction: 'giden' }))));
-      tasks.push(fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
+      tasks.push(fetchInvoicesSmart(EArchiveWithAccount.listInvoices, account, 'earsiv', { StartDate: dateStart, EndDate: dateEnd }, { signal })
         .then(r => r.map(i => ({ ...i, _source: 'earsiv', _direction: 'giden' }))));
     }
     if (wantGelen) {
       // Gelen = Alım (E-Fatura Purchase)
-      tasks.push(fetchAllPages(EInvoiceWithAccount.listPurchases, { StartDate: dateStart, EndDate: dateEnd })
+      tasks.push(fetchInvoicesSmart(EInvoiceWithAccount.listPurchases, account, 'efatura_purchase', { StartDate: dateStart, EndDate: dateEnd }, { signal })
         .then(r => r.map(i => ({ ...i, _source: 'efatura', _direction: 'gelen' }))));
     }
 
