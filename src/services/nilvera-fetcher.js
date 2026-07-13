@@ -120,6 +120,16 @@ export async function fetchAllPagesChunked(apiFn, account, baseParams = {}, opti
   // (bazı sayfalar 'YYYY-MM-DDT00:00:00' gibi saatli format yollar)
   if (chunks.length === 1) chunks = [{ start: StartDate, end: EndDate }];
 
+  // ÖNEMLİ — Nilvera (.NET) tarihleri timestamp olarak yorumlar:
+  // saatsiz 'YYYY-MM-DD' bitiş tarihi o gün 00:00'da BİTER ve o günün
+  // saatli belgeleri (özellikle e-Arşiv, saat içerir) dışarıda kalır.
+  // Örn: 13 Temmuz'da kesilen fatura EndDate=2026-07-13 sorgusunda görünmez,
+  // ancak ertesi gün görünürdü. Bu yüzden saatsiz değerlere gün başı /
+  // gün sonu saatleri eklenir; zaten saatli değerlere dokunulmaz.
+  const withDayStart = (s) => (s && !String(s).includes('T') ? `${s}T00:00:00` : s);
+  const withDayEnd = (s) => (s && !String(s).includes('T') ? `${s}T23:59:59` : s);
+  chunks = chunks.map(c => ({ start: withDayStart(c.start), end: withDayEnd(c.end) }));
+
   const seen = new Set();
   const merged = [];
 
