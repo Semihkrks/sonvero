@@ -45,9 +45,10 @@ let selectedAccounts = [];    // tarama anındaki seçili hesaplar {id,name,colo
 let selectedCustomerKey = null;
 let isScanning = false;
 let allAccounts = [];
-let selectedIds = new Set();  // checkbox seçimi
+let selectedIds = new Set();  // checkbox seçimi (hesaplar)
 let direction = 'both';       // 'satis' | 'alis' | 'both'
 let withTahsilat = true;
+let exportCustomerKeys = new Set(); // Excel'e sadece bu müşteriler dahil edilsin (boşsa = hepsi)
 
 export async function renderSelectedAccountCari() {
   customerMap = {};
@@ -56,6 +57,7 @@ export async function renderSelectedAccountCari() {
   selectedIds = new Set();
   direction = 'both';
   withTahsilat = true;
+  exportCustomerKeys = new Set();
 
   const page = document.createElement('div');
   page.className = 'cari-page';
@@ -104,8 +106,8 @@ export async function renderSelectedAccountCari() {
       </div>
     </div>
 
-    <div class="sac-export-bar" id="sacExportBar" style="display:none; align-items:center; gap:10px; margin:0 0 14px; padding:10px 14px; background:var(--card-bg,#fff); border:1px solid var(--border,#e5e7eb); border-radius:8px;">
-      <span style="font-weight:600; font-size:13px;">Tüm işlemleri Excel'e aktar:</span>
+    <div class="sac-export-bar" id="sacExportBar" style="display:none; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 14px; padding:10px 14px; background:var(--card-bg,#fff); border:1px solid var(--border,#e5e7eb); border-radius:8px;">
+      <span style="font-weight:600; font-size:13px;" id="sacExportLabel">Tüm işlemleri Excel'e aktar:</span>
       <button class="btn btn-sm btn-success" id="sacExportTum" style="display:flex; gap:6px;">${ic.download} Tek Sayfa</button>
       <button class="btn btn-sm btn-success" id="sacExportAyri" style="display:flex; gap:6px;">${ic.download} Hesaplar Ayrı</button>
       <span id="sacExportInfo" style="font-size:12px; color:var(--text-muted); margin-left:auto;"></span>
@@ -115,6 +117,13 @@ export async function renderSelectedAccountCari() {
       <div class="cari-customer-list-container">
         <div class="cari-customer-list-header">
           <h3>${ic.user} Müşteriler / Tedarikçiler</h3><span class="cari-customer-count" id="sacCustomerCount">0</span>
+        </div>
+        <div class="sac-customer-select-bar" id="sacSelectBar" style="display:none; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--border-color); font-size:12px; color:var(--text-muted);">
+          <span id="sacSelectedCount">0 firma seçili</span>
+          <button class="sac-link" id="sacCustSelAll" type="button">Tümünü Seç</button>
+          <span>·</span>
+          <button class="sac-link" id="sacCustSelNone" type="button">Seçimi Temizle</button>
+          <span style="margin-left:auto; font-style:italic;">Seçim yapmazsan tüm liste aktarılır</span>
         </div>
         <div class="cari-customer-list" id="sacCustomerList">
           <div class="cari-loading-state">${ic.noData}<p>Hesapları seçip TARA butonuna basın</p></div>
@@ -156,6 +165,16 @@ export async function renderSelectedAccountCari() {
   page.querySelector('#sacExportTum')?.addEventListener('click', () => doExport(page, 'tum'));
   page.querySelector('#sacExportAyri')?.addEventListener('click', () => doExport(page, 'ayri'));
 
+  page.querySelector('#sacCustSelAll')?.addEventListener('click', () => {
+    // Sadece o an listede görünen (aramaya uyan) müşterileri seçer
+    getVisibleCustomerEntries(page).forEach(([key]) => exportCustomerKeys.add(key));
+    renderCustomerList(page);
+  });
+  page.querySelector('#sacCustSelNone')?.addEventListener('click', () => {
+    exportCustomerKeys = new Set();
+    renderCustomerList(page);
+  });
+
   return page;
 }
 
@@ -166,6 +185,7 @@ async function loadData(page) {
   customerMap = {};
   allItems = [];
   selectedCustomerKey = null;
+  exportCustomerKeys = new Set(); // yeni tarama = önceki firma seçimi geçersiz
 
   const listEl = page.querySelector('#sacCustomerList');
   const panelEl = page.querySelector('#sacDetailPanel');
@@ -298,18 +318,24 @@ async function loadData(page) {
   renderCustomerList(page);
 }
 
+// Arama kutusuna uyan müşterileri döner (aynı sıralama/filtre mantığı listeyle paylaşılır).
+function getVisibleCustomerEntries(page) {
+  const search = (page.querySelector('#sacSearchInput')?.value || '').toLocaleLowerCase('tr-TR').trim();
+  return Object.entries(customerMap).filter(([key, c]) => {
+    if (!search) return true;
+    return c.name.toLocaleLowerCase('tr-TR').includes(search) || c.taxNo.includes(search) || key.includes(search);
+  }).sort((a, b) => (b[1].totalSatis + b[1].totalAlis) - (a[1].totalSatis + a[1].totalAlis));
+}
+
 function renderCustomerList(page) {
   const listEl = page.querySelector('#sacCustomerList');
   const countEl = page.querySelector('#sacCustomerCount');
   if (!listEl) return;
 
-  const search = (page.querySelector('#sacSearchInput')?.value || '').toLocaleLowerCase('tr-TR').trim();
-  const entries = Object.entries(customerMap).filter(([key, c]) => {
-    if (!search) return true;
-    return c.name.toLocaleLowerCase('tr-TR').includes(search) || c.taxNo.includes(search) || key.includes(search);
-  }).sort((a, b) => (b[1].totalSatis + b[1].totalAlis) - (a[1].totalSatis + a[1].totalAlis));
+  const entries = getVisibleCustomerEntries(page);
 
   if (countEl) countEl.textContent = entries.length;
+  updateExportBar(page);
 
   if (entries.length === 0) {
     listEl.innerHTML = `<div class="cari-loading-state">${ic.noData}<h3>Kayıt bulunamadı</h3></div>`;
@@ -322,8 +348,12 @@ function renderCustomerList(page) {
     const alisCount = c.items.filter(x => x._direction === 'gelen').length;
     const tahCount = c.items.filter(x => x._type === 'tahsilat').length;
     const bakiye = c.totalSatis - c.totalAlis - c.totalTahsilat;
+    const isChecked = exportCustomerKeys.has(key);
     return `
-      <div class="cari-customer-item ${selectedCustomerKey === key ? 'active' : ''}" data-key="${key}">
+      <div class="cari-customer-item ${selectedCustomerKey === key ? 'active' : ''} ${isChecked ? 'export-selected' : ''}" data-key="${key}">
+        <label class="sac-customer-check" title="Excel'e dahil et">
+          <input type="checkbox" class="sac-customer-cb" value="${key}" ${isChecked ? 'checked' : ''} />
+        </label>
         <div class="cari-customer-avatar">${initials}</div>
         <div class="cari-customer-info">
           <span class="cari-customer-name">${c.name}</span>
@@ -346,7 +376,33 @@ function renderCustomerList(page) {
       item.classList.add('active');
       renderDetailPanel(page, customerMap[selectedCustomerKey]);
     });
+
+    // Checkbox: satırın "detay göster" tıklamasını tetiklemeden Excel seçimini değiştirir.
+    const cb = item.querySelector('.sac-customer-cb');
+    cb?.addEventListener('click', (e) => e.stopPropagation());
+    cb?.addEventListener('change', () => {
+      const key = item.dataset.key;
+      if (cb.checked) exportCustomerKeys.add(key); else exportCustomerKeys.delete(key);
+      item.classList.toggle('export-selected', cb.checked);
+      updateExportBar(page);
+    });
   });
+}
+
+// Excel export barındaki etiket, sayaç ve "seçili firma" bandını günceller.
+function updateExportBar(page) {
+  const selectBar = page.querySelector('#sacSelectBar');
+  const selectedCountEl = page.querySelector('#sacSelectedCount');
+  const exportLabel = page.querySelector('#sacExportLabel');
+  const count = exportCustomerKeys.size;
+
+  if (selectBar) selectBar.style.display = Object.keys(customerMap).length > 0 ? 'flex' : 'none';
+  if (selectedCountEl) selectedCountEl.textContent = count > 0 ? `${count} firma seçili` : 'Hiç firma seçili değil';
+  if (exportLabel) {
+    exportLabel.textContent = count > 0
+      ? `Seçili ${count} firmanın işlemlerini Excel'e aktar:`
+      : `Tüm işlemleri Excel'e aktar:`;
+  }
 }
 
 function renderDetailPanel(page, customer) {
@@ -405,12 +461,28 @@ function renderDetailPanel(page, customer) {
   `;
 }
 
+// Firma seçimi yapıldıysa sadece o firmaların hareketlerini döner, yoksa hepsini.
+function getExportItems() {
+  if (exportCustomerKeys.size === 0) return allItems;
+  const items = [];
+  exportCustomerKeys.forEach((key) => {
+    const c = customerMap[key];
+    if (c) items.push(...c.items);
+  });
+  return items;
+}
+
 async function doExport(page, layout) {
-  if (allItems.length === 0) { showToast('Önce tarama yapın.', 'error'); return; }
+  const items = getExportItems();
+  if (items.length === 0) {
+    showToast(allItems.length === 0 ? 'Önce tarama yapın.' : 'Seçili firmalarda hareket bulunamadı.', 'error');
+    return;
+  }
   try {
-    showToast('Excel hazırlanıyor...', 'info');
-    const res = await exportAllTransactions(allItems, selectedAccounts, { layout, direction, withTahsilat });
-    if (res.success) showToast(`Excel indirildi (${res.count} hareket).`, 'success');
+    const selCount = exportCustomerKeys.size;
+    showToast(selCount > 0 ? `${selCount} firma için Excel hazırlanıyor...` : 'Excel hazırlanıyor...', 'info');
+    const res = await exportAllTransactions(items, selectedAccounts, { layout, direction, withTahsilat });
+    if (res.success) showToast(`Excel indirildi (${res.count} hareket${selCount > 0 ? `, ${selCount} firma` : ''}).`, 'success');
     else showToast('Hata: ' + res.error, 'error');
   } catch (e) {
     showToast('Hata: ' + e.message, 'error');

@@ -577,6 +577,14 @@
     box-shadow: 0 0 0 1px var(--accent-glow) inset;
   }
 
+  /* Seçili Hesaplar Cari: mobilde sağ sütun (tutarlar) ile çakışmasın diye
+     checkbox sol üst köşeye, avatarın üzerine taşınır. */
+  .sac-customer-check {
+    top: 4px;
+    left: 4px;
+    right: auto;
+  }
+
   .cari-customer-avatar {
     width: 34px;
     height: 34px;

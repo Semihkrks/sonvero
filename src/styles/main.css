@@ -3358,6 +3358,7 @@ tbody tr:last-child td {
 .cari-loading-state p { margin: 0; font-size: 13px; }
 
 .cari-customer-item {
+  position: relative;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border-color);
   cursor: pointer;
@@ -3373,6 +3374,28 @@ tbody tr:last-child td {
 
 .cari-customer-item.active {
   border-left: 3px solid var(--primary);
+}
+
+/* Seçili Hesaplar Cari: Excel'e dahil edilecek firma checkbox'ı (sağ üst köşe) */
+.sac-customer-check {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  z-index: 2;
+  display: flex;
+  cursor: pointer;
+}
+
+.sac-customer-check input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  cursor: pointer;
+  accent-color: var(--success, #16a34a);
+}
+
+.cari-customer-item.export-selected {
+  box-shadow: inset 0 0 0 2px var(--success, #16a34a);
+  background: color-mix(in srgb, var(--success, #16a34a) 7%, transparent);
 }
 
 .cari-customer-info {
