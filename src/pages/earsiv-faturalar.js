@@ -5,6 +5,7 @@
 import { EInvoice, EArchive, EArchiveWithAccount } from '../api/nilvera.js';
 import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
+import { redactNilveraFooter, base64ToBytes, bytesToBase64 } from '../services/pdf-redact.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
@@ -654,9 +655,13 @@ async function bulkDownloadForFiltered(page, type) {
     try {
       const res = type === 'pdf' ? await EArchive.getInvoicePdf(uuid) : await EArchive.getInvoiceXml(uuid);
       if (res.success && res.data) {
-        const content = typeof res.data === 'string' ? res.data : (res.data.File || res.data.String || res.data[0]);
+        let content = typeof res.data === 'string' ? res.data : (res.data.File || res.data.String || res.data[0]);
         if (content) {
-          const isBase64 = content.match(/^[a-zA-Z0-9+/=]+$/);
+          let isBase64 = content.match(/^[a-zA-Z0-9+/=]+$/);
+          if (type === 'pdf' && isBase64) {
+            const redacted = await redactNilveraFooter(base64ToBytes(content));
+            content = bytesToBase64(redacted);
+          }
           const url = isBase64
             ? `data:application/${type};base64,${content}`
             : `data:application/${type},${encodeURIComponent(content)}`;
@@ -687,11 +692,15 @@ async function downloadFile(uuid, source, type) {
 
     if (res.success && res.data) {
       // Nilvera API commonly returns PDF/XML strings directly or wrapped in data/String/File property
-      const content = typeof res.data === 'string' ? res.data : (res.data.File || res.data.String || res.data[0]);
+      let content = typeof res.data === 'string' ? res.data : (res.data.File || res.data.String || res.data[0]);
       if (!content) throw new Error('Dosya içeriği bulunamadı');
 
-      const isBase64 = content.match(/^[a-zA-Z0-9+/=]+$/);
-      const url = isBase64 
+      let isBase64 = content.match(/^[a-zA-Z0-9+/=]+$/);
+      if (type === 'pdf' && isBase64) {
+        const redacted = await redactNilveraFooter(base64ToBytes(content));
+        content = bytesToBase64(redacted);
+      }
+      const url = isBase64
         ? `data:application/${type === 'pdf' ? 'pdf' : 'xml'};base64,${content}`
         : `data:application/${type === 'pdf' ? 'pdf' : 'xml'},${encodeURIComponent(content)}`;
 
@@ -800,9 +809,7 @@ async function showPdfPreviewModal(uuid, source) {
     const isBase64 = content.match(/^[a-zA-Z0-9+/=\s]+$/);
     let blobUrl;
     if (isBase64) {
-      const byteChars = atob(content.replace(/\s/g, ''));
-      const byteNumbers = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const byteNumbers = await redactNilveraFooter(base64ToBytes(content));
       blobUrl = URL.createObjectURL(new Blob([byteNumbers], { type: 'application/pdf' }));
     } else {
       blobUrl = URL.createObjectURL(new Blob([content], { type: 'application/pdf' }));

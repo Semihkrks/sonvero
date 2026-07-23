@@ -5,6 +5,7 @@
 import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
+import { redactNilveraFooter, base64ToBytes, bytesToBase64 } from '../services/pdf-redact.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
@@ -1213,8 +1214,16 @@ async function downloadFile(uuid, source, type, options = {}) {
     }
 
     if (res.success && res.data) {
-      const content = extractFileContent(res.data);
+      let content = extractFileContent(res.data);
       if (!content) throw new Error('Dosya içeriği bulunamadı');
+
+      if (type === 'pdf') {
+        const isBase64 = /^[A-Za-z0-9+/=\r\n\s]+$/.test(content) && content.replace(/\s/g, '').length % 4 === 0;
+        if (isBase64) {
+          const redacted = await redactNilveraFooter(base64ToBytes(content));
+          content = bytesToBase64(redacted);
+        }
+      }
 
       const url = buildDataUrl(content, type);
 
@@ -1332,9 +1341,7 @@ async function showPdfPreviewModal(uuid, source) {
     const isBase64 = content.match(/^[a-zA-Z0-9+/=\s]+$/);
     let blobUrl;
     if (isBase64) {
-      const byteChars = atob(content.replace(/\s/g, ''));
-      const byteNumbers = new Uint8Array(byteChars.length);
-      for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+      const byteNumbers = await redactNilveraFooter(base64ToBytes(content));
       const blob = new Blob([byteNumbers], { type: 'application/pdf' });
       blobUrl = URL.createObjectURL(blob);
     } else {
