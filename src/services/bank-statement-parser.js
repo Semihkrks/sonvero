@@ -255,23 +255,38 @@ export async function parseExcelStatement(file) {
 // ══════════════════════════════════════════
 // PDF PARSER
 // ══════════════════════════════════════════
-export async function parsePdfStatement(file) {
-  const pdfjsLib = await import('pdfjs-dist');
+let pdfjsPromise = null;
 
-  // Vite ?url import: sadece worker dosyasının URL'ini al, bundle etme
-  const workerUrl = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
-  pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl;
+function getPdfjs() {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import('pdfjs-dist').then((lib) => {
+      // Vite: sadece worker dosyasının URL'ini al, bundle etme
+      lib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href;
+      return lib;
+    });
+  }
+  return pdfjsPromise;
+}
 
+export async function openPdf(file) {
+  const lib = await getPdfjs();
   const buffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+  return lib.getDocument({ data: buffer }).promise;
+}
 
+export async function extractPdfText(pdf) {
   let fullText = '';
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const pageText = content.items.map(item => item.str).join(' ');
-    fullText += pageText + '\n';
+    fullText += content.items.map(item => item.str).join(' ') + '\n';
   }
+  return fullText;
+}
+
+export async function parsePdfStatement(file) {
+  const pdf = await openPdf(file);
+  const fullText = await extractPdfText(pdf);
 
   const txs = parseBankStatementText(fullText);
   const fileName = file?.name || '';
