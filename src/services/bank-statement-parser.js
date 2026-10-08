@@ -57,16 +57,62 @@ function parseDate(val) {
 }
 
 // ── Tutar parse helper ──
-function parseAmount(val) {
-  if (typeof val === 'number') return val > 0 ? val : 0;
+// 450.000,00 (TR) ve 299,000.00 (banka/US) ve iOS "1500.50" aynı kuralla okunur.
+// İki ayırıcı varsa sonuncusu ondalıktır. Tek ayırıcıdan sonra 1–2 hane ondalık,
+// 3 hane veya tekrarlayan grup binliktir.
+export function parseUserAmount(val) {
+  if (typeof val === 'number') return Number.isFinite(val) && val > 0 ? val : 0;
   if (!val) return 0;
-  const str = String(val).trim()
+  let str = String(val).trim()
     .replace(/\s/g, '')
     .replace(/TL|₺|TRY/gi, '')
-    .replace(/\./g, '')   // binlik ayırıcı
-    .replace(/,/g, '.');  // ondalık
+    .replace(/[.,]+$/, '');
+  if (!str) return 0;
+
+  const lastDot = str.lastIndexOf('.');
+  const lastComma = str.lastIndexOf(',');
+
+  if (lastDot !== -1 && lastComma !== -1) {
+    if (lastComma > lastDot) str = str.replace(/\./g, '').replace(',', '.');
+    else str = str.replace(/,/g, '');
+  } else if (lastComma !== -1 || lastDot !== -1) {
+    const sep = lastComma !== -1 ? ',' : '.';
+    const parts = str.split(sep);
+    const frac = parts[parts.length - 1];
+    const grouped = frac.length === 3 && parts.slice(1).every(p => p.length === 3);
+    if (grouped) str = parts.join('');
+    else if (frac.length <= 2) str = `${parts.slice(0, -1).join('')}.${frac}`;
+    else str = parts.join('');
+  }
+
   const n = parseFloat(str);
   return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+export function formatUserAmount(value) {
+  const n = typeof value === 'number' ? value : parseUserAmount(value);
+  if (!n) return '';
+  return new Intl.NumberFormat('tr-TR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(n);
+}
+
+// Yazarken kuruş girilebilsin: sondaki . veya , ve 1–2 haneli küsur silinmesin.
+// 1.500 ve 1.500.000 binlik olduğu için formatlanmaya devam eder.
+export function isDecimalInProgress(raw) {
+  const trimmed = String(raw || '').trim();
+  if (!trimmed) return false;
+  if (/[.,]$/.test(trimmed)) return true;
+  const m = trimmed.match(/[.,](\d{1,2})$/);
+  if (!m) return false;
+  const seps = trimmed.match(/[.,]/g) || [];
+  if (seps.length === 1 && m[1].length === 3) return false;
+  return true;
+}
+
+function parseAmount(val) {
+  return parseUserAmount(val);
 }
 
 // ══════════════════════════════════════════
@@ -227,58 +273,256 @@ export async function parsePdfStatement(file) {
     fullText += pageText + '\n';
   }
 
-  return parseBankStatementText(fullText);
+  const txs = parseBankStatementText(fullText);
+  const fileName = file?.name || '';
+  if (!txs.length) {
+    return [{
+      date: '',
+      amount: 0,
+      description: '',
+      senderName: '',
+      receiverName: '',
+      displayDescription: 'Gelen Ödeme (Dekont)',
+      rawDescription: '',
+      source: 'pdf-dekont',
+      confidence: 'low',
+      fileName
+    }];
+  }
+  return txs.map(tx => ({ ...tx, fileName: tx.fileName || fileName }));
 }
 
-// ── Tekli Dekont (Örn: Garanti Havale Dekontu) Çıkarıcı ──
-function parseSingleDekont(text) {
-  let dateStr = '';
-  let amountStr = '';
-  let senderName = '';
-  let receiverName = '';
-  
-  const dateMatch = text.match(/(?:İŞLEM|DÜZENLENME)\s*TARİHİ\s*:\s*(\d{1,2}[./-]\d{1,2}[./-]\d{4})/i);
-  if (dateMatch) dateStr = dateMatch[1];
-  
-  const amountMatch = text.match(/TUTAR\s*:\s*[-\s]*([\d.,]+)\s*(?:TL|TRY|₺)?/i);
-  if (amountMatch) amountStr = amountMatch[1];
-  
-  const sayinMatch = text.match(/SAYIN\s+([A-ZĞÜŞÖÇİa-zğüşöçı\s]+?)(?:\s+MERKEZ|\s+MAH|\s+SOK|\s+CAD|\s+BULVAR|\s+VD|\s+VERGİ|\s+CARİ|\s+ALACAKLI|$)/i);
-  if (sayinMatch) {
-    senderName = sayinMatch[1].trim();
-  } else {
-    // Fallback: take next 3 words
-    const fallbackMatch = text.match(/SAYIN\s+(\S+(?:\s+\S+){0,3})/i);
-    if (fallbackMatch) senderName = fallbackMatch[1].trim();
-  }
-  
-  const alacakliMatch = text.match(/ALACAKLI\s*(?:HESAP|İSİM|UNVAN|AD)\s*:(.*?)(?:ALACAKLI|MASRAF|IBAN|ŞUBE|$)/i);
-  if (alacakliMatch) {
-    receiverName = alacakliMatch[1].replace(/[\d/:\-]/g, '').trim();
-  }
+export function parseDekontFromText(text, fileName = '') {
+  const txs = parseBankStatementText(text);
+  return txs.map(tx => ({ ...tx, fileName: tx.fileName || fileName }));
+}
 
-  const date = parseDate(dateStr);
-  const amount = parseAmount(amountStr);
+// ── Tek dekont: etiket sözlüğü (banka adına kilitli değil) ──
+// Aramalar katlanmış (İ/I/Ş → i/s) metinde yapılır; değer özgün metinden kesilir.
+const NEXT_FIELD = /\b(?:gonderen(?:\s+kisi|\s+adi|\s+unvani?|\s+unvan)?|alici(?:\s+unvani|\s+isim(?:\s*[\\/]\s*unvan)?|\s+unvan|\s+adi|\s+iban|\s+banka)?|alacakli(?:\s+hesap|\s+isim|\s+unvan|\s+adi?)?|musteri\s+unvani|borclu|(?:islem)\s+tutari|eft\s+tutari|havale\s+tutari|fast\s+tutari|islem\s+tarihi|islem\s+zam|belge\s+tarihi|dekont\s+tarihi|duzenlen?me\s+tarihi|valor|aciklama|odeme\s+amaci|sorgu|iban|fast\s+ucret|eft\s+ucret|bsmv|toplam|gonderilen\s+iban)\b/;
 
-  if (date && amount > 0 && senderName) {
-    return [{
-      date,
-      amount,
-      description: extractCustomerFromDesc(senderName),
-      displayDescription: 'Gelen Ödeme (Dekont)',
-      rawDescription: `${senderName} - ${receiverName} - DEKONT`, 
-      source: 'pdf-dekont'
-    }];
+const SENDER_RULES = [
+  { re: /gonderen\s+kisi/, weight: 100 },
+  { re: /gonderen\s+(?:adi|unvani?)/, weight: 95 },
+  { re: /gonderen/, weight: 90, rejectAfter: /^\s*iban/ },
+  { re: /musteri\s+unvani/, weight: 80 },
+  { re: /borclu/, weight: 70 },
+  { re: /sayin/, weight: 60 }
+];
+
+const RECEIVER_RULES = [
+  { re: /alici\s+unvani|alici\s+isim(?:\s*[\\/]\s*unvan)?|alici\s+unvan|alici\s+adi/, weight: 100 },
+  { re: /alacakli\s*(?:hesap|isim|unvan|adi?)/, weight: 90 },
+  { re: /alici/, weight: 70, rejectAfter: /^\s*(?:iban|banka|bank)\b/ }
+];
+
+const AMOUNT_RULES = [
+  { re: /islem\s+tutari/, weight: 100, badBefore: /toplam|ucret|vergi|masraf|komisyon/ },
+  { re: /eft\s+tutari/, weight: 96, badBefore: /ucret/ },
+  { re: /havale\s+tutari/, weight: 96, badBefore: /ucret/ },
+  { re: /fast\s+tutari/, weight: 94, badBefore: /ucret/ },
+  { re: /gonderilen\s+tutar/, weight: 92 },
+  { re: /(?<![\p{L}])tutar(?![\p{L}])/u, weight: 70, badBefore: /toplam|ucret|bsmv|masraf|komisyon|vergi|fast|eft/ }
+];
+
+const DATE_RULES = [
+  { re: /islem\s+tarihi/, weight: 100 },
+  { re: /islem\s+zam/, weight: 95 },
+  { re: /belge\s+tarihi/, weight: 90 },
+  { re: /dekont\s+tarihi/, weight: 85 },
+  { re: /duzenlen?me\s+tarihi/, weight: 80 },
+  { re: /valor(?:\s+tarihi)?/, weight: 50 }
+];
+
+const COMPANY_RE = /([A-ZÇĞİÖŞÜ][A-ZÇĞİÖŞÜa-zçğıöşü0-9\s.&'-]{8,220}?(?:LİMİTED ŞİRKETİ|LIMITED SIRKETI|LİMİTED ŞİRKET|ANONİM ŞİRKETİ|ANONIM SIRKETI|A\.\s*Ş\.))/g;
+
+function flattenDekontText(text) {
+  return String(text || '').replace(/\s+/g, ' ').trim();
+}
+
+function foldTr(text) {
+  return String(text || '')
+    .replace(/İ/g, 'i').replace(/I/g, 'i').replace(/ı/g, 'i')
+    .replace(/Ş/g, 's').replace(/ş/g, 's')
+    .replace(/Ğ/g, 'g').replace(/ğ/g, 'g')
+    .replace(/Ü/g, 'u').replace(/ü/g, 'u')
+    .replace(/Ö/g, 'o').replace(/ö/g, 'o')
+    .replace(/Ç/g, 'c').replace(/ç/g, 'c')
+    .toLowerCase();
+}
+
+function cleanPartyName(raw) {
+  if (!raw) return '';
+  let s = String(raw).replace(/\s+/g, ' ').trim();
+  s = s.replace(/^[:\-–—\s]+/, '');
+  s = s.replace(/^(?:e[-\s]*)?dekont\s+/i, '');
+  const folded = foldTr(s);
+  const cut = folded.search(/\b(?:turkiye\s+garanti|garanti\s+bank|turkiye\s+is|is\s*bankasi|yapi\s*(?:ve\s*)?kredi|akbank|qnb\s*bank|halk\s*bank|halkbank|ziraat\s*bank|vakif\s*bank|vakifbank|kuveyt\s*turk|denizbank|enpara|finansbank|ing\s*bank|albaraka)\b/);
+  if (cut > 0) s = s.slice(0, cut);
+  s = s.replace(/\bTR\d{2}\b[\s\S]*/i, '');
+  s = s.replace(/\s+[BA]\s+TL\b[\s\S]*/i, '');
+  s = s.replace(/\s+\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?\s*(?:TL|TRY)?\s*$/i, '');
+  s = s.replace(/[|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  s = s.replace(/[:\-–—,./\\]+$/, '').trim();
+  if (s.length < 2) return '';
+  if (/^(tl|try|iban|eft|fast|banka|bank)$/i.test(s)) return '';
+  return s.slice(0, 140);
+}
+
+function findLabel(text, rule) {
+  const re = new RegExp(rule.re.source, rule.re.flags.includes('g') ? rule.re.flags : rule.re.flags + 'g');
+  let m;
+  while ((m = re.exec(text))) {
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 16);
+    if (rule.rejectAfter && rule.rejectAfter.test(after)) continue;
+    if (rule.badBefore) {
+      const before = text.slice(Math.max(0, m.index - 28), m.index);
+      if (rule.badBefore.test(before)) continue;
+    }
+    return m;
   }
   return null;
 }
 
+function valueAfter(folded, match, original) {
+  const rawTail = folded.slice(match.index + match[0].length);
+  const restFold = rawTail.replace(/^[\s:–—-]+/, '');
+  const lead = rawTail.length - restFold.length;
+  const start = match.index + match[0].length + lead;
+  const stop = restFold.search(NEXT_FIELD);
+  const end = stop === -1 ? original.length : start + stop;
+  const chunk = original.slice(start, Math.min(end, start + 180)).trim();
+  return cleanPartyName(chunk);
+}
+
+function bestParty(folded, rules, original) {
+  let best = null;
+  for (const rule of rules) {
+    const m = findLabel(folded, rule);
+    if (!m) continue;
+    const name = valueAfter(folded, m, original);
+    if (!name) continue;
+    if (!best || rule.weight > best.weight) best = { name, weight: rule.weight, labeled: true };
+  }
+  return best;
+}
+
+function bestAmount(text) {
+  let best = null;
+  for (const rule of AMOUNT_RULES) {
+    const re = new RegExp(rule.re.source, rule.re.flags.includes('g') ? rule.re.flags : rule.re.flags + 'g');
+    let m;
+    while ((m = re.exec(text))) {
+      const before = text.slice(Math.max(0, m.index - 28), m.index);
+      if (rule.badBefore && rule.badBefore.test(before)) continue;
+      const after = text.slice(m.index + m[0].length, m.index + m[0].length + 48);
+      const num = after.match(/[:\s(TLRY)]*(\d{1,3}(?:[.,]\d{3})+(?:[.,]\d{1,2})?|\d+[.,]\d{1,2}|\d{4,})/i);
+      if (!num) continue;
+      const amount = parseAmount(num[1]);
+      if (amount <= 0) continue;
+      if (!best || rule.weight > best.weight || (rule.weight === best.weight && amount > best.amount)) {
+        best = { amount, weight: rule.weight, labeled: true };
+      }
+    }
+  }
+  return best;
+}
+
+function collectDates(text) {
+  const re = /(\d{1,2}[./-]\d{1,2}[./-]\d{4})/g;
+  const out = [];
+  let m;
+  while ((m = re.exec(text))) {
+    const d = parseDate(m[1]);
+    if (d && !out.includes(d)) out.push(d);
+  }
+  return out;
+}
+
+function bestDate(text) {
+  let best = null;
+  for (const rule of DATE_RULES) {
+    const m = findLabel(text, rule);
+    if (!m) continue;
+    const after = text.slice(m.index + m[0].length, m.index + m[0].length + 40);
+    const dm = after.match(/(\d{1,2}[./-]\d{1,2}[./-]\d{4})/);
+    const date = dm ? parseDate(dm[1]) : null;
+    if (!date) continue;
+    if (!best || rule.weight > best.weight) best = { date, weight: rule.weight, labeled: true };
+  }
+  if (best) return best;
+  const dates = collectDates(text);
+  if (dates.length === 1) return { date: dates[0], weight: 40, labeled: true };
+  if (dates.length > 1) return { date: dates[0], weight: 20, labeled: false };
+  return null;
+}
+
+function guessSenderFromTitle(text, receiverName) {
+  const recv = normalize(receiverName || '');
+  COMPANY_RE.lastIndex = 0;
+  let m;
+  while ((m = COMPANY_RE.exec(text))) {
+    const name = cleanPartyName(m[1]);
+    if (!name || name.length < 8) continue;
+    const norm = normalize(name);
+    if (recv && (norm === recv || norm.includes(recv) || recv.includes(norm))) continue;
+    if (/\b(bank|bankasi|qnb)\b/.test(norm)) continue;
+    return name;
+  }
+  return '';
+}
+
+function parseSingleDekont(text) {
+  const flat = flattenDekontText(text);
+  if (!flat || flat.length < 20) return null;
+  const folded = foldTr(flat);
+
+  const senderHit = bestParty(folded, SENDER_RULES, flat);
+  const receiverHit = bestParty(folded, RECEIVER_RULES, flat);
+  const amountHit = bestAmount(folded);
+  const dateHit = bestDate(folded, flat);
+
+  let senderName = senderHit?.name || '';
+  let senderLabeled = !!senderHit;
+  const receiverName = receiverHit?.name || '';
+  const receiverLabeled = !!receiverHit;
+
+  if (!senderName) {
+    senderName = guessSenderFromTitle(flat, receiverName);
+    senderLabeled = false;
+  }
+
+  const amount = amountHit?.amount || 0;
+  const date = dateHit?.date || '';
+  const amountLabeled = !!amountHit?.labeled;
+  const dateLabeled = !!dateHit?.labeled;
+
+  if (!senderName && !receiverName && !amount && !date) return null;
+
+  let confidence = 'high';
+  if (!amount || !date || !senderName) confidence = 'low';
+  else if (!senderLabeled || !receiverLabeled || !amountLabeled || !dateLabeled) confidence = 'mid';
+
+  const customerName = extractCustomerFromDesc(senderName) || senderName;
+
+  return {
+    date,
+    amount,
+    description: customerName,
+    displayDescription: 'Gelen Ödeme (Dekont)',
+    rawDescription: [senderName, receiverName].filter(Boolean).join(' - '),
+    senderName: customerName,
+    receiverName,
+    source: 'pdf-dekont',
+    confidence
+  };
+}
+
 // ── Banka dekont metninden transaction çıkarma ──
 function parseBankStatementText(text) {
-  // Önce spesifik dekont formatını dene
-  const dekontMatch = parseSingleDekont(text);
-  if (dekontMatch && dekontMatch.length > 0) {
-    return dekontMatch;
+  const dekont = parseSingleDekont(text);
+  if (dekont && dekont.confidence !== 'low' && dekont.amount > 0 && dekont.senderName) {
+    return [dekont];
   }
 
   const transactions = [];
@@ -323,11 +567,17 @@ function parseBankStatementText(text) {
       description: extractCustomerFromDesc(desc),
       displayDescription: 'Gelen Ödeme',
       rawDescription: line.trim(),
-      source: 'pdf'
+      senderName: extractCustomerFromDesc(desc),
+      receiverName: '',
+      source: 'pdf',
+      confidence: 'mid'
     });
   }
 
-  return transactions;
+  if (transactions.length > 1) return transactions;
+  if (dekont && (dekont.senderName || dekont.receiverName || dekont.amount || dekont.date)) return [dekont];
+  if (transactions.length === 1) return transactions;
+  return dekont ? [dekont] : [];
 }
 
 // ══════════════════════════════════════════
@@ -350,7 +600,7 @@ export function routeTransactionsToAccounts(transactions, accounts) {
   }));
 
   return transactions.map(tx => {
-    const rawNorm = normalize(tx.rawDescription || tx.description || '');
+    const rawNorm = normalize(tx.receiverName || tx.rawDescription || tx.description || '');
 
     let bestAccount = null;
     let bestScore = 0;
@@ -358,11 +608,15 @@ export function routeTransactionsToAccounts(transactions, accounts) {
     for (const acc of accountEntries) {
       let score = 0;
 
-      // Tam isim eşleşmesi
+      // Tam isim eşleşmesi (alıcı adı hesap adını içerir veya hesap adı alıcıyı içerir)
       if (acc.normalizedName && rawNorm.includes(acc.normalizedName)) {
         score = 100;
       } else if (acc.normalizedCompany && rawNorm.includes(acc.normalizedCompany)) {
         score = 100;
+      } else if (tx.receiverName && acc.normalizedName && acc.normalizedName.includes(rawNorm) && rawNorm.length >= 5) {
+        score = 90;
+      } else if (tx.receiverName && acc.normalizedCompany && acc.normalizedCompany.includes(rawNorm) && rawNorm.length >= 5) {
+        score = 90;
       }
       // Kısmi isim eşleşmesi
       else if (acc.nameParts.length >= 2) {
@@ -409,7 +663,7 @@ export function matchTransactionsToCustomers(transactions, customerMap) {
   const unmatched = [];
 
   for (const tx of transactions) {
-    const normalizedDesc = normalize(tx.description);
+    const normalizedDesc = normalize(tx.senderName || tx.description);
     // Açıklama kelimelerini de çıkar (kısaltma eşleşmesi için)
     const descParts = normalizedDesc.split(' ').filter(p => p.length > 2);
     let bestMatch = null;
@@ -643,14 +897,16 @@ export async function parseStatementFile(file) {
   if (!file) throw new Error('Dosya seçilmedi.');
 
   const type = await detectFileType(file);
+  let txs;
 
   if (type === 'xlsx' || type === 'xls' || type === 'csv' || type === 'excel-fallback') {
-    return parseExcelStatement(file);
+    txs = await parseExcelStatement(file);
+  } else if (type === 'pdf') {
+    txs = await parsePdfStatement(file);
+  } else {
+    throw new Error('Desteklenmeyen dosya formatı. Lütfen PDF, Excel (.xlsx/.xls) veya CSV yükleyin.');
   }
 
-  if (type === 'pdf') {
-    return parsePdfStatement(file);
-  }
-
-  throw new Error('Desteklenmeyen dosya formatı. Lütfen PDF, Excel (.xlsx/.xls) veya CSV yükleyin.');
+  const fileName = file.name || '';
+  return (txs || []).map(tx => ({ ...tx, fileName: tx.fileName || fileName }));
 }

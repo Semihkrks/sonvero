@@ -161,6 +161,9 @@ const menuItems = [
   {
     id: 'secili-hesaplar-cari', label: 'Seçili Hesaplar Cari', icon: 'layers', route: '/secili-hesaplar-cari',
   },
+  {
+    id: 'toplu-tahsilat', label: 'Toplu Tahsilat', icon: 'upload', route: '/toplu-tahsilat',
+  },
 ];
 
 const adminItems = [

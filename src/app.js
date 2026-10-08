@@ -26,6 +26,7 @@ import { renderSettings } from './pages/settings.js';
 import { renderCariPage } from './pages/cari.js';
 import { renderMultiAccountCari } from './pages/multi-account-cari.js';
 import { renderSelectedAccountCari } from './pages/selected-account-cari.js';
+import { renderTopluTahsilat } from './pages/toplu-tahsilat.js';
 import { renderPlaceholderPage } from './pages/placeholder-page.js';
 import { renderCompanyInfo } from './pages/company-info.js';
 import { renderCustomers } from './pages/customers.js';
@@ -190,6 +191,11 @@ registerRoute('/tum-hesaplar-cari', async () => ({
 registerRoute('/secili-hesaplar-cari', async () => ({
   page: await renderSelectedAccountCari(),
   title: 'Seçili Hesaplar Cari (Tüm İşlemler)'
+}));
+
+registerRoute('/toplu-tahsilat', async () => ({
+  page: await renderTopluTahsilat(),
+  title: 'Toplu Tahsilat'
 }));
 
 registerRoute('/eirsaliye-giden', async () => ({

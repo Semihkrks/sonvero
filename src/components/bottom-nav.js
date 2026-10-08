@@ -5,7 +5,7 @@
 const ROUTE_GROUPS = {
   incoming: ['/incoming', '/eirsaliye-gelen'],
   outgoing: ['/outgoing', '/eirsaliye-giden'],
-  cari: ['/cari', '/secili-hesaplar-cari', '/tum-hesaplar-cari']
+  cari: ['/cari', '/secili-hesaplar-cari', '/tum-hesaplar-cari', '/toplu-tahsilat']
 };
 
 const SOURCE_LABELS = {
@@ -15,7 +15,8 @@ const SOURCE_LABELS = {
   '/eirsaliye-giden': 'e-Irsaliye',
   '/cari': 'Canli Cari',
   '/secili-hesaplar-cari': 'Secili Hesap',
-  '/tum-hesaplar-cari': 'Tum Hesap'
+  '/tum-hesaplar-cari': 'Tum Hesap',
+  '/toplu-tahsilat': 'Toplu Tahsilat'
 };
 
 

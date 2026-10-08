@@ -10,7 +10,7 @@ import { getActiveAccount, getActiveAccountId } from '../services/account-manage
 import { registerCacheReset } from '../router.js';
 import { exportCustomerCari } from '../services/cari-export.js';
 import { addCollection, listCollections, updateCollection, deleteCollection } from '../services/tahsilat-manager.js';
-import { openImportTahsilatModal } from '../components/import-tahsilat-modal.js';
+import { parseUserAmount, formatUserAmount, isDecimalInProgress } from '../services/bank-statement-parser.js';
 
 // ── SVG Icons ──
 const ic = {
@@ -93,22 +93,11 @@ function toTs(v) {
 }
 
 function parseAmountInput(value) {
-  if (!value) return 0;
-  const normalized = String(value)
-    .replace(/\s/g, '')
-    .replace(/\./g, '')
-    .replace(/,/g, '.');
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : 0;
+  return parseUserAmount(value);
 }
 
 function formatAmountInput(value) {
-  const n = parseAmountInput(value);
-  if (!n) return '';
-  return new Intl.NumberFormat('tr-TR', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2
-  }).format(n);
+  return formatUserAmount(value);
 }
 
 function extractItems(data) {
@@ -268,20 +257,8 @@ export async function renderCariPage() {
   page.querySelector('#cariApplyBtn')?.addEventListener('click', () => loadCariData(page));
   page.querySelector('#cariSearchInput')?.addEventListener('input', () => filterCustomerList(page));
 
-  // Toplu Tahsilat Import butonu
   page.querySelector('#cariImportBtn')?.addEventListener('click', () => {
-    if (Object.keys(customerMap).length === 0) {
-      showToast('Önce verileri yükleyin (ARA butonuna basın), sonra toplu tahsilat yükleyebilirsiniz.', 'warning');
-      return;
-    }
-    openImportTahsilatModal(customerMap, () => {
-      // Import tamamlanınca veriyi yenile
-      loadCariData(page).then(() => {
-        if (selectedCustomer && customerMap[selectedCustomer]) {
-          renderDetailPanel(page, customerMap[selectedCustomer], selectedCustomer);
-        }
-      });
-    });
+    window.location.hash = '#/toplu-tahsilat';
   });
 
   // Sayfa açılır açılmaz verileri listele ki müşteriler ekranı boş kalmasın ve anlık filtreleme çalışsın
@@ -786,14 +763,17 @@ function renderDetailPanel(page, customer, key) {
   const amountInput = panel.querySelector('#tahsilatAmount');
   amountInput?.addEventListener('input', (e) => {
     const raw = e.target.value;
-    // Virgülle biterken veya virgülden sonra rakam yazılırken formatlamayı atla
-    if (raw.endsWith(',') || /,\d{0,2}$/.test(raw)) return;
+    // iOS klavyesinde ondalık noktadır; virgül de kabul edilir. Kuruş yazılırken biçimleme kesilmesin.
+    if (isDecimalInProgress(raw)) return;
     const cursorAtEnd = e.target.selectionStart === e.target.value.length;
     const formatted = formatAmountInput(raw);
     e.target.value = formatted;
     if (cursorAtEnd) {
       e.target.setSelectionRange(formatted.length, formatted.length);
     }
+  });
+  amountInput?.addEventListener('blur', (e) => {
+    e.target.value = formatAmountInput(e.target.value);
   });
 
   const tahsilatWrap = panel.querySelector('#tahsilatFormWrap');
