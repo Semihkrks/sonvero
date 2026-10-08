@@ -118,6 +118,7 @@ async function loadMultiAccountData(page) {
   // Eşleştirme/birleştirme tek hesabın değil, tüm hesapların verisi elde olunca yapılır.
   const pendingInvoices = []; // { inv, acc }
   const pendingTahsilats = []; // { t, acc }
+  const failedTahsilat = [];
 
   for (const acc of allAccounts) {
     try {
@@ -130,6 +131,10 @@ async function loadMultiAccountData(page) {
       if (efRes.status === 'fulfilled') efRes.value.forEach(i => pendingInvoices.push({ inv: { ...i, _type: 'efatura' }, acc }));
       if (eaRes.status === 'fulfilled') eaRes.value.forEach(i => pendingInvoices.push({ inv: { ...i, _type: 'earsiv' }, acc }));
       if (thRes.status === 'fulfilled') thRes.value.forEach(t => pendingTahsilats.push({ t: { ...t, _type: 'tahsilat' }, acc }));
+      else {
+        failedTahsilat.push(acc.name);
+        console.error(`${acc.name} tahsilatları yüklenemedi:`, thRes.reason);
+      }
     } catch (e) {
       console.error(`Error scanning account ${acc.name}:`, e);
     }
@@ -214,6 +219,9 @@ async function loadMultiAccountData(page) {
 
   isScanning = false;
   showToast(`${allAccounts.length} hesaptan toplam ${totalInvoices} satış faturası ve ${totalTahsilats} tahsilat tarandı.`, 'success');
+  if (failedTahsilat.length) {
+    showToast(`Tahsilatlar yüklenemedi: ${failedTahsilat.join(', ')}. Tekrar taramayı deneyin.`, 'warning');
+  }
   renderCustomerList(page);
 }
 

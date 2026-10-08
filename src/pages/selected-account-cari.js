@@ -209,6 +209,7 @@ async function loadData(page) {
   let totalSatis = 0, totalAlis = 0, totalTah = 0;
   const pendingInvoices = []; // { inv, acc, dir }
   const pendingTahsilats = []; // { t, acc }
+  const failedTahsilat = [];
 
   for (const acc of accountsToScan) {
     try {
@@ -228,8 +229,12 @@ async function loadData(page) {
 
       const results = await Promise.allSettled(tasks.map(t => t[1]));
       results.forEach((res, idx) => {
-        if (res.status !== 'fulfilled') return;
         const kind = tasks[idx][0];
+        if (res.status !== 'fulfilled') {
+          if (kind === 'tahsilat') failedTahsilat.push(acc.name);
+          console.error(`${acc.name} ${kind} yüklenemedi:`, res.reason);
+          return;
+        }
         if (kind === 'tahsilat') {
           (res.value || []).forEach(t => pendingTahsilats.push({ t: { ...t, _type: 'tahsilat' }, acc }));
         } else if (kind.startsWith('satis')) {
@@ -315,6 +320,9 @@ async function loadData(page) {
     if (info) info.textContent = `${totalSatis} satış · ${totalAlis} alış · ${totalTah} tahsilat`;
   }
   showToast(`${accountsToScan.length} hesap tarandı: ${totalSatis} satış, ${totalAlis} alış, ${totalTah} tahsilat.`, 'success');
+  if (failedTahsilat.length) {
+    showToast(`Tahsilatlar yüklenemedi: ${failedTahsilat.join(', ')}. Tekrar taramayı deneyin.`, 'warning');
+  }
   renderCustomerList(page);
 }
 

@@ -337,11 +337,18 @@ async function loadCariData(page) {
       if (res.status === 'fulfilled' && Array.isArray(res.value)) fetchedInvoices.push(...res.value);
     });
 
-    const fetchedCollections = await listCollections({
-      accountId: account.id,
-      startDate: dateStart,
-      endDate: dateEnd
-    });
+    let fetchedCollections = [];
+    let collectionError = null;
+    try {
+      fetchedCollections = await listCollections({
+        accountId: account.id,
+        startDate: dateStart,
+        endDate: dateEnd
+      });
+    } catch (err) {
+      collectionError = err;
+      console.error('Cari tahsilat yükleme:', err);
+    }
 
     if (seq !== cariLoadSeq || cachedCariAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
@@ -368,7 +375,9 @@ async function loadCariData(page) {
     const searchInput = page.querySelector('#cariSearchInput');
     const searchValue = searchInput ? searchInput.value.trim() : '';
     
-    if (searchValue) {
+    if (collectionError) {
+      showToast(`Faturalar geldi ama tahsilatlar yüklenemedi: ${collectionError.message}. ARA ile tekrar deneyin.`, 'warning');
+    } else if (searchValue) {
       showToast(`Arama tamamlandı: "${searchValue}" için sonuçlar listelendi.`, 'success');
     } else {
       showToast(`Veriler güncellendi: ${allInvoices.length} fatura, ${allCollections.length} tahsilat hareketi getirildi.`, 'success');
@@ -449,10 +458,28 @@ function buildCustomerMap() {
     });
   });
 
+  const foldKey = (s) => String(s || '')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ı/g, 'i')
+    .trim();
+  const keyByFold = {};
+  Object.entries(customerMap).forEach(([k, c]) => {
+    keyByFold[foldKey(k)] = keyByFold[foldKey(k)] || k;
+    if (c.name && c.name !== 'Bilinmeyen') keyByFold[foldKey(c.name)] = keyByFold[foldKey(c.name)] || k;
+  });
+
   allCollections.forEach(col => {
     const name = col.customer_name || 'Bilinmeyen';
     const taxNo = col.customer_tax_no || '—';
-    const key = col.customer_key || getCustomerKey(name, taxNo);
+    let key = col.customer_key || getCustomerKey(name, taxNo);
+    if (!customerMap[key]) {
+      key = keyByFold[foldKey(key)]
+        || (col.customer_tax_no && keyByFold[foldKey(col.customer_tax_no)])
+        || keyByFold[foldKey(name)]
+        || key;
+    }
 
     if (!customerMap[key]) {
       customerMap[key] = {

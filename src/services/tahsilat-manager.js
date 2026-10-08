@@ -9,15 +9,24 @@ async function requireSupabaseUserId() {
     throw new Error('Supabase istemcisi baslatilamadi.');
   }
 
-  const { data: authData } = await sb.auth.getUser();
-  const userId = authData?.user?.id;
+  const { data: sessionData } = await sb.auth.getSession();
+  let userId = sessionData?.session?.user?.id;
   if (!userId) {
-    throw new Error('Supabase oturumu yok. Authentication > Anonymous sign-ins acik olmali.');
+    const { data: authData } = await sb.auth.getUser();
+    userId = authData?.user?.id;
+  }
+  if (!userId) {
+    throw new Error('Supabase oturumu yok. Lütfen yeniden giriş yapın.');
   }
   return userId;
 }
 
+const ownedAccounts = new Set();
+
 async function ensureAccountOwnership(accountId, userId) {
+  const cacheKey = `${userId}:${accountId}`;
+  if (ownedAccounts.has(cacheKey)) return;
+
   const sb = getSupabase();
   const { data, error } = await sb
     .from('accounts')
@@ -30,32 +39,72 @@ async function ensureAccountOwnership(accountId, userId) {
   if (!data?.id) {
     throw new Error('Aktif hesap Supabase tarafinda bulunamadi. Hesabi once Supabasee kaydedin.');
   }
+  ownedAccounts.add(cacheKey);
 }
+
+async function withRetry(fn, attempts = 3) {
+  let lastError;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastError = e;
+      if (/bulunamadi|zorunlu|eksik/i.test(e?.message || '')) throw e;
+      await new Promise(r => setTimeout(r, 400 * (i + 1)));
+    }
+  }
+  throw lastError;
+}
+
+function foldSearch(s) {
+  return String(s || '')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ı/g, 'i');
+}
+
+// PostgREST tek istekte en fazla 1000 satır döndürür; sayfa sayfa çekilir.
+const PAGE_SIZE = 1000;
 
 export async function listCollections({ accountId, startDate = '', endDate = '', searchText = '' } = {}) {
   if (!accountId) return [];
 
-  const userId = await requireSupabaseUserId();
-  await ensureAccountOwnership(accountId, userId);
-  const sb = getSupabase();
+  const rows = await withRetry(async () => {
+    const userId = await requireSupabaseUserId();
+    await ensureAccountOwnership(accountId, userId);
+    const sb = getSupabase();
 
-  let query = sb
-    .from('customer_collections')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('account_id', accountId)
-    .order('date', { ascending: true })
-    .order('created_at', { ascending: true });
+    const all = [];
+    for (let from = 0; ; from += PAGE_SIZE) {
+      let query = sb
+        .from('customer_collections')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('account_id', accountId)
+        .order('date', { ascending: true })
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1);
 
-  if (startDate) query = query.gte('date', startDate);
-  if (endDate) query = query.lte('date', endDate);
-  if (searchText) {
-    query = query.or(`customer_name.ilike.%${searchText}%,customer_tax_no.ilike.%${searchText}%`);
-  }
+      if (startDate) query = query.gte('date', startDate);
+      if (endDate) query = query.lte('date', endDate);
 
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
+      const { data, error } = await query;
+      if (error) throw error;
+      all.push(...(data || []));
+      if (!data || data.length < PAGE_SIZE) break;
+    }
+    return all;
+  });
+
+  const q = foldSearch(searchText).trim();
+  if (!q) return rows;
+  return rows.filter(c =>
+    foldSearch(c.customer_name).includes(q) ||
+    foldSearch(c.customer_tax_no).includes(q) ||
+    foldSearch(c.customer_key).includes(q)
+  );
 }
 
 export async function addCollection(record) {
