@@ -110,7 +110,7 @@ async function loadCustomerData(accounts, view) {
       view.addExisting(cols || []);
       const found = {};
       (cols || []).forEach(c => rememberCustomer(found, c.customer_name, c.customer_tax_no));
-      view.addCustomers(found);
+      view.addCustomers(found, acc.id);
     } catch { /* hesap Supabase'de yoksa geç */ }
   }));
 
@@ -129,7 +129,7 @@ async function loadCustomerData(accounts, view) {
         const tax = inv.ReceiverTaxNumber || inv.receiverTaxNumber || inv.TaxNumber || inv.taxNumber || (inv.CustomerInfo || {}).TaxNumber || '';
         rememberCustomer(found, name, tax);
       }
-      view.addCustomers(found);
+      view.addCustomers(found, acc.id);
     } catch (e) {
       console.error('Toplu tahsilat müşteri yükleme:', acc?.name, e);
     }
@@ -141,7 +141,8 @@ async function loadCustomerData(accounts, view) {
 
 export function createTopluTahsilatView({ accounts, save }) {
   const accountById = Object.fromEntries(accounts.map(a => [a.id, a]));
-  const customers = {};
+  const customersByAcc = {};
+  const accCustomers = (id) => (customersByAcc[id] = customersByAcc[id] || {});
   const existing = [];
   let rows = [];
   let filter = 'all';
@@ -237,9 +238,11 @@ export function createTopluTahsilatView({ accounts, save }) {
       row.customerKey = '';
       row.customerName = '';
       row.customerTaxNo = '';
+      row.customerIsNew = false;
       row.matchScore = 0;
-      if (row.senderName && Object.keys(customers).length) {
-        const { matched } = matchTransactionsToCustomers([{ senderName: row.senderName, description: row.senderName }], customers);
+      const pool = row.accountId ? accCustomers(row.accountId) : null;
+      if (row.senderName && pool && Object.keys(pool).length) {
+        const { matched } = matchTransactionsToCustomers([{ senderName: row.senderName, description: row.senderName }], pool);
         const hit = matched[0];
         if (hit) {
           row.customerKey = hit.matchedCustomerKey;
@@ -255,7 +258,7 @@ export function createTopluTahsilatView({ accounts, save }) {
     const sameAmount = (a, b) => Math.abs((Number(a) || 0) - (Number(b) || 0)) < 0.01;
     const inDb = !!row.date && row.amount > 0 && existing.some(c =>
       c.date === row.date && sameAmount(c.amount, row.amount) &&
-      ((row.customerKey && c.customer_key === row.customerKey) || (!row.customerKey && c.account_id === row.accountId))
+      c.account_id === row.accountId && (!row.customerKey || c.customer_key === row.customerKey)
     );
     const inList = !!row.date && row.amount > 0 && rows.some(o =>
       o !== row && o.date === row.date && sameAmount(o.amount, row.amount) &&
@@ -282,7 +285,7 @@ export function createTopluTahsilatView({ accounts, save }) {
     if (!row.confirmed) {
       if (!row.readError && row.confidence !== 'high' && row.source !== 'excel') notes.push({ tone: 'warn', text: 'Bazı bilgiler etiketten değil tahminle okundu.' });
       if (row.customerKey && !row.customerTouched && row.matchScore < 90) notes.push({ tone: 'warn', text: `Müşteri eşleşmesi zayıf (%${row.matchScore}). Doğru müşteri mi?` });
-      if (row.senderName && !row.customerKey && !missing.includes('müşteri')) notes.push({ tone: 'warn', text: 'Gönderen listede yok.' });
+      if (row.senderName && !row.customerKey && !missing.includes('müşteri')) notes.push({ tone: 'warn', text: 'Gönderen bu hesabın müşterilerinde yok.' });
     }
 
     let status = 'ready';
@@ -376,7 +379,7 @@ export function createTopluTahsilatView({ accounts, save }) {
 
   function renderCustomerPill() {
     const pill = ref('cust');
-    const count = Object.keys(customers).length;
+    const count = new Set(Object.values(customersByAcc).flatMap(m => Object.keys(m))).size;
     if (custProgress.finished) {
       pill.className = 'tt-pill tt-pill-ok';
       pill.textContent = `${count} müşteri hazır`;
@@ -437,7 +440,7 @@ export function createTopluTahsilatView({ accounts, save }) {
         ${thumbHtml(row)}
         <div class="tt-c-customer">
           <strong class="${row.customerKey ? '' : 'tt-muted-strong'}">${esc(row.customerName || 'Müşteri seçilmedi')}</strong>
-          <span>Gönderen: ${esc(row.senderName || '—')}</span>
+          <span>${row.customerIsNew ? '<b class="tt-new-tag">Yeni cari</b> ' : ''}Gönderen: ${esc(row.senderName || '—')}</span>
         </div>
         <div class="tt-c-account">
           ${accountChip(row.accountId)}
@@ -700,6 +703,7 @@ export function createTopluTahsilatView({ accounts, save }) {
   function paintForm(row) {
     const form = viewer.querySelector('[data-v="form"]');
     const read = row.read;
+    const acc = accountById[row.accountId];
     form.innerHTML = `
       <div class="tt-read">
         <h3>Dekontta okunan</h3>
@@ -714,15 +718,6 @@ export function createTopluTahsilatView({ accounts, save }) {
       <ul class="tt-notes" data-v="notes"></ul>
 
       <div class="tt-field">
-        <label for="ttCust">Müşteri <small>tahsilat bu cariye yazılır</small></label>
-        <div class="tt-combo">
-          <input id="ttCust" class="form-input" data-f="customer" value="${esc(row.customerName)}" placeholder="Müşteri adı veya VKN ara" autocomplete="off" />
-          <div class="tt-menu" data-f="menu" hidden></div>
-        </div>
-        <span class="tt-field-hint" data-f="custHint">${row.customerTaxNo ? `VKN ${esc(row.customerTaxNo)}` : row.customerKey ? 'Gönderen adıyla cari' : ''}</span>
-      </div>
-
-      <div class="tt-field">
         <label>Hesap <small>parayı alan Sonvera hesabı</small></label>
         <div class="tt-accs">
           ${accounts.map(a => `
@@ -730,6 +725,15 @@ export function createTopluTahsilatView({ accounts, save }) {
               <i></i><span>${esc(a.name)}</span>
             </button>`).join('') || '<span class="tt-muted">Kayıtlı hesap yok. Önce Hesaplar sayfasından ekle.</span>'}
         </div>
+      </div>
+
+      <div class="tt-field">
+        <label for="ttCust">Müşteri <small>${acc ? `${esc(acc.name)} hesabının müşterileri` : 'önce hesabı seç'}</small></label>
+        <div class="tt-combo">
+          <input id="ttCust" class="form-input" data-f="customer" value="${esc(row.customerName)}" placeholder="${acc ? 'Müşteri adı veya VKN ara' : 'Önce yukarıdan hesap seç'}" autocomplete="off" ${acc ? '' : 'disabled'} />
+          <div class="tt-menu" data-f="menu" hidden></div>
+        </div>
+        <span class="tt-field-hint" data-f="custHint">${custHint(row)}</span>
       </div>
 
       <div class="tt-field-row">
@@ -750,6 +754,12 @@ export function createTopluTahsilatView({ accounts, save }) {
     paintViewerMeta();
   }
 
+  function custHint(row) {
+    if (row.customerTaxNo) return `VKN ${esc(row.customerTaxNo)}`;
+    if (row.customerIsNew) return 'Bu hesapta yeni cari olarak açılacak';
+    return row.customerKey ? 'VKN yok' : '';
+  }
+
   function touch(row) {
     row.confirmed = false;
     paintViewerMeta();
@@ -761,27 +771,29 @@ export function createTopluTahsilatView({ accounts, save }) {
     const menu = form.querySelector('[data-f="menu"]');
     const hint = form.querySelector('[data-f="custHint"]');
 
-    const pickCustomer = (key, c) => {
+    const pickCustomer = (key, c, isNew = false) => {
       row.customerTouched = true;
       row.customerKey = key;
       row.customerName = c.name;
       row.customerTaxNo = c.taxNo || '';
+      row.customerIsNew = isNew;
       row.matchScore = 100;
       custInput.value = c.name;
-      hint.textContent = c.taxNo ? `VKN ${c.taxNo}` : 'Gönderen adıyla cari';
+      hint.innerHTML = custHint(row);
       menu.hidden = true;
       touch(row);
     };
 
     const paintMenu = () => {
+      if (!row.accountId) { menu.hidden = true; return; }
+      const pool = accCustomers(row.accountId);
       const q = custInput.value.toLocaleLowerCase('tr-TR').trim();
-      const hits = Object.entries(customers)
+      const hits = Object.entries(pool)
         .filter(([, c]) => !q || c.name.toLocaleLowerCase('tr-TR').includes(q) || String(c.taxNo || '').includes(q))
         .sort((a, b) => a[1].name.localeCompare(b[1].name, 'tr'))
         .slice(0, 30);
       const sender = row.read.senderName || row.senderName;
-      const senderKey = sender ? customerKey(sender, '') : '';
-      const offerNew = sender && !customers[senderKey];
+      const offerNew = sender && !Object.values(pool).some(c => norm(c.name) === norm(sender));
       const items = [];
       if (offerNew) {
         items.push(`<button type="button" class="tt-menu-item tt-menu-new" data-new="1"><strong>+ Yeni cari: ${esc(sender)}</strong><span>Gönderen adıyla kaydet</span></button>`);
@@ -790,7 +802,7 @@ export function createTopluTahsilatView({ accounts, save }) {
         items.push(`<button type="button" class="tt-menu-item ${key === row.customerKey ? 'active' : ''}" data-key="${esc(key)}"><strong>${esc(c.name)}</strong><span>${esc(c.taxNo || 'VKN yok')}</span></button>`);
       });
       if (!hits.length) {
-        items.push(`<div class="tt-menu-empty">${custProgress.finished ? 'Eşleşen müşteri yok.' : 'Müşteri listesi hâlâ yükleniyor…'}</div>`);
+        items.push(`<div class="tt-menu-empty">${custProgress.finished ? 'Bu hesapta eşleşen müşteri yok.' : 'Müşteri listesi hâlâ yükleniyor…'}</div>`);
       }
       menu.innerHTML = items.join('');
       menu.hidden = false;
@@ -822,23 +834,34 @@ export function createTopluTahsilatView({ accounts, save }) {
       const item = e.target.closest('.tt-menu-item');
       if (!item) return;
       e.preventDefault();
+      const pool = accCustomers(row.accountId);
       if (item.dataset.new) {
         const name = row.read.senderName || row.senderName;
-        const key = customerKey(name, '');
-        customers[key] = customers[key] || { name, taxNo: '' };
-        pickCustomer(key, customers[key]);
+        pickCustomer(customerKey(name, ''), { name, taxNo: '' }, true);
         return;
       }
-      const c = customers[item.dataset.key];
+      const c = pool[item.dataset.key];
       if (c) pickCustomer(item.dataset.key, c);
     });
 
     form.querySelectorAll('[data-acc]').forEach(btn => {
       btn.addEventListener('click', () => {
+        if (btn.dataset.acc === row.accountId) return;
         row.accountTouched = true;
         row.accountId = btn.dataset.acc;
-        form.querySelectorAll('[data-acc]').forEach(b => b.classList.toggle('active', b === btn));
+        const keep = row.customerTouched && (row.customerIsNew || accCustomers(row.accountId)[row.customerKey]);
+        if (!keep) row.customerTouched = false;
+        else if (row.customerIsNew) {
+          const twin = Object.entries(accCustomers(row.accountId)).find(([, c]) => norm(c.name) === norm(row.customerName));
+          if (twin) {
+            row.customerIsNew = false;
+            row.customerKey = twin[0];
+            row.customerTaxNo = twin[1].taxNo || '';
+          }
+        }
+        autoMatch(row);
         touch(row);
+        paintForm(row);
       });
     });
 
@@ -954,10 +977,12 @@ export function createTopluTahsilatView({ accounts, save }) {
   return {
     el,
     addFiles: ingest,
-    addCustomers(map) {
+    addCustomers(map, accountId) {
+      if (!accountId) return;
+      const pool = accCustomers(accountId);
       Object.entries(map || {}).forEach(([key, c]) => {
-        if (!customers[key]) customers[key] = c;
-        else if (c.name.length > customers[key].name.length) customers[key].name = c.name;
+        if (!pool[key]) pool[key] = c;
+        else if (c.name.length > pool[key].name.length) pool[key].name = c.name;
       });
       rematch();
     },

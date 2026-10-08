@@ -340,6 +340,16 @@
   white-space: nowrap;
 }
 .tt-c-customer strong.tt-muted-strong { color: var(--tt-bad); font-weight: 600; }
+.tt-new-tag {
+  display: inline-block;
+  padding: 0 6px;
+  margin-right: 2px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
 .tt-c-customer span,
 .tt-c-account .tt-sub {
   font-size: 11px;
