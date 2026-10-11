@@ -1,8 +1,9 @@
+import {fetchAllPagesChunked} from '../services/nilvera-fetcher.js';
 // ══════════════════════════════════════════
 // Excel Export Config Page
 // ══════════════════════════════════════════
 import { INVOICE_COLUMNS, LINE_COLUMNS, exportInvoicesToExcel } from '../services/excel-export.js';
-import { EInvoice } from '../api/nilvera.js';
+import { EInvoiceWithAccount } from '../api/nilvera.js';
 import { getActiveAccount } from '../services/account-manager.js';
 import { showToast } from '../components/toast.js';
 
@@ -52,7 +53,7 @@ export async function renderExportPage() {
 
         <div class="form-group">
           <label class="form-label">Dosya Adı</label>
-          <input type="text" class="form-input" id="fileName" placeholder="efatura_export" value="efatura_export_${new Date().toISOString().slice(0, 10)}" />
+          <input type="text" class="form-input" id="fileName" placeholder="Otomatik: firma adı ve dönem" value="" />
         </div>
 
         <div class="form-group" style="display:flex;gap:16px">
@@ -103,24 +104,16 @@ export async function renderExportPage() {
 
   page.querySelector('#exportBtn')?.addEventListener('click', async () => {
     const source = page.querySelector('#exportSource')?.value;
+    const dateRange={start:page.querySelector('#dateStart')?.value||null,end:page.querySelector('#dateEnd')?.value||null};
     const btn = page.querySelector('#exportBtn');
     btn.disabled = true;
     btn.innerHTML = `${ic.loader} Yükleniyor...`;
 
     try {
-      let res;
-      if (source === 'incoming') {
-        res = await EInvoice.listPurchases({ PageSize: 200 });
-      } else {
-        res = await EInvoice.listSales({ PageSize: 200 });
-      }
-
-      if (!res.success) {
-        showToast(`API hatası: ${res.error}`, 'error');
-        return;
-      }
-
-      const invoices = res.data?.Items || res.data || [];
+      if(!account)throw new Error('Önce firma hesabı seçin.');
+      if(dateRange.start&&dateRange.end&&dateRange.start>dateRange.end)throw new Error('Başlangıç tarihi bitişten sonra olamaz.');
+      const invoices=await fetchAllPagesChunked(source==='incoming'?EInvoiceWithAccount.listPurchases:EInvoiceWithAccount.listSales,account,{StartDate:dateRange.start,EndDate:dateRange.end});
+      if(getActiveAccount()?.id!==account.id||!page.isConnected)return;
       if (invoices.length === 0) {
         showToast('Dışa aktarılacak fatura bulunamadı', 'warning');
         return;
@@ -139,16 +132,13 @@ export async function renderExportPage() {
       });
 
       const result = exportInvoicesToExcel(invoices, {
-        fileName: page.querySelector('#fileName')?.value || 'export',
+        fileName: page.querySelector('#fileName')?.value || null,
         accountName: account?.name || '',
         selectedColumns: selectedInv.length > 0 ? selectedInv : INVOICE_COLUMNS.filter(c => c.checked),
         selectedLineColumns: selectedLine.length > 0 ? selectedLine : LINE_COLUMNS.filter(c => c.checked),
         includeLines: page.querySelector('#includeLines')?.checked ?? true,
         includeSummary: page.querySelector('#includeSummary')?.checked ?? true,
-        dateRange: {
-          start: page.querySelector('#dateStart')?.value || null,
-          end: page.querySelector('#dateEnd')?.value || null
-        }
+        dateRange
       });
 
       showToast(`${result.count} fatura "${result.fileName}" olarak indirildi`, 'success');

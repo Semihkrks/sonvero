@@ -4,8 +4,8 @@
 import { createClient } from '@supabase/supabase-js';
 
 // Sabit Supabase config (her oturumda otomatik kullanılır)
-export const EMBEDDED_SUPABASE_URL = 'https://ciaffmgszfvyrdoweirw.supabase.co';
-export const EMBEDDED_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpYWZmbWdzemZ2eXJkb3dlaXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1OTc0MjcsImV4cCI6MjA4OTE3MzQyN30.Hhn3szJONOxK4Zpa-pfGTV5xiRNUQdlBl2NnyGlCCfE';
+export const EMBEDDED_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://ciaffmgszfvyrdoweirw.supabase.co';
+export const EMBEDDED_SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNpYWZmbWdzemZ2eXJkb3dlaXJ3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1OTc0MjcsImV4cCI6MjA4OTE3MzQyN30.Hhn3szJONOxK4Zpa-pfGTV5xiRNUQdlBl2NnyGlCCfE';
 
 let supabaseUrl = EMBEDDED_SUPABASE_URL;
 let supabaseKey = EMBEDDED_SUPABASE_ANON_KEY;

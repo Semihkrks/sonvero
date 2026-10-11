@@ -1,9 +1,11 @@
+import {rememberExportPeriod,exportPeriod} from '../lib/export-context.js';
+import { invoiceLedgerAmount, addAmount } from '../lib/ledger-finance.js';
 import { EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { listAccounts } from '../services/account-manager.js';
 import { listCollections } from '../services/tahsilat-manager.js';
 import { showToast } from '../components/toast.js';
-import { exportAllTransactions } from '../services/cari-export.js';
+import { exportAllTransactions } from '../services/cari-export-worker-client.js';
 
 const ic = {
   search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
@@ -175,6 +177,7 @@ export async function renderSelectedAccountCari() {
     renderCustomerList(page);
   });
 
+  const notice=document.createElement('div');notice.className='sv-notice';notice.textContent='Bu görünüm yüklenen dönem kayıtlarını içerir. Dövizli, para birimi belirsiz ve iptal edilen belgeler TL bakiyesine katılmaz. Eksik hesap sonuçları tam bakiye değildir.';page.prepend(notice);
   return page;
 }
 
@@ -210,6 +213,7 @@ async function loadData(page) {
   const pendingInvoices = []; // { inv, acc, dir }
   const pendingTahsilats = []; // { t, acc }
   const failedTahsilat = [];
+  let completeScan=true;
 
   for (const acc of accountsToScan) {
     try {
@@ -231,6 +235,7 @@ async function loadData(page) {
       results.forEach((res, idx) => {
         const kind = tasks[idx][0];
         if (res.status !== 'fulfilled') {
+          completeScan=false;
           if (kind === 'tahsilat') failedTahsilat.push(acc.name);
           console.error(`${acc.name} ${kind} yüklenemedi:`, res.reason);
           return;
@@ -244,10 +249,13 @@ async function loadData(page) {
         }
       });
     } catch (e) {
+      completeScan=false;
       console.error(`Error scanning account ${acc.name}:`, e);
     }
   }
 
+  rememberExportPeriod(page,{start:startDate,end:endDate,complete:completeScan});
+  if(!completeScan)showToast('Bazı kaynaklar yüklenemedi. Görünen bakiye eksiktir; dışa aktarmadan önce taramayı yenileyin.','warning');
   function ensureCustomer(key, name, taxNo) {
     if (!customerMap[key]) customerMap[key] = { name, taxNo, items: [], totalSatis: 0, totalAlis: 0, totalTahsilat: 0, accountBreakdown: {} };
     if (name && name !== 'Bilinmeyen' && customerMap[key].name === 'Bilinmeyen') customerMap[key].name = name;
@@ -259,18 +267,18 @@ async function loadData(page) {
 
   // GEÇİŞ 1 — Faturalar (satış=giden / alış=gelen)
   for (const { inv, acc } of pendingInvoices) {
-    if (isRejected(inv)) continue;
+    if (isRejected(inv) || invoiceLedgerAmount(inv) === null) continue;
     const isGelen = inv._direction === 'gelen';
     const name = (isGelen ? getSenderName(inv) : getReceiverName(inv)) || 'Bilinmeyen';
     const taxNo = (isGelen ? getSenderTaxNo(inv) : getReceiverTaxNo(inv)) || '—';
-    const amount = parseFloat(getAmount(inv) || 0);
+    const amount = Number(invoiceLedgerAmount(inv));
     const key = customerKey(taxNo, name);
 
     ensureCustomer(key, name, taxNo);
     customerMap[key].items.push({ ...inv, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
     ensureBreakdown(key, acc);
-    if (isGelen) { customerMap[key].totalAlis += amount; customerMap[key].accountBreakdown[acc.id].alis += amount; totalAlis++; }
-    else { customerMap[key].totalSatis += amount; customerMap[key].accountBreakdown[acc.id].satis += amount; totalSatis++; }
+    if (isGelen) { customerMap[key].totalAlis = addAmount(customerMap[key].totalAlis, amount); customerMap[key].accountBreakdown[acc.id].alis = addAmount(customerMap[key].accountBreakdown[acc.id].alis, amount); totalAlis++; }
+    else { customerMap[key].totalSatis = addAmount(customerMap[key].totalSatis, amount); customerMap[key].accountBreakdown[acc.id].satis = addAmount(customerMap[key].accountBreakdown[acc.id].satis, amount); totalSatis++; }
     customerMap[key].accountBreakdown[acc.id].count++;
 
     allItems.push({ ...inv, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
@@ -286,10 +294,9 @@ async function loadData(page) {
     if (taxNo === '—' || !taxNo) {
       const normName = name.toLocaleLowerCase('tr-TR').trim();
       const match = Object.entries(customerMap).find(([, c]) => {
+        if (!c.accountBreakdown?.[acc.id]) return false;
         const cName = c.name.toLocaleLowerCase('tr-TR').trim();
         if (cName === normName) return true;
-        if (cName.includes(normName) && normName.length > 4) return true;
-        if (normName.includes(cName) && cName.length > 4) return true;
         return false;
       });
       if (match) { key = match[0]; name = match[1].name; taxNo = match[1].taxNo; }
@@ -298,8 +305,8 @@ async function loadData(page) {
     ensureCustomer(key, name, taxNo);
     customerMap[key].items.push({ ...t, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
     ensureBreakdown(key, acc);
-    customerMap[key].totalTahsilat += amount;
-    customerMap[key].accountBreakdown[acc.id].tahsilat += amount;
+    customerMap[key].totalTahsilat = addAmount(customerMap[key].totalTahsilat, amount);
+    customerMap[key].accountBreakdown[acc.id].tahsilat = addAmount(customerMap[key].accountBreakdown[acc.id].tahsilat, amount);
     totalTah++;
 
     allItems.push({ ...t, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
@@ -470,18 +477,19 @@ function renderDetailPanel(page, customer) {
 }
 
 // Firma seçimi yapıldıysa sadece o firmaların hareketlerini döner, yoksa hepsini.
-function getExportItems() {
-  if (exportCustomerKeys.size === 0) return allItems;
+function getExportItems(page) {
+  const visibleKeys=new Set(getVisibleCustomerEntries(page).map(([key])=>key));
   const items = [];
-  exportCustomerKeys.forEach((key) => {
+  (exportCustomerKeys.size ? exportCustomerKeys : visibleKeys).forEach((key) => {
+    if(!visibleKeys.has(key))return;
     const c = customerMap[key];
-    if (c) items.push(...c.items);
+    if (c) for (const item of c.items) items.push(item);
   });
   return items;
 }
 
 async function doExport(page, layout) {
-  const items = getExportItems();
+  const items = getExportItems(page);
   if (items.length === 0) {
     showToast(allItems.length === 0 ? 'Önce tarama yapın.' : 'Seçili firmalarda hareket bulunamadı.', 'error');
     return;
@@ -489,7 +497,7 @@ async function doExport(page, layout) {
   try {
     const selCount = exportCustomerKeys.size;
     showToast(selCount > 0 ? `${selCount} firma için Excel hazırlanıyor...` : 'Excel hazırlanıyor...', 'info');
-    const res = await exportAllTransactions(items, selectedAccounts, { layout, direction, withTahsilat });
+    const res = await exportAllTransactions(items, selectedAccounts, { layout, direction, withTahsilat, dateRange:exportPeriod(page,'#sacDateStart','#sacDateEnd') });
     if (res.success) showToast(`Excel indirildi (${res.count} hareket${selCount > 0 ? `, ${selCount} firma` : ''}).`, 'success');
     else showToast('Hata: ' + res.error, 'error');
   } catch (e) {

@@ -82,17 +82,18 @@ export function splitDateRange(startStr, endStr, chunkDays = CHUNK_DAYS) {
  * apiFn imzası: (account, params, options) → { success, data }
  */
 async function fetchPagesForChunk(apiFn, account, params, options = {}) {
-  const { signal, pageSize = 100, maxPages = 30, stats } = options;
-  const items = [];
-  let pg = 1, totalPages = 1;
-  do {
-    if (signal?.aborted) { if (stats) stats.failed = true; break; }
+  const { signal, pageSize = 50, maxPages = 10000, stats } = options;
+  const items = []; let complete = false;
+  for (let pg = 1; pg <= maxPages; pg++) {
+    if (signal?.aborted) break;
     const res = await apiFn(account, { ...params, Page: pg, PageSize: pageSize }, { signal });
-    if (!res?.success) { if (stats) stats.failed = true; break; }
-    items.push(...extractItems(res.data));
-    totalPages = res.data?.TotalPages || 1;
-    pg++;
-  } while (pg <= totalPages && pg <= maxPages);
+    if (!res?.success) break;
+    const batch = extractItems(res.data); items.push(...batch);
+    const total = Number(res.data?.TotalPages || 0);
+    if ((total > 0 && pg >= total) || (!total && batch.length < pageSize)) { complete = true; break; }
+    if (total > pg && batch.length === 0) break;
+  }
+  if (!complete) { if (stats) stats.failed = true; else throw new Error('Belgelerin tamamı alınamadı. Filtreyi daraltıp yeniden deneyin.'); }
   return items;
 }
 

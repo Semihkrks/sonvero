@@ -1,3 +1,5 @@
+import { listenScoped } from '../lib/page-events.js';
+import { escapeHtml, safeColor } from '../lib/html.js';
 // ══════════════════════════════════════════
 // Header Component — Nilvera-Inspired
 // ══════════════════════════════════════════
@@ -104,8 +106,8 @@ export function renderHeader(title = 'Dashboard', options = {}) {
       const isActive = acc.id === activeId;
       return `
         <button class="header-account-item ${isActive ? 'active' : ''}" data-account-id="${acc.id}">
-          <span class="header-account-dot" style="background:${acc.color || '#3b82f6'}"></span>
-          <span class="header-account-name">${acc.name || 'Hesap'}</span>
+          <span class="header-account-dot" style="background:${safeColor(acc.color)}"></span>
+          <span class="header-account-name">${escapeHtml(acc.name || 'Hesap')}</span>
           <span class="header-account-env ${envClass}">${envLabel}</span>
         </button>
       `;
@@ -170,11 +172,11 @@ export function renderHeader(title = 'Dashboard', options = {}) {
     }
 
     setTimeout(() => {
-      document.addEventListener('click', closeAccountDropdown, { once: true });
+      listenScoped(header, document, 'click', closeAccountDropdown, { once: true });
     }, 0);
   });
 
-  window.addEventListener('resize', () => {
+  listenScoped(header, window, 'resize', () => {
     if (accountDropdown?.classList.contains('open')) {
       positionAccountDropdown();
     }

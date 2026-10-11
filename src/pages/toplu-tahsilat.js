@@ -1,3 +1,5 @@
+import { fingerprint } from '../lib/operations.js';
+import { parseStatementInWorker } from '../services/parser-worker-client.js';
 // ══════════════════════════════════════════
 // Toplu Tahsilat — dekont oku, gözle kontrol et, kaydet
 // ══════════════════════════════════════════
@@ -8,7 +10,6 @@ import { listAccounts } from '../services/account-manager.js';
 import { addCollection, listCollections } from '../services/tahsilat-manager.js';
 import { showToast } from '../components/toast.js';
 import {
-  parseStatementFile,
   parseDekontFromText,
   openPdf,
   extractPdfText,
@@ -199,6 +200,7 @@ export function createTopluTahsilatView({ accounts, save }) {
 
   // ── Dosya alma ──
   el.addEventListener('click', (e) => {
+    if (saving) return;
     if (e.target.closest('[data-act="pick"]')) fileInput.click();
   });
   fileInput.addEventListener('change', () => {
@@ -298,6 +300,7 @@ export function createTopluTahsilatView({ accounts, save }) {
     const row = {
       id: crypto.randomUUID(),
       file,
+      sourceKey: (tx.reference || tx.transactionId) ? 'bank:' + (tx.source || '') + ':' + (tx.reference || tx.transactionId) : 'file:' + (fileHashes.get(file) || crypto.randomUUID()) + ':' + (extras.index || 0),
       fileName: tx.fileName || file?.name || 'Dekont',
       isPdf: !!extras.pdf,
       pdf: extras.pdf || null,
@@ -330,6 +333,8 @@ export function createTopluTahsilatView({ accounts, save }) {
     return row;
   }
 
+  const loadedFiles = new Set();
+  const fileHashes = new WeakMap();
   async function ingest(files) {
     if (!files.length) return;
     reading.total += files.length;
@@ -337,6 +342,10 @@ export function createTopluTahsilatView({ accounts, save }) {
     let added = 0;
     for (const file of files) {
       try {
+        if (file.size > 20 * 1024 * 1024) throw new Error('Dosya en fazla 20 MB olabilir.');
+        const digest = await fingerprint(await file.arrayBuffer());
+        if (loadedFiles.has(digest)) { reading.done++; showToast('Bu dosya zaten listede.', 'warning'); continue; }
+        loadedFiles.add(digest); fileHashes.set(file, digest);
         if (isPdfFile(file)) {
           const pdf = await openPdf(file);
           const text = await extractPdfText(pdf);
@@ -344,12 +353,12 @@ export function createTopluTahsilatView({ accounts, save }) {
           const txs = parseDekontFromText(text, file.name);
           const readError = !text.replace(/\s/g, '').length;
           if (!txs.length) rows.push(newRow({ fileName: file.name, source: 'pdf-dekont' }, file, { pdf, thumb, readError }));
-          else txs.forEach(tx => rows.push(newRow(tx, file, { pdf, thumb, readError })));
+          else txs.forEach((tx,index) => rows.push(newRow(tx, file, { pdf, thumb, readError, index })));
           added += Math.max(1, txs.length);
         } else {
-          const txs = await parseStatementFile(file);
+          const txs = await parseStatementInWorker(file);
           if (!txs.length) rows.push(newRow({ fileName: file.name, source: 'excel' }, file, { readError: true }));
-          else txs.forEach(tx => rows.push(newRow(tx, file)));
+          else txs.forEach((tx,index) => rows.push(newRow(tx, file, { index })));
           added += Math.max(1, txs.length);
         }
       } catch (e) {
@@ -414,7 +423,7 @@ export function createTopluTahsilatView({ accounts, save }) {
     const assessed = rows.map(r => ({ row: r, ...assess(r) }));
     const counts = { all: rows.length, ready: 0, check: 0, missing: 0 };
     assessed.forEach(a => { counts[a.status]++; });
-    const savable = assessed.filter(a => a.row.selected && a.status !== 'missing');
+    const savable = assessed.filter(a => a.row.selected && a.status === 'ready');
     const savableTotal = savable.reduce((s, a) => s + a.row.amount, 0);
 
     ref('stats').innerHTML = `
@@ -493,6 +502,7 @@ export function createTopluTahsilatView({ accounts, save }) {
     }
   });
   el.addEventListener('change', (e) => {
+    if (saving) return;
     const sel = e.target.closest('[data-sel]');
     if (sel) {
       const row = rows.find(r => r.id === sel.dataset.sel);
@@ -509,12 +519,13 @@ export function createTopluTahsilatView({ accounts, save }) {
 
   async function saveSelected() {
     if (saving) return;
-    const targets = rows.filter(r => r.selected && assess(r).status !== 'missing');
+    const targets = rows.filter(r => r.selected && assess(r).status === 'ready');
     if (!targets.length) {
       showToast('Kaydedilecek satır yok. Eksik bilgileri tamamla veya satır seç.', 'warning');
       return;
     }
     saving = true;
+    el.inert = true;
     render();
     let ok = 0;
     let fail = 0;
@@ -522,6 +533,8 @@ export function createTopluTahsilatView({ accounts, save }) {
       try {
         const saved = await save({
           account_id: row.accountId,
+          idempotency_key: await fingerprint(row.accountId + ':' + row.sourceKey),
+          source_key: await fingerprint(row.sourceKey),
           customer_key: row.customerKey,
           customer_name: row.customerName,
           customer_tax_no: row.customerTaxNo || '',
@@ -540,6 +553,7 @@ export function createTopluTahsilatView({ accounts, save }) {
     }
     rows = rows.filter(r => !r.saved);
     saving = false;
+    el.inert = false;
     render();
     if (ok && !fail) showToast(`${ok} tahsilat kaydedildi.`, 'success');
     else if (ok) showToast(`${ok} tahsilat kaydedildi, ${fail} satır kaydedilemedi.`, 'warning');

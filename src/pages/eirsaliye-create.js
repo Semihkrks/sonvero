@@ -1,3 +1,8 @@
+import {documentRecovery} from '../components/document-recovery.js';
+import {escapeHtml} from '../lib/html.js';
+import {requireOnline} from '../lib/operations.js';
+import {Decimal,istanbulDate} from '../lib/money.js';
+import { listenScoped } from '../lib/page-events.js';
 // ══════════════════════════════════════════
 // e-İrsaliye Oluştur (Create Despatch) Page
 // Full form matching Nilvera despatch creation
@@ -20,10 +25,7 @@ const ic = {
   user: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
 };
 
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
+function todayStr() { return istanbulDate(); }
 function nowTime() {
   const d = new Date();
   return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
@@ -35,6 +37,22 @@ export async function renderEirsaliyeCreate() {
   const page = document.createElement('div');
   page.className = 'invoice-create-page';
   const account = await getActiveAccount();
+  const draftKey='sonvera:draft:despatch:'+account?.id;
+  const editContext=consumeDespatchEditContext(account?.id);
+  let editModel=null;
+  if(editContext?.uuid){
+    try{
+      const res=await EDespatch.getDraft(editContext.uuid);
+      if(!res.success)throw new Error(res.error||'Taslak alınamadı.');
+      editModel=extractDespatchModel(res.data);
+      if(!editModel)throw new Error('Taslak içeriği beklenen biçimde gelmedi.');
+      if(getActiveAccount()?.id!==account?.id){editModel=null;throw new Error('Firma değişti. Taslağı doğru firmadan yeniden açın.');}
+    }catch(error){showToast('Taslak açılamadı: '+escapeHtml(error.message),'error');}
+  }
+  let recovered;if(!editModel){try{recovered=JSON.parse(sessionStorage.getItem(draftKey)||'null');}catch{}}
+  page.dataset.documentId=editModel?editContext.uuid:(recovered?.documentId||crypto.randomUUID());
+  if(editModel||recovered?.editingDraft)page.dataset.editingDraft='1';
+  let busy=false;
   const despatchSeries = account?.despatch_series || 'AYK';
   lineCounter = 0;
 
@@ -302,7 +320,7 @@ export async function renderEirsaliyeCreate() {
     }, 500);
   });
 
-  document.addEventListener('click', (e) => {
+  listenScoped(page, document, 'click', (e) => {
     if (!suggestions.contains(e.target) && e.target !== searchInput) suggestions.style.display = 'none';
   });
 
@@ -344,49 +362,42 @@ export async function renderEirsaliyeCreate() {
     }
   });
 
-  // ── Action Buttons ──
-  page.querySelector('#btnSaveDraft')?.addEventListener('click', async () => {
-    const model = buildDespatchModel(page, drivers, trailers);
-    if (!model) return;
-    showToast('Taslak kaydediliyor...', 'info');
-    try {
-      const res = await EDespatch.createDraft(model);
-      if (res.success) {
-        showToast('Taslak kaydedildi', 'success');
-        navigate('/eirsaliye-taslaklar');
-      } else {
-        showToast(`Hata: ${res.error}`, 'error');
+  const recovery=documentRecovery({page,recoveryKey:draftKey,accountId:account?.id,onSuccess:(destination)=>{sessionStorage.removeItem(draftKey);showToast('İrsaliye işlemi sunucuda tamamlandı.','success');navigate(destination);}});
+  // One lock for draft, confirmation and sending. The provider identity survives retries.
+  async function saveDocument(send){
+    if(busy||recovery.blocked)return;busy=true;page.inert=true;
+    const buttons=[page.querySelector('#btnSaveDraft'),page.querySelector('#btnSend')];buttons.forEach(b=>b.disabled=true);
+    try{
+      requireOnline();
+      const model=buildDespatchModel(page,drivers,trailers);if(!model)return;
+      if(send){
+        const confirmed=await new Promise(resolve=>{
+          const body=document.createElement('div');
+          body.textContent=(account?.name||'Firma')+' · '+model.ReceiverInfo.Name+' · '+model.DespatchInfo.IssueDate+' · '+model.DespatchLines.length+' satır. İrsaliyeyi göndermek istiyor musunuz?';
+          const footer=document.createElement('div');footer.className='sv-actions';
+          footer.innerHTML='<button class="btn btn-secondary" data-cancel>Vazgeç</button><button class="btn btn-primary" data-confirm>Onayla ve gönder</button>';
+          const modal=showModal({title:'İrsaliye gönderim özeti',body,footer,onClose:()=>resolve(false)});
+          if(!modal){resolve(false);return;}
+          footer.querySelector('[data-cancel]').onclick=()=>modal.close();
+          footer.querySelector('[data-confirm]').onclick=()=>{resolve(true);modal.close();};
+        });
+        if(!confirmed)return;
       }
-    } catch (e) { showToast(`Hata: ${e.message}`, 'error'); }
-  });
-
-  page.querySelector('#btnSend')?.addEventListener('click', async () => {
-    const model = buildDespatchModel(page, drivers, trailers);
-    if (!model) return;
-
-    const confirmed = await new Promise(resolve => {
-      const body = document.createElement('div');
-      body.innerHTML = `<p>Bu irsaliyeyi onaylayip gondermek istediginize emin misiniz?</p><p style="color:var(--warning);font-size:12px;margin-top:8px">Bu islem geri alinamaz.</p>`;
-      const footer = document.createElement('div');
-      footer.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
-      footer.innerHTML = `<button class="btn btn-secondary" id="cancelSend">Iptal</button><button class="btn btn-primary" id="confirmSend">${ic.send} Onayla ve Gonder</button>`;
-      const modal = showModal({ title: 'Irsaliye Gonderimi', body, footer });
-      footer.querySelector('#cancelSend').addEventListener('click', () => { modal?.close(); resolve(false); });
-      footer.querySelector('#confirmSend').addEventListener('click', () => { modal?.close(); resolve(true); });
-    });
-
-    if (!confirmed) return;
-    showToast('Irsaliye gonderiliyor...', 'info');
-    try {
-      const res = await EDespatch.sendModel(model);
-      if (res.success) {
-        showToast('Irsaliye basariyla gonderildi!', 'success');
-        navigate('/eirsaliye-giden');
-      } else {
-        showToast(`Hata: ${res.error}`, 'error');
-      }
-    } catch (e) { showToast(`Hata: ${e.message}`, 'error'); }
-  });
+      if(getActiveAccount()?.id!==account?.id||!page.isConnected)throw new Error('Firma değişti. İşlem yapılmadı; doğru hesabı seçin.');
+      persist();
+      const options={onIntent:intent=>recovery.track(intent,send?'/eirsaliye-giden':'/belgeler/despatchDraft')};
+      const editing=page.dataset.editingDraft==='1';
+      const res=await (send?(editing?EDespatch.editAndSend(model,options):EDespatch.sendModel(model,options)):EDespatch.createDraft(model,options));
+      recovery.settle(res);
+      if(!res.success)throw new Error(res.error||'İşlemin sonucu doğrulanamadı. Aynı belgeyle tekrar kontrol edin.');
+      sessionStorage.removeItem(draftKey);
+      showToast(send?'İrsaliye gönderildi.':'Taslak kaydedildi.','success');
+      navigate(send?'/eirsaliye-giden':'/belgeler/despatchDraft');
+    }catch(error){showToast(error.message,'error');}
+    finally{busy=false;page.inert=false;buttons.forEach(b=>b.disabled=false);recovery.refresh();}
+  }
+  page.querySelector('#btnSaveDraft').addEventListener('click',()=>saveDocument(false));
+  page.querySelector('#btnSend').addEventListener('click',()=>saveDocument(true));
 
   page.querySelector('#btnXmlPreview')?.addEventListener('click', async () => {
     const model = buildDespatchModel(page, drivers, trailers);
@@ -396,7 +407,7 @@ export async function renderEirsaliyeCreate() {
       const res = await EDespatch.sendXmlPreview(model);
       const xml = res.success ? (typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2)) : `Hata: ${res.error}`;
       const body = document.createElement('div');
-      body.innerHTML = `<pre style="font-size:11px;overflow:auto;max-height:70vh;white-space:pre-wrap;background:var(--bg-input);padding:16px;border-radius:var(--radius-sm);color:var(--text-secondary)">${xml}</pre>`;
+      body.innerHTML = `<pre style="font-size:11px;overflow:auto;max-height:70vh;white-space:pre-wrap;background:var(--bg-input);padding:16px;border-radius:var(--radius-sm);color:var(--text-secondary)">${escapeHtml(xml)}</pre>`;
       showModal({ title: 'XML Onizleme', body, size: 'lg' });
     } catch (e) { showToast(`Hata: ${e.message}`, 'error'); }
   });
@@ -405,11 +416,90 @@ export async function renderEirsaliyeCreate() {
     const model = buildDespatchModel(page, drivers, trailers);
     if (!model) return;
     const body = document.createElement('div');
-    body.innerHTML = `<pre style="font-size:11px;overflow:auto;max-height:70vh;white-space:pre-wrap;background:var(--bg-input);padding:16px;border-radius:var(--radius-sm);color:var(--text-secondary)">${JSON.stringify(model, null, 2)}</pre>`;
+    body.innerHTML = `<pre style="font-size:11px;overflow:auto;max-height:70vh;white-space:pre-wrap;background:var(--bg-input);padding:16px;border-radius:var(--radius-sm);color:var(--text-secondary)">${escapeHtml(JSON.stringify(model, null, 2))}</pre>`;
     showModal({ title: 'Irsaliye Onizleme (JSON)', body, size: 'lg' });
   });
 
+  function persist(){
+    const fields={};page.querySelectorAll('input[id],select[id],textarea[id]').forEach(el=>{fields[el.id]={value:el.value,checked:el.checked};});
+    const lines=[...page.querySelectorAll('#linesBody tr')].map(row=>Object.fromEntries([...row.querySelectorAll('[data-field]')].map(el=>[el.dataset.field,el.value])));
+    try{sessionStorage.setItem(draftKey,JSON.stringify({documentId:page.dataset.documentId,editingDraft:page.dataset.editingDraft==='1',fields,lines,drivers,trailers}));}catch{}
+  }
+  if(editModel){hydrateDespatchForm(page,editModel,drivers,trailers);showToast('İrsaliye taslağı düzenleme için açıldı.','info');}
+  else if(recovered&&typeof recovered==='object'){
+    for(const [id,value] of Object.entries(recovered.fields||{})){const el=page.querySelector('#'+CSS.escape(id));if(el){el.value=value.value;el.checked=!!value.checked;}}
+    if(Array.isArray(recovered.lines)&&recovered.lines.length){page.querySelector('#linesBody').replaceChildren();for(const line of recovered.lines){addLine(page);const row=page.querySelector('#linesBody tr:last-child');for(const [field,value] of Object.entries(line)){const el=row.querySelector('[data-field="'+CSS.escape(field)+'"]');if(el)el.value=value;}}}
+    if(Array.isArray(recovered.drivers))drivers.push(...recovered.drivers);
+    if(Array.isArray(recovered.trailers))trailers.push(...recovered.trailers);
+    renderDrivers(page,drivers);renderTrailers(page,trailers);
+  }
+  page.querySelector('#ettnValue').textContent=page.dataset.documentId;
+  page.querySelector('#currency').innerHTML='<option value="TRY">TRY</option>';
+  page.addEventListener('input',persist);page.addEventListener('change',persist);page.addEventListener('click',()=>queueMicrotask(persist));
+  recovery.refresh();
   return page;
+}
+
+const DESPATCH_EDIT_CONTEXT_KEY='nilfatura_despatch_edit_context';
+function consumeDespatchEditContext(accountId){
+  try{
+    const raw=sessionStorage.getItem(DESPATCH_EDIT_CONTEXT_KEY);
+    if(!raw)return null;
+    sessionStorage.removeItem(DESPATCH_EDIT_CONTEXT_KEY);
+    const parsed=JSON.parse(raw);
+    if(parsed?.accountId!==accountId){showToast('Taslak başka firmaya ait veya firma bilgisi eksik. Doğru firmada taslağı yeniden açın.','warning');return null;}
+    return parsed&&typeof parsed==='object'&&typeof parsed.uuid==='string'?parsed:null;
+  }catch{return null;}
+}
+
+function extractDespatchModel(data){
+  const root=data?.Content&&typeof data.Content==='object'?data.Content:data;
+  const model=root?.Despatch||root?.DespatchModel||root?.EDespatch||root?.Model||root;
+  return model&&typeof model==='object'&&(model.DespatchInfo||model.DespatchLines)?model:null;
+}
+
+// Best-effort: only fields with a clear counterpart in the form are filled.
+function hydrateDespatchForm(page,m,drivers,trailers){
+  const info=m.DespatchInfo||{},receiver=m.ReceiverInfo||{},shipment=m.ShipmentInfo||{};
+  const str=v=>typeof v==='string'||typeof v==='number'?String(v).trim():'';
+  const set=(id,v)=>{const el=page.querySelector('#'+id);if(el&&str(v))el.value=str(v);};
+  const pick=(el,v)=>{if(el&&str(v)&&[...el.options].some(o=>o.value===str(v)))el.value=str(v);};
+  const date=v=>/^\d{4}-\d{2}-\d{2}/.test(str(v))?str(v).slice(0,10):'';
+  const time=v=>str(v).match(/\d{2}:\d{2}/)?.[0]||'';
+  if(str(receiver.Name)||str(receiver.TaxNumber))applyReceiverToForm(page,receiver,{Email:receiver.Mail||receiver.EMail});
+  const delivery=m.DeliveryAddress;
+  if(delivery&&typeof delivery==='object'&&str(delivery.Address)&&str(delivery.Address)!==str(receiver.Address)){
+    page.querySelector('#useReceiverAsDelivery').checked=false;
+    set('deliveryAddress',delivery.Address);set('deliveryDistrict',delivery.District);set('deliveryCity',delivery.City);set('deliveryPostalCode',delivery.PostalCode||delivery.ZipCode);
+  }
+  set('despatchDate',date(info.IssueDate));set('despatchTime',time(info.IssueTime)||time(str(info.IssueDate).split('T')[1]));
+  set('shipmentDate',date(shipment.ActualShipmentDate));set('shipmentTime',time(shipment.ActualShipmentTime)||time(str(shipment.ActualShipmentDate).split('T')[1]));
+  pick(page.querySelector('#despatchType'),info.DespatchType);
+  pick(page.querySelector('#despatchScenario'),info.ProfileId||info.DespatchProfile);
+  pick(page.querySelector('#despatchTemplate'),info.TemplateName);
+  const serie=str(info.SerieOrNumber||info.DespatchSerieOrNumber).match(/^[A-Z0-9]{3}/i)?.[0];if(serie)set('despatchSerial',serie.toUpperCase());
+  set('vehiclePlate',shipment.LicensePlateId||shipment.LicensePlate);
+  const plates=shipment.TrailerLicensePlates||shipment.TrailerPlateIds;
+  if(Array.isArray(plates))trailers.push(...plates.map(p=>str(p)||str(p?.PlateId||p?.LicensePlateId)).filter(Boolean));
+  const driverList=m.DriverInfo||shipment.DriverInfo;
+  if(Array.isArray(driverList))drivers.push(...driverList.map(d=>({firstName:str(d?.FirstName||d?.Name),lastName:str(d?.FamilyName||d?.LastName),tckn:str(d?.CitizenshipId||d?.NationalityId)})).filter(d=>d.firstName||d.lastName));
+  renderDrivers(page,drivers);renderTrailers(page,trailers);
+  const notes=Array.isArray(m.Notes)?m.Notes.map(n=>str(n)||str(n?.Note)).filter(Boolean):[];
+  if(notes.length)page.querySelector('#despatchNote').value=notes.join('\n');
+  const lines=Array.isArray(m.DespatchLines)?m.DespatchLines:[];
+  if(!lines.length)return;
+  page.querySelector('#linesBody').replaceChildren();
+  for(const line of lines){
+    addLine(page);const row=page.querySelector('#linesBody tr:last-child');
+    const field=name=>row.querySelector('[data-field="'+name+'"]');
+    const quantity=Number(line?.Quantity??line?.DeliveredQuantity),price=Number(line?.Price??line?.UnitPrice);
+    field('name').value=str(line?.Name||line?.ItemName);
+    if(str(line?.BatchNumber))field('batchNo').value=str(line.BatchNumber);
+    if(Number.isFinite(quantity))field('quantity').value=String(quantity);
+    if(Number.isFinite(price))field('unitPrice').value=String(price);
+    pick(field('unit'),line?.UnitType||line?.UnitCode);
+    field('total').value=new Decimal(Number.isFinite(quantity)?quantity:0).mul(Number.isFinite(price)?price:0).toFixed(2);
+  }
 }
 
 // ── Helper: pick best alias from Aliases array ──
@@ -474,7 +564,7 @@ function applyReceiverToForm(page, customer, fallback = {}) {
       aliasSelect.innerHTML = '<option value="">Lutfen Etiket Seciniz</option>' +
         allAliases.map(a => {
           const n = a.Name || a.AliasName || a.Alias || '';
-          return n ? `<option value="${n}" ${n === alias ? 'selected' : ''}>${n}</option>` : '';
+          return n ? `<option value="${escapeHtml(n)}" ${n === alias ? 'selected' : ''}>${escapeHtml(n)}</option>` : '';
         }).join('');
     } else {
       const exists = Array.from(aliasSelect.options).some(o => o.value === alias);
@@ -509,7 +599,7 @@ function applyReceiverToForm(page, customer, fallback = {}) {
 
   // Generate ETTN
   const ettnSpan = page.querySelector('#ettnValue');
-  if (ettnSpan) ettnSpan.textContent = crypto.randomUUID();
+  if (ettnSpan) ettnSpan.textContent = page.dataset.documentId;
 }
 
 function addLine(page) {
@@ -552,7 +642,7 @@ function addLine(page) {
   const calcTotal = () => {
     const q = parseFloat(qtyInput.value) || 0;
     const p = parseFloat(priceInput.value) || 0;
-    totalInput.value = (q * p).toFixed(2);
+    totalInput.value = new Decimal(q).mul(p).toFixed(2);
   };
   qtyInput.addEventListener('input', calcTotal);
   priceInput.addEventListener('input', calcTotal);
@@ -591,10 +681,10 @@ function addLine(page) {
             const dn = c.Name || c.StockName || c.Title || '';
             const price = c.Price !== undefined ? c.Price : 0;
             return `<div class="stock-search-item receiver-suggestion-item" data-idx="${i}">
-              <div style="font-weight:600;font-size:13px">${dn}</div>
+              <div style="font-weight:600;font-size:13px">${escapeHtml(dn)}</div>
               <div style="font-size:11px;color:var(--text-muted);display:flex;justify-content:space-between">
-                <span>Fiyat: ${price} TL</span>
-                <span>Birim: ${c.UnitCode || 'ADET'}</span>
+                <span>Fiyat: ${escapeHtml(price)} TL</span>
+                <span>Birim: ${escapeHtml(c.UnitCode || 'ADET')}</span>
               </div>
             </div>`;
           }).join('');
@@ -616,7 +706,7 @@ function addLine(page) {
     }, 500);
   });
 
-  document.addEventListener('click', (e) => {
+  listenScoped(page, document, 'click', (e) => {
     if (!nameInput.contains(e.target) && !searchResults.contains(e.target)) searchResults.style.display = 'none';
   });
 
@@ -632,7 +722,7 @@ function renderTrailers(page, trailers) {
   const list = page.querySelector('#trailerList');
   list.innerHTML = trailers.map((t, i) => `
     <span class="badge badge-info" style="display:flex;align-items:center;gap:4px;padding:4px 10px">
-      ${t} <button class="btn-icon" data-remove-trailer="${i}" style="padding:0;width:16px;height:16px">&times;</button>
+      ${escapeHtml(t)} <button class="btn-icon" data-remove-trailer="${i}" style="padding:0;width:16px;height:16px">&times;</button>
     </span>
   `).join('');
   list.querySelectorAll('[data-remove-trailer]').forEach(btn => {
@@ -647,7 +737,7 @@ function renderDrivers(page, drivers) {
   const list = page.querySelector('#driverList');
   list.innerHTML = drivers.map((d, i) => `
     <div class="badge badge-info" style="display:flex;align-items:center;gap:8px;padding:6px 12px">
-      ${ic.user} ${d.firstName} ${d.lastName} ${d.tckn ? `(${d.tckn})` : ''}
+      ${ic.user} ${escapeHtml(d.firstName)} ${escapeHtml(d.lastName)} ${d.tckn ? `(${escapeHtml(d.tckn)})` : ''}
       <button class="btn-icon" data-remove-driver="${i}" style="padding:0;width:16px;height:16px">&times;</button>
     </div>
   `).join('');
@@ -668,9 +758,11 @@ function buildDespatchModel(page, drivers, trailers) {
     return null;
   }
 
+  if(!/^\d{10,11}$/.test(receiverTaxNo||'')){showToast('Geçerli VKN / TCKN girin.','warning');return null;}
   // Collect lines
   const rows = page.querySelectorAll('#linesBody tr');
   const lines = [];
+  let invalidLine=false;
   rows.forEach(tr => {
     const name = tr.querySelector('[data-field="name"]')?.value?.trim();
     const quantity = parseFloat(tr.querySelector('[data-field="quantity"]')?.value) || 0;
@@ -678,19 +770,20 @@ function buildDespatchModel(page, drivers, trailers) {
     const unitPrice = parseFloat(tr.querySelector('[data-field="unitPrice"]')?.value) || 0;
     const batchNo = tr.querySelector('[data-field="batchNo"]')?.value?.trim();
 
+    if (!name||!Number.isFinite(quantity)||quantity<=0||!Number.isFinite(unitPrice)||unitPrice<0)invalidLine=true;
     if (name && quantity > 0) {
       lines.push({
         Name: name,
         Quantity: quantity,
         UnitType: unit,
         Price: unitPrice,
-        Amount: quantity * unitPrice,
+        Amount: new Decimal(quantity).mul(unitPrice).toDecimalPlaces(2).toNumber(),
         ...(batchNo ? { BatchNumber: batchNo } : {}),
       });
     }
   });
 
-  if (!lines.length) {
+  if (invalidLine || !lines.length) {
     showToast('En az 1 mal/hizmet satiri ekleyin', 'warning');
     return null;
   }
@@ -699,13 +792,13 @@ function buildDespatchModel(page, drivers, trailers) {
 
   const model = {
     DespatchInfo: {
-      UUID: crypto.randomUUID(),
+      UUID: page.dataset.documentId,
       IssueDate: page.querySelector('#despatchDate')?.value || todayStr(),
       IssueTime: (page.querySelector('#despatchTime')?.value || nowTime()) + ':00',
       DespatchType: page.querySelector('#despatchType')?.value || 'SEVK',
       ProfileId: page.querySelector('#despatchScenario')?.value || 'TEMELFATURA',
       SerieOrNumber: page.querySelector('#despatchSerial')?.value || 'AYK',
-      CurrencyCode: page.querySelector('#currency')?.value || 'TRY',
+      CurrencyCode: 'TRY',
       TemplateName: page.querySelector('#despatchTemplate')?.value || 'eIrsaliye',
     },
     ReceiverInfo: {

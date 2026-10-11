@@ -1,3 +1,7 @@
+import { listenScoped } from '../lib/page-events.js';
+import { fingerprint } from '../lib/operations.js';
+import { listDocumentBatchKinds, runDocumentBatch } from '../services/document-batch.js';
+import { renderBatchResults, restoreBatchResults } from '../components/batch-results.js';
 import { EDespatch, EDespatchWithAccount } from '../api/nilvera.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { showToast } from '../components/toast.js';
@@ -20,6 +24,9 @@ const ic = {
   link: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,
   rule: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18v18H3z"/><path d="M7 3v4"/><path d="M11 3v2"/><path d="M15 3v4"/><path d="M3 7h18"/></svg>`,
   check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  gear: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  chevronDown: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
+  archive: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`,
   noData: `<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
 };
 
@@ -121,7 +128,7 @@ function setupFilterToggle(page) {
 
   setExpanded(!isMobileViewport());
   toggleBtn.addEventListener('click', () => setExpanded(!filterBar.classList.contains('filters-expanded')));
-  window.addEventListener('resize', () => {
+  listenScoped(page, window, 'resize', () => {
     if (!isMobileViewport()) setExpanded(true);
   });
 }
@@ -676,7 +683,9 @@ async function handleMenuAction(action, row, page) {
   }
 
   if (action === 'share') {
-    const shareLink = `${window.location.origin}${window.location.pathname}#/eirsaliye-gelen?uuid=${encodeURIComponent(row.uuid)}`;
+    const accountId = getActiveAccountId();
+    if (!accountId || !row.uuid) { showToast('Firma veya belge kimliği bulunamadı; bağlantı oluşturulamadı.', 'warning'); return; }
+    const shareLink = `${window.location.origin}${window.location.pathname}#/belge/${encodeURIComponent(accountId)}/received/${encodeURIComponent(row.uuid)}`;
     try {
       await navigator.clipboard.writeText(shareLink);
       showToast('Link panoya kopyalandı', 'success');
@@ -704,6 +713,118 @@ async function handleMenuAction(action, row, page) {
   }
 }
 
+function getSelectedItems(page) {
+  const uuids = [...page.querySelectorAll('.row-check:checked')].map((cb) => cb.dataset.uuid).filter(Boolean);
+  return [...new Set(uuids)].map((uuid) => ({ uuid }));
+}
+
+function summarizeBulkResult(okCount, failCount, actionLabel) {
+  if (okCount > 0 && failCount === 0) {
+    showToast(`${okCount} kayıt için ${actionLabel} tamamlandı`, 'success');
+    return;
+  }
+  if (okCount > 0 && failCount > 0) {
+    showToast(`${okCount} başarılı, ${failCount} başarısız`, 'warning');
+    return;
+  }
+  showToast(`${actionLabel} başarısız`, 'error');
+}
+
+// Each item is one write; an uncertain result is never retried under another operation name.
+async function runBulkSelected(page, kind, actionLabel, execute, items = getSelectedItems(page)) {
+  const empty = { okCount: 0, failCount: 0, results: [] };
+  if (page.dataset.batchBusy === 'true') return empty;
+  const account = getActiveAccount();
+  if (!items.length || !account) {
+    showToast('Önce firma ve kayıt seçin.', 'warning');
+    return empty;
+  }
+  page.dataset.batchBusy = 'true';
+  page.inert = true;
+  try {
+    const results = await runDocumentBatch({
+      accountId: account.id,
+      kind,
+      items,
+      execute,
+      onProgress: (progress) => renderBatchResults(page, { accountId: account.id, kind, results: progress, total: items.length }),
+    });
+    const okCount = results.filter((row) => row.status === 'succeeded').length;
+    const failCount = results.length - okCount;
+    summarizeBulkResult(okCount, failCount, actionLabel);
+    return { okCount, failCount, results };
+  } catch (error) {
+    showToast(error.message, 'error');
+    return { ...empty, failCount: items.length };
+  } finally {
+    page.dataset.batchBusy = 'false';
+    page.inert = false;
+  }
+}
+
+const BULK_OPERATIONS = {
+  archive: { operation: 'Archived', label: 'arşive kaldırma' },
+  unarchive: { operation: 'Unarchived', label: 'arşivden çıkarma' },
+  read: { operation: 'Read', label: 'okundu işaretleme' },
+  unread: { operation: 'Unread', label: 'okunmadı işaretleme' },
+};
+
+async function bulkSetOperation(page, act, options = {}) {
+  const { operation, label } = BULK_OPERATIONS[act];
+  const result = await runBulkSelected(page, 'despatch-in:' + act, label, ({ uuid }) => EDespatch.setPurchaseOperation(operation, [uuid]));
+  if (result.okCount > 0) await loadIncoming(page, options);
+}
+
+async function bulkCreateDraft(page) {
+  await runBulkSelected(page, 'despatch-in:draft', 'taslak oluşturma', ({ uuid }) => EDespatch.createPurchaseDraft(uuid));
+}
+
+function showBulkSpecialCodeModal(page) {
+  const items = getSelectedItems(page);
+  if (!items.length) {
+    showToast('Önce en az bir kayıt seçmelisiniz', 'warning');
+    return;
+  }
+
+  const bodyEl = document.createElement('div');
+  bodyEl.innerHTML = `
+    <p style="margin:0 0 10px;color:var(--text-muted)">${items.length} kayıt için özel kod atanacak</p>
+    <div class="form-group">
+      <label class="form-label">Özel Kod</label>
+      <input type="text" class="form-input" id="bulkSpecialCodeInput" placeholder="Örn: TOPLU-2026" maxlength="64" />
+    </div>
+  `;
+
+  const footerEl = document.createElement('div');
+  footerEl.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
+  footerEl.innerHTML = `
+    <button class="btn btn-secondary" id="cancelBulkCode">İptal</button>
+    <button class="btn btn-primary" id="saveBulkCode">Kaydet</button>
+  `;
+
+  const modal = showModal({ title: 'Toplu Özel Kod', body: bodyEl, footer: footerEl });
+  footerEl.querySelector('#cancelBulkCode')?.addEventListener('click', () => modal?.close());
+  const saveBtn = footerEl.querySelector('#saveBulkCode');
+  let busy = false;
+  saveBtn?.addEventListener('click', async () => {
+    if (busy) return;
+    const code = bodyEl.querySelector('#bulkSpecialCodeInput')?.value?.trim();
+    if (!code) return showToast('Özel kod boş bırakılamaz', 'warning');
+    busy = true;
+    bodyEl.inert = true;
+    saveBtn.disabled = true;
+    try {
+      const kind = 'despatch-in:special-code:' + await fingerprint(code);
+      const { okCount } = await runBulkSelected(page, kind, 'özel kod atama', ({ uuid }) => EDespatch.setPurchaseSpecialCode(uuid, code), items);
+      if (okCount === items.length) modal?.close();
+    } finally {
+      busy = false;
+      bodyEl.inert = false;
+      saveBtn.disabled = false;
+    }
+  });
+}
+
 function renderRows(page, rows) {
   const tbody = page.querySelector('#rowList');
   const footer = page.querySelector('#resultCount');
@@ -717,7 +838,7 @@ function renderRows(page, rows) {
 
   tbody.innerHTML = rows.map((r, idx) => `
     <tr>
-      <td data-label="Seçim"><input type="checkbox" class="row-check" value="${r.uuid}" /></td>
+      <td data-label="Seçim"><input type="checkbox" class="row-check" value="${r.uuid}" data-uuid="${r.uuid}" /></td>
       <td data-label="ERP">
         <div style="display:flex;align-items:center;gap:8px;">
           <button class="action-menu-btn" data-act="preview" data-idx="${idx}" title="PDF Önizleme">${ic.query}</button>
@@ -927,6 +1048,11 @@ export async function renderEDespatchIncoming(options = {}) {
       <div class="filter-actions" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:-4px;">
         <button class="btn btn-sm" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--accent); color:white; border:none">${ic.search} ARA</button>
         <button class="btn btn-sm" id="btnRefresh" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--bg-secondary); border:1px solid var(--border); color:var(--text-secondary)">${ic.refresh} YENİLE</button>
+        <div style="position:relative">
+          <button class="btn btn-sm" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--info); border:none; color:white">
+            ${ic.gear} İŞLEMLER ${ic.chevronDown}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -964,10 +1090,43 @@ export async function renderEDespatchIncoming(options = {}) {
     page.querySelectorAll('.row-check').forEach((c) => { c.checked = e.target.checked; });
   });
 
-  document.addEventListener('click', () => {
+  page.querySelector('#islemlerBtn')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.action-dropdown').forEach((d) => d.remove());
+    const dd = document.createElement('div');
+    dd.className = 'action-dropdown';
+    dd.innerHTML = `
+      <button class="action-dropdown-item" data-act="archive">${ic.archive} Arşiv'e Kaldır</button>
+      <button class="action-dropdown-item" data-act="unarchive">${ic.archive} Arşivden Çıkar</button>
+      <button class="action-dropdown-item" data-act="read">${ic.check} Okundu Olarak İşaretle</button>
+      <button class="action-dropdown-item" data-act="unread">${ic.mail} Okunmadı Olarak İşaretle</button>
+      <button class="action-dropdown-item" data-act="draft">${ic.plus} Taslak Oluştur</button>
+      <button class="action-dropdown-item" data-act="special-code">${ic.tag} Özel Kod Alanı</button>
+    `;
+    mountActionDropdown(e.target.closest('button'), dd);
+
+    dd.querySelectorAll('.action-dropdown-item').forEach((btn) => {
+      btn.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        dd.remove();
+        const act = btn.dataset.act;
+        if (BULK_OPERATIONS[act]) await bulkSetOperation(page, act, options);
+        else if (act === 'draft') await bulkCreateDraft(page);
+        else if (act === 'special-code') showBulkSpecialCodeModal(page);
+      });
+    });
+  });
+
+  listenScoped(page, document, 'click', () => {
     document.querySelectorAll('.action-dropdown').forEach((d) => d.remove());
   });
 
   await loadIncoming(page, options);
+  const batchAccountId = getActiveAccountId();
+  if (batchAccountId) {
+    for (const kind of listDocumentBatchKinds(batchAccountId)) {
+      if (kind.startsWith('despatch-in:')) restoreBatchResults(page, batchAccountId, kind);
+    }
+  }
   return page;
 }

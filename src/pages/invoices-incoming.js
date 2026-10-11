@@ -1,3 +1,7 @@
+import {fingerprint} from '../lib/operations.js';
+import {listDocumentBatchKinds,runDocumentBatch} from '../services/document-batch.js';
+import {renderBatchResults,restoreBatchResults} from '../components/batch-results.js';
+import { listenScoped } from '../lib/page-events.js';
 // ══════════════════════════════════════════
 // Incoming Invoices (Gelen Faturalar) Page
 // Nilvera-Style with İşlemler & Kabul/Reddet
@@ -8,7 +12,7 @@ import { redactNilveraFooter, base64ToBytes, bytesToBase64 } from '../services/p
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
-import { exportCariDefter } from '../services/cari-export.js';
+import { exportCariDefter } from '../services/cari-export-worker-client.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
@@ -68,7 +72,7 @@ function setupFilterToggle(page) {
     setExpanded(next);
   });
 
-  window.addEventListener('resize', () => {
+  listenScoped(page, window, 'resize', () => {
     if (!isMobileViewport()) setExpanded(true);
   });
 }
@@ -240,32 +244,45 @@ export async function renderIncomingInvoices(options = {}) {
     document.querySelectorAll('.action-dropdown').forEach(d => d.remove());
     const dd = document.createElement('div');
     dd.className = 'action-dropdown';
+    const archiveAction = archivedOnly ? 'unarchive' : 'archive';
     const archiveActionLabel = archivedOnly ? 'Arşivden Çıkar' : "Arşiv'e Kaldır";
     dd.innerHTML = `
-      <button class="action-dropdown-item">${ic.archive} ${archiveActionLabel}</button>
-      <button class="action-dropdown-item">${ic.fileText} Taslak Oluştur</button>
-      <button class="action-dropdown-item">${ic.tag} Özel Kod Alanı</button>
-      <button class="action-dropdown-item">${ic.check} Aktarıldı Olarak İşaretle</button>
-      <button class="action-dropdown-item">${ic.x} Aktarılmadı Olarak İşaretle</button>
+      <button class="action-dropdown-item" data-act="${archiveAction}">${ic.archive} ${archiveActionLabel}</button>
+      <button class="action-dropdown-item" data-act="draft">${ic.fileText} Taslak Oluştur</button>
+      <button class="action-dropdown-item" data-act="special-code">${ic.tag} Özel Kod Alanı</button>
+      <button class="action-dropdown-item" data-act="transferred">${ic.check} Aktarıldı Olarak İşaretle</button>
+      <button class="action-dropdown-item" data-act="not-transferred">${ic.x} Aktarılmadı Olarak İşaretle</button>
     `;
     mountActionDropdown(e.target.closest('button'), dd);
     
     dd.querySelectorAll('.action-dropdown-item').forEach(btn => {
-      btn.addEventListener('click', (ev) => {
+      btn.addEventListener('click', async (ev) => {
         ev.stopPropagation();
         dd.remove();
-        showToast('Toplu işlem seçimi yapmadınız.', 'warning');
+        const act = btn.dataset.act;
+        if (act === 'archive') await bulkArchiveSelected(page, options);
+        else if (act === 'unarchive') await bulkUnarchiveSelected(page, options);
+        else if (act === 'draft') await bulkCreateDraftSelected(page);
+        else if (act === 'special-code') showBulkSpecialCodeModal(page);
+        else if (act === 'transferred') await bulkTransferMarkSelected(page, true);
+        else if (act === 'not-transferred') await bulkTransferMarkSelected(page, false);
       });
     });
   });
   page.querySelector('#selectAll')?.addEventListener('change', (e) => {
     page.querySelectorAll('.row-check').forEach(cb => cb.checked = e.target.checked);
   });
-  document.addEventListener('click', () => {
+  listenScoped(page, document, 'click', () => {
     document.querySelectorAll('.action-dropdown').forEach(d => d.remove());
   });
 
   loadIncoming(page, options);
+  const batchAccountId = getActiveAccountId();
+  if (batchAccountId) {
+    for (const kind of listDocumentBatchKinds(batchAccountId)) {
+      if (kind.startsWith('incoming:')) restoreBatchResults(page, batchAccountId, kind);
+    }
+  }
   return page;
 }
 
@@ -488,7 +505,7 @@ function renderTable(page, invoices) {
     const needsAnswer = status === 'waiting' || status === 'waitingForApproval';
 
     return `<tr>
-      <td data-label="Seçim"><input type="checkbox" class="row-check" data-idx="${idx}" /></td>
+      <td data-label="Seçim"><input type="checkbox" class="row-check" data-idx="${idx}" data-uuid="${uuid}" data-source="${inv._source}" /></td>
       <td data-label="ERP">
         <button class="action-menu-btn" data-action="queryInv" data-uuid="${uuid}" data-source="${inv._source}" title="PDF Önizle">${ic.query}</button>
       </td>
@@ -679,7 +696,7 @@ async function exportFiltered(page) {
   const data = filteredInvoices.length > 0 ? filteredInvoices : cachedInvoices;
   if (data.length === 0) return showToast('Dışa aktarılacak fatura yok', 'warning');
   const account = await getActiveAccount();
-  const result = exportInvoicesToExcel(data, { accountName: account?.name || '', fileName: 'gelen_faturalar' });
+  const result = exportInvoicesToExcel(data, { accountName: account?.name || '', dateRange: { start:page.querySelector('#dateStart')?.value, end:page.querySelector('#dateEnd')?.value } });
   showToast(`${result.count} fatura Excel'e aktarıldı`, 'success');
 }
 
@@ -689,7 +706,7 @@ async function exportCariFiltered(page) {
     if (data.length === 0) return showToast('Aktarılacak fatura yok', 'warning');
     const account = await getActiveAccount();
     showToast('Cari Defter hazırlanıyor...', 'info');
-    const result = await exportCariDefter(data, 'gelen', account?.name || '');
+    const result = await exportCariDefter(data, 'gelen', account?.name || '', {dateRange:{ start:page.querySelector('#dateStart')?.value, end:page.querySelector('#dateEnd')?.value }});
     if (result.success) {
       showToast(`${result.count} fatura Cari Defter'e eklendi`, 'success');
     } else {
@@ -717,6 +734,92 @@ function summarizeBulkResult(ok, fail, label) {
   if (ok > 0 && fail === 0) showToast(`${ok} kayıt ${label} başarılı`, 'success');
   else if (ok > 0) showToast(`${ok} başarılı, ${fail} başarısız — ${label}`, 'warning');
   else showToast(`${label} başarısız (${fail} hata)`, 'error');
+}
+
+function getSelectedInvoices(page) {
+  return [...page.querySelectorAll('.row-check:checked')]
+    .map(cb => ({ uuid: cb.dataset.uuid || '', source: cb.dataset.source || 'efatura' }))
+    .filter(x => x.uuid);
+}
+
+async function runBulkSelected(page, actionLabel, worker) {
+  if(page.dataset.batchBusy==='true')return {okCount:0,failCount:0};
+  const selected=getSelectedInvoices(page),account=getActiveAccount();
+  if(!selected.length||!account){showToast('Önce firma ve kayıt seçin.','warning');return {okCount:0,failCount:0};}
+  page.dataset.batchBusy='true';page.inert=true;
+  try{
+    const kind='incoming:'+actionLabel;
+    const results=await runDocumentBatch({accountId:account.id,kind,items:selected,execute:worker,onProgress:results=>renderBatchResults(page,{accountId:account.id,kind,results,total:selected.length})});
+    const okCount=results.filter(row=>row.status==='succeeded').length,failCount=results.length-okCount;
+    summarizeBulkResult(okCount,failCount,actionLabel);return {okCount,failCount};
+  }catch(error){showToast(error.message,'error');return {okCount:0,failCount:selected.length};}
+  finally{page.dataset.batchBusy='false';page.inert=false;}
+}
+
+async function runOperation(source, uuid, operationType) {
+  const fn=source==='earsiv'?EArchive.setInvoiceOperation:EInvoice.setPurchaseOperation;
+  const res=await fn(operationType,[uuid]);
+  return {...res,operationType};
+}
+
+async function bulkArchiveSelected(page, options = {}) {
+  const result = await runBulkSelected(page, 'arşive kaldırma', ({ uuid, source }) => runOperation(source, uuid, 'Archive'));
+  if (result.okCount > 0) await loadIncoming(page, options);
+}
+
+async function bulkUnarchiveSelected(page, options = {}) {
+  const result = await runBulkSelected(page, 'arşivden çıkarma', ({ uuid, source }) => runOperation(source, uuid, 'Unarchive'));
+  if (result.okCount > 0) await loadIncoming(page, options);
+}
+
+async function bulkCreateDraftSelected(page) {
+  await runBulkSelected(page, 'taslak oluşturma', ({ uuid, source }) =>
+    (source === 'earsiv' ? EArchive.createInvoiceDraft : EInvoice.createPurchaseDraft)(uuid));
+}
+
+async function bulkTransferMarkSelected(page, transferred) {
+  await runBulkSelected(page, transferred ? 'aktarıldı işaretleme' : 'aktarılmadı işaretleme', ({ uuid, source }) =>
+    runOperation(source, uuid, transferred ? 'Transferred' : 'NotTransferred'));
+}
+
+function showBulkSpecialCodeModal(page) {
+  const selected = getSelectedInvoices(page);
+  if (selected.length === 0) {
+    showToast('Önce en az bir kayıt seçmelisiniz', 'warning');
+    return;
+  }
+
+  const bodyEl = document.createElement('div');
+  bodyEl.innerHTML = `
+    <p style="margin:0 0 10px;color:var(--text-muted)">${selected.length} kayıt için özel kod atanacak</p>
+    <div class="form-group">
+      <label class="form-label">Özel Kod</label>
+      <input type="text" class="form-input" id="bulkSpecialCodeInput" placeholder="Örn: TOPLU-2026" maxlength="64" />
+    </div>
+  `;
+
+  const footerEl = document.createElement('div');
+  footerEl.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
+  footerEl.innerHTML = `
+    <button class="btn btn-secondary" id="cancelBulkCode">İptal</button>
+    <button class="btn btn-primary" id="saveBulkCode">Kaydet</button>
+  `;
+
+  const modal = showModal({ title: 'Toplu Özel Kod', body: bodyEl, footer: footerEl });
+  footerEl.querySelector('#cancelBulkCode')?.addEventListener('click', () => modal?.close());
+  let busy=false;
+  footerEl.querySelector('#saveBulkCode')?.addEventListener('click', async () => {
+    if(busy)return;
+    const code=bodyEl.querySelector('#bulkSpecialCodeInput')?.value?.trim(),account=getActiveAccount();
+    if(!code||!account)return showToast('Firma ve özel kod gerekli.','warning');
+    busy=true;bodyEl.inert=true;footerEl.querySelector('#saveBulkCode').disabled=true;
+    try{
+      const kind='incoming:special-code:'+await fingerprint(code);
+      const results=await runDocumentBatch({accountId:account.id,kind,items:selected,execute:item=>(item.source==='earsiv'?EArchive.setInvoiceSpecialCode:EInvoice.setPurchaseSpecialCode)(item.uuid,code),onProgress:results=>renderBatchResults(page,{accountId:account.id,kind,results,total:selected.length})});
+      const ok=results.filter(row=>row.status==='succeeded').length;summarizeBulkResult(ok,results.length-ok,'özel kod atama');
+      if(ok===selected.length)modal.close();
+    }catch(error){showToast(error.message,'error');}finally{busy=false;bodyEl.inert=false;footerEl.querySelector('#saveBulkCode').disabled=false;}
+  });
 }
 
 async function bulkDownloadForFiltered(page, type) {

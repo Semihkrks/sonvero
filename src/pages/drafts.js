@@ -1,3 +1,7 @@
+import {renderBatchResults,restoreBatchResults} from '../components/batch-results.js';
+import {runDocumentBatch} from '../services/document-batch.js';
+import {confirmDocument} from '../components/document-confirmation.js';
+import { listenScoped } from '../lib/page-events.js';
 import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
@@ -113,32 +117,34 @@ export async function renderDrafts() {
     });
   });
 
-  page.querySelector('#btnSendBulk')?.addEventListener('click', async () => {
-    const selectedRows = Array.from(page.querySelectorAll('.row-check:checked'))
-      .map(el => ({ uuid: el.value, alias: (el.dataset.alias || '').trim() }))
-      .filter(item => item.uuid);
-
-    const selected = selectedRows
-      .map(item => item.uuid)
-      .filter(Boolean);
-
-    if (selected.length === 0) {
-      showToast('Önce en az bir taslak seçin', 'warning');
-      return;
-    }
-
-    const res = selectedSource === 'earchive'
-      ? await EArchive.confirmAndSend(selected)
-      : await EInvoice.confirmAndSend(await buildEInvoiceSendModels(selectedRows));
-    showToast(res.success ? 'Taslaklar gönderildi' : `Hata: ${res.error}`, res.success ? 'success' : 'error');
-    if (res.success) loadDrafts(page);
+  let batchBusy=false;
+  page.querySelector('#btnSendBulk')?.addEventListener('click',async()=>{
+    if(batchBusy)return;
+    const rows=[...page.querySelectorAll('.row-check:checked')].map(el=>({uuid:el.value,alias:(el.dataset.alias||'').trim()})).filter(row=>row.uuid);
+    if(!rows.length){showToast('Önce en az bir taslak seçin.','warning');return;}
+    const account=getActiveAccount(),source=selectedSource;
+    if(!account)return;
+    batchBusy=true;page.inert=true;
+    try{
+      const confirmed=await confirmDocument({title:'Seçili taslakları gönder',fields:{Firma:account.name,'Belge türü':source==='earchive'?'e-Arşiv':'e-Fatura','Seçili belge':rows.length},lines:rows.map(row=>row.uuid)});
+      if(!confirmed)return;
+      const paint=results=>{
+        renderBatchResults(page,{accountId:account.id,kind:source+'-send',results,total:rows.length});
+        for(const result of results){if(result.status==='succeeded'){const checkbox=[...page.querySelectorAll('.row-check')].find(el=>el.value===result.id);if(checkbox){checkbox.checked=false;checkbox.disabled=true;}}}
+      };
+      const results=await runDocumentBatch({accountId:account.id,kind:source+'-send',items:rows,execute:async row=>source==='earchive'?EArchive.confirmAndSend([row.uuid]):EInvoice.confirmAndSend(await buildEInvoiceSendModels([row])),onProgress:paint});
+      const succeeded=results.filter(row=>row.status==='succeeded').length;
+      showToast(succeeded+' belge gönderildi; diğer satırların durumunu aşağıdan inceleyin.',succeeded===rows.length?'success':'warning');
+    }catch(error){showToast(error.message,'error');}
+    finally{batchBusy=false;page.inert=false;}
   });
 
-  document.addEventListener('click', () => {
+  listenScoped(page, document, 'click', () => {
     document.querySelectorAll('.action-dropdown').forEach(d => d.remove());
   });
 
   await loadDrafts(page);
+  if(getActiveAccountId())restoreBatchResults(page,getActiveAccountId(),selectedSource+'-send');
   return page;
 }
 
@@ -371,6 +377,7 @@ async function handleAction(page, action, uuid, source, aliasHint = '') {
 }
 
 async function openDraftInInvoiceCreate(uuid, source) {
+  const accountId=getActiveAccountId();
   try {
     if (!uuid) {
       showToast('Taslak UUID bulunamadı', 'error');
@@ -388,7 +395,9 @@ async function openDraftInInvoiceCreate(uuid, source) {
     const cached = cachedDrafts.find((d) => extractDraftUuid(d) === uuid) || null;
     const draftAlias = extractDraftAlias(draftModel) || extractDraftAlias(draftRaw) || extractDraftAlias(cached) || '';
 
+    if(getActiveAccountId()!==accountId)throw new Error('Firma değişti. Taslağı seçili firmadan tekrar açın.');
     const context = {
+      accountId,
       source,
       uuid,
       draftModel,
@@ -456,14 +465,8 @@ async function showPdfPreviewModal(uuid, source) {
     const htmlRes = source === 'earchive' ? await EArchive.getDraftHtml(uuid) : await EInvoice.getDraftHtml(uuid);
     const htmlContent = extractFileContent(htmlRes?.data);
     if (htmlRes?.success && htmlContent) {
-      bodyEl.innerHTML = `<iframe srcdoc="${escapeHtmlAttr(htmlContent)}" width="100%" height="100%" style="border:none;border-radius:4px;background:white"></iframe>`;
-      openBtn.style.display = 'flex';
-      openBtn.addEventListener('click', () => {
-        const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        window.open(url, '_blank', 'noopener,noreferrer');
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-      });
+      bodyEl.innerHTML = `<iframe sandbox="" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttr(htmlContent)}" width="100%" height="100%" style="border:none;border-radius:4px;background:white"></iframe>`;
+      openBtn.style.display = 'none';
       return;
     }
 

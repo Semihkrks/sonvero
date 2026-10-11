@@ -1,194 +1,73 @@
-import { getSupabase, isSupabaseConfigured } from '../lib/supabase.js';
-
-async function requireSupabaseUserId() {
-  if (!isSupabaseConfigured()) {
-    throw new Error('Supabase yapilandirmasi bulunamadi.');
-  }
-  const sb = getSupabase();
-  if (!sb) {
-    throw new Error('Supabase istemcisi baslatilamadi.');
-  }
-
-  const { data: sessionData } = await sb.auth.getSession();
-  let userId = sessionData?.session?.user?.id;
-  if (!userId) {
-    const { data: authData } = await sb.auth.getUser();
-    userId = authData?.user?.id;
-  }
-  if (!userId) {
-    throw new Error('Supabase oturumu yok. Lütfen yeniden giriş yapın.');
-  }
-  return userId;
+import { getSupabase } from '../lib/supabase.js';
+import { positiveMoney } from '../lib/money.js';
+import { completeIntent, fingerprint, operationIntent, requireOnline, singleFlight, stableJson } from '../lib/operations.js';
+const versions = new Map();
+export class CollectionCommandError extends Error {
+  constructor(message, uncertain = false) { super(message); this.uncertain = uncertain; }
 }
-
-const ownedAccounts = new Set();
-
-async function ensureAccountOwnership(accountId, userId) {
-  const cacheKey = `${userId}:${accountId}`;
-  if (ownedAccounts.has(cacheKey)) return;
-
-  const sb = getSupabase();
-  const { data, error } = await sb
-    .from('accounts')
-    .select('id')
-    .eq('id', accountId)
-    .eq('user_id', userId)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!data?.id) {
-    throw new Error('Aktif hesap Supabase tarafinda bulunamadi. Hesabi once Supabasee kaydedin.');
-  }
-  ownedAccounts.add(cacheKey);
+async function userId() {
+  const { data } = await getSupabase().auth.getSession();
+  if (!data?.session?.user?.id) throw new Error('Oturumunuz sona erdi. Yeniden giriş yapın.');
+  return data.session.user.id;
 }
-
-async function withRetry(fn, attempts = 3) {
-  let lastError;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      return await fn();
-    } catch (e) {
-      lastError = e;
-      if (/bulunamadi|zorunlu|eksik/i.test(e?.message || '')) throw e;
-      await new Promise(r => setTimeout(r, 400 * (i + 1)));
-    }
-  }
-  throw lastError;
-}
-
-function foldSearch(s) {
-  return String(s || '')
-    .toLocaleLowerCase('tr-TR')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/ı/g, 'i');
-}
-
-// PostgREST tek istekte en fazla 1000 satır döndürür; sayfa sayfa çekilir.
-const PAGE_SIZE = 1000;
-
-export async function listCollections({ accountId, startDate = '', endDate = '', searchText = '' } = {}) {
+export async function listCollections({ accountId, startDate = '', endDate = '', searchText = '', includeCancelled = false } = {}) {
   if (!accountId) return [];
-
-  const rows = await withRetry(async () => {
-    const userId = await requireSupabaseUserId();
-    await ensureAccountOwnership(accountId, userId);
-    const sb = getSupabase();
-
-    const all = [];
-    for (let from = 0; ; from += PAGE_SIZE) {
-      let query = sb
-        .from('customer_collections')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('account_id', accountId)
-        .order('date', { ascending: true })
-        .order('created_at', { ascending: true })
-        .order('id', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (startDate) query = query.gte('date', startDate);
-      if (endDate) query = query.lte('date', endDate);
-
-      const { data, error } = await query;
-      if (error) throw error;
-      all.push(...(data || []));
-      if (!data || data.length < PAGE_SIZE) break;
+  const user = await userId(), rows = [];
+  for (let from = 0; ; from += 1000) {
+    let query = getSupabase().from('customer_collections').select('*').eq('user_id', user).eq('account_id', accountId)
+      .order('date').order('created_at').order('id').range(from, from + 999);
+    if (!includeCancelled) query = query.is('cancelled_at', null);
+    if (startDate) query = query.gte('date', startDate);
+    if (endDate) query = query.lte('date', endDate);
+    const { data, error } = await query;
+    if (error) throw new Error(databaseMessage(error));
+    for (const row of data || []) versions.set(accountId + ':' + row.id, row.version);
+    rows.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  const search = searchText.toLocaleLowerCase('tr-TR').trim();
+  return search ? rows.filter(row => [row.customer_key, row.customer_name, row.customer_tax_no].some(value => String(value || '').toLocaleLowerCase('tr-TR').includes(search))) : rows;
+}
+function databaseMessage(error) {
+  if (['PGRST202','42703','42883'].includes(error.code)) return 'Güvenli veri katmanı henüz kurulmamış. Veritabanı geçişi uygulanmalı; kayıt gönderilmedi.';
+  if (error.code === '23505') return 'Bu banka işlemi veya dekont satırı daha önce kaydedilmiş.';
+  return error.message || 'İşlem tamamlanamadı.';
+}
+function command(accountId, action, payload, suppliedKey) {
+  const identity = accountId + ':' + action + ':' + (suppliedKey || stableJson(payload));
+  return singleFlight('collection:' + identity, async () => {
+    requireOnline();
+    const user = await userId();
+    const signature = await fingerprint(stableJson(payload));
+    const scope = user + ':collection:' + accountId + ':' + action + ':' + (suppliedKey || payload.id || payload.customer_key);
+    const key = suppliedKey || operationIntent(scope, signature);
+    const { data, error } = await getSupabase().rpc('collection_command', { p_account_id: accountId, p_key: key, p_action: action, p_record: payload });
+    if (error) {
+      const uncertain = !error.code || ['PGRST000','PGRST001','PGRST002'].includes(error.code);
+      if (!uncertain) completeIntent(scope);
+      throw new CollectionCommandError(databaseMessage(error), uncertain);
     }
-    return all;
+    if (!data?.id) throw new CollectionCommandError('Kayıt sonucu doğrulanamadı. Aynı bilgilerle tekrar kontrol edin.', true);
+    completeIntent(scope);
+    versions.set(accountId + ':' + data.id, data.version);
+    return data;
   });
-
-  const q = foldSearch(searchText).trim();
-  if (!q) return rows;
-  return rows.filter(c =>
-    foldSearch(c.customer_name).includes(q) ||
-    foldSearch(c.customer_tax_no).includes(q) ||
-    foldSearch(c.customer_key).includes(q)
-  );
 }
-
-export async function addCollection(record) {
-  const payload = {
-    id: crypto.randomUUID(),
-    account_id: record.account_id,
-    customer_key: record.customer_key,
-    customer_name: record.customer_name || '',
-    customer_tax_no: record.customer_tax_no || '',
-    type: record.type || 'Tahsilat',
-    description: record.description || '',
-    amount: Number(record.amount) || 0,
-    date: record.date,
-    created_at: new Date().toISOString()
-  };
-
-  if (!payload.account_id || !payload.customer_key || !payload.date || payload.amount <= 0) {
-    throw new Error('Tahsilat kaydı için zorunlu alanlar eksik.');
-  }
-
-  const userId = await requireSupabaseUserId();
-  await ensureAccountOwnership(payload.account_id, userId);
-
-  const sb = getSupabase();
-  const insertPayload = {
-    ...payload,
-    user_id: userId
-  };
-  const { data, error } = await sb
-    .from('customer_collections')
-    .insert(insertPayload)
-    .select('*')
-    .single();
-
+export function addCollection(record) {
+  const payload = { customer_key: record.customer_key, customer_name: record.customer_name || '', customer_tax_no: record.customer_tax_no || '',
+    type: record.type || 'Tahsilat', description: record.description || '', amount: positiveMoney(record.amount), date: record.date, currency: 'TRY', source_key: record.source_key || null };
+  return command(record.account_id, 'create', payload, record.idempotency_key);
+}
+export function updateCollection(id, accountId, updates = {}) {
+  return command(accountId, 'update', { id, version: updates.version ?? versions.get(accountId + ':' + id),
+    date: updates.date, type: updates.type || 'Tahsilat', description: updates.description || '', amount: positiveMoney(updates.amount), currency: 'TRY', reason: updates.reason || 'Tahsilat düzeltmesi' }, updates.idempotency_key);
+}
+/** @param {string} id @param {string} accountId @param {{version?: number, reason?: string, idempotency_key?: string}} [options] */
+export function deleteCollection(id, accountId, { version = undefined, reason = 'Kullanıcı tarafından iptal edildi', idempotency_key = undefined } = {}) {
+  return command(accountId, 'cancel', { id, version: version ?? versions.get(accountId + ':' + id), reason }, idempotency_key);
+}
+export async function collectionHistory(id, accountId) {
+  const { data, error } = await getSupabase().from('collection_history').select('*').eq('collection_id', id).eq('account_id', accountId).order('created_at', { ascending: false });
   if (error) throw error;
   return data;
-}
-
-export async function updateCollection(id, accountId, updates = {}) {
-  if (!id) throw new Error('Tahsilat kayit id eksik.');
-  if (!accountId) throw new Error('Hesap bilgisi eksik.');
-
-  const userId = await requireSupabaseUserId();
-  await ensureAccountOwnership(accountId, userId);
-
-  const payload = {
-    date: updates.date,
-    type: (updates.type || 'Tahsilat').trim(),
-    description: (updates.description || '').trim(),
-    amount: Number(updates.amount) || 0
-  };
-
-  if (!payload.date || payload.amount <= 0) {
-    throw new Error('Gecerli tarih ve tutar zorunludur.');
-  }
-
-  const sb = getSupabase();
-  const { data, error } = await sb
-    .from('customer_collections')
-    .update(payload)
-    .eq('id', id)
-    .eq('account_id', accountId)
-    .eq('user_id', userId)
-    .select('*')
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-export async function deleteCollection(id, accountId) {
-  if (!id) throw new Error('Tahsilat kayit id eksik.');
-  if (!accountId) throw new Error('Hesap bilgisi eksik.');
-
-  const userId = await requireSupabaseUserId();
-  await ensureAccountOwnership(accountId, userId);
-
-  const sb = getSupabase();
-  const { error } = await sb
-    .from('customer_collections')
-    .delete()
-    .eq('id', id)
-    .eq('account_id', accountId)
-    .eq('user_id', userId);
-
-  if (error) throw error;
 }

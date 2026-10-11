@@ -1,5 +1,6 @@
 import { EInvoiceWithAccount } from '../api/nilvera.js';
 import { getActiveAccount } from './account-manager.js';
+import { showToast } from '../components/toast.js';
 
 const LS_SEEN_KEY = 'nilfatura_seen_incoming_v1';
 const CHECK_INTERVAL_MS = 120000;
@@ -9,6 +10,7 @@ const MAX_TRACKED_UUIDS = 300;
 let monitorTimer = null;
 let initializedForAccount = '';
 let visibilityHandler = null;
+let generation = 0;
 
 function loadSeenMap() {
   try {
@@ -76,17 +78,12 @@ async function requestNotificationPermissionIfNeeded() {
   if (Notification.permission === 'granted') return true;
   if (Notification.permission === 'denied') return false;
 
-  try {
-    const perm = await Notification.requestPermission();
-    return perm === 'granted';
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 async function showIncomingNotification(payload) {
   const hasPerm = await requestNotificationPermissionIfNeeded();
-  if (!hasPerm) return;
+  if (!hasPerm) { showToast(payload.body || 'Yeni e-Fatura alındı.', 'info'); return; }
 
   const title = payload.title || 'Sonvera';
   const body = payload.body || 'Yeni e-Fatura alindi.';
@@ -128,6 +125,7 @@ async function runCheck({ silentSeed = false } = {}) {
   if (!account?.id) return;
 
   const snapshot = await fetchIncomingSnapshot(account);
+  if (getActiveAccount()?.id !== account.id) return;
   const uuids = snapshot.map((x) => getUuid(x)).filter(Boolean);
 
   const seenMap = loadSeenMap();
@@ -159,7 +157,9 @@ async function runCheck({ silentSeed = false } = {}) {
 }
 
 export async function startInvoiceNotificationMonitor() {
+  const seq = ++generation;
   await runCheck({ silentSeed: true });
+  if (seq !== generation) return;
 
   if (monitorTimer) {
     clearInterval(monitorTimer);
@@ -181,4 +181,11 @@ export async function startInvoiceNotificationMonitor() {
   }
   visibilityHandler = nextVisibilityHandler;
   document.addEventListener('visibilitychange', visibilityHandler);
+}
+
+export function stopInvoiceNotificationMonitor() {
+  generation++;
+  clearInterval(monitorTimer); monitorTimer = null;
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+  visibilityHandler = null; initializedForAccount = '';
 }

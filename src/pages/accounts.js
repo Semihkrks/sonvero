@@ -1,9 +1,11 @@
+import { escapeHtml, safeColor } from '../lib/html.js';
 // ══════════════════════════════════════════
 // Accounts Management Page
 // ══════════════════════════════════════════
 import { listAccounts, addAccount, updateAccount, deleteAccount, setActiveAccount, getActiveAccountId, ACCOUNT_COLORS } from '../services/account-manager.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
+import { requestWithAccount } from '../api/nilvera.js';
 
 const ic = {
   users: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>`,
@@ -59,19 +61,20 @@ async function refreshGrid(page) {
   grid.innerHTML = accounts.map(acc => `
     <div class="account-card ${acc.id === activeId ? 'active-account' : ''}" data-id="${acc.id}">
       <div class="account-card-header">
-        <span class="account-card-color" style="background:${acc.color || '#3b82f6'}"></span>
-        <span class="account-card-name">${acc.name}</span>
+        <span class="account-card-color" style="background:${safeColor(acc.color)}"></span>
+        <span class="account-card-name">${escapeHtml(acc.name)}</span>
         <span class="account-card-env ${acc.environment}">${acc.environment === 'live' ? 'CANLI' : 'TEST'}</span>
       </div>
-      ${acc.company_name ? `<div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);margin-bottom:6px">${ic.building} ${acc.company_name}</div>` : ''}
-      ${acc.vkn ? `<div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);margin-bottom:8px">${ic.clipboard} VKN: ${acc.vkn}</div>` : ''}
-      <div class="account-card-key" style="display:flex;align-items:center;gap:6px">${ic.key} ${'•'.repeat(12)}${(acc.api_key || '').slice(-8)}</div>
+      ${acc.company_name ? `<div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);margin-bottom:6px">${ic.building} ${escapeHtml(acc.company_name)}</div>` : ''}
+      ${acc.vkn ? `<div style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text-muted);margin-bottom:8px">${ic.clipboard} VKN: ${escapeHtml(acc.vkn)}</div>` : ''}
+      <div class="account-card-key" style="display:flex;align-items:center;gap:6px">${ic.key} ${acc.has_api_key ? 'Anahtar sunucuda tanımlı' : 'Anahtar gerekli'}</div>
       <div class="account-card-actions">
         ${acc.id !== activeId
           ? `<button class="btn btn-sm btn-primary" data-action="activate" data-id="${acc.id}" style="display:flex;align-items:center;gap:4px">${ic.check} Aktif Yap</button>`
           : `<span class="badge badge-success" style="display:flex;align-items:center;gap:4px">${ic.check} Aktif Hesap</span>`
         }
-        <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${acc.id}">${ic.edit}</button>
+        <button class="btn btn-sm btn-secondary" data-action="test" data-id="${acc.id}">Bağlantıyı test et</button>
+        <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${acc.id}" aria-label="Hesabı düzenle">${ic.edit}</button>
         <button class="btn btn-sm btn-danger" data-action="delete" data-id="${acc.id}">${ic.trash}</button>
       </div>
     </div>
@@ -82,26 +85,35 @@ async function refreshGrid(page) {
       const id = btn.dataset.id;
       const action = btn.dataset.action;
 
-      if (action === 'activate') {
+      try {
+      if (action === 'test') {
+        btn.disabled = true;
+        const result = await requestWithAccount(accounts.find(a=>a.id===id),'GET','/general/Company');
+        showToast(result.success ? 'Nilvera bağlantısı doğrulandı.' : result.error || 'Bağlantı doğrulanamadı.',result.success ? 'success' : 'error');
+      } else if (action === 'activate') {
         await setActiveAccount(id);
         showToast('Hesap aktif edildi', 'success');
         await refreshGrid(page);
       } else if (action === 'delete') {
-        if (confirm('Bu hesabı silmek istediğinize emin misiniz?')) {
+        if (confirm('Bu hesabı devre dışı bırakmak istiyor musunuz? Finansal geçmiş korunacak.')) {
           await deleteAccount(id);
-          showToast('Hesap silindi', 'warning');
+          showToast('Hesap devre dışı bırakıldı', 'warning');
           await refreshGrid(page);
         }
       } else if (action === 'edit') {
         const acc = accounts.find(a => a.id === id);
         if (acc) showAccountForm(page, acc);
       }
+      } catch(error) { showToast(error.message || 'İşlem tamamlanamadı.','error'); }
+      finally { btn.disabled = false; }
     });
   });
 }
 
 function showAccountForm(page, existing = null) {
   const isEdit = !!existing;
+  const newAccountId = crypto.randomUUID();
+  let savingAccount = false;
   const existingPrefs = { invoice_series: existing?.invoice_series };
   const colorOptions = ACCOUNT_COLORS.map(c =>
     `<button type="button" class="color-opt" data-color="${c}" style="width:28px;height:28px;border-radius:50%;border:2px solid ${c === (existing?.color || '#3b82f6') ? 'white' : 'transparent'};background:${c};cursor:pointer;transition:all 0.15s"></button>`
@@ -111,13 +123,13 @@ function showAccountForm(page, existing = null) {
   body.innerHTML = `
     <div class="form-group">
       <label class="form-label">Hesap Adı</label>
-      <input type="text" class="form-input" id="accName" placeholder="Firma Muhasebe Hesabı" value="${existing?.name || ''}" />
+      <input type="text" class="form-input" id="accName" placeholder="Firma Muhasebe Hesabı" value="${escapeHtml(existing?.name || '')}" />
       <span class="form-hint">Bu hesabı tanımlayacak bir isim</span>
     </div>
     <div class="form-group">
       <label class="form-label">API Anahtarı</label>
-      <input type="password" class="form-input" id="accApiKey" placeholder="9EE05B6564525810C86A32646DB46A26..." value="${existing?.api_key || ''}" />
-      <span class="form-hint">Nilvera portalından oluşturduğunuz API anahtarı</span>
+      <input type="password" class="form-input" id="accApiKey" placeholder="9EE05B6564525810C86A32646DB46A26..." value="${''}" />
+      <span class="form-hint">Yeni anahtar girebilirsiniz. Düzenlerken boş bırakırsanız mevcut anahtar korunur.</span>
     </div>
     <div class="form-row">
       <div class="form-group">
@@ -135,22 +147,22 @@ function showAccountForm(page, existing = null) {
     <div class="form-row">
       <div class="form-group">
         <label class="form-label">Firma Adı <span style="color:var(--text-muted)">(opsiyonel)</span></label>
-        <input type="text" class="form-input" id="accCompany" value="${existing?.company_name || ''}" />
+        <input type="text" class="form-input" id="accCompany" value="${escapeHtml(existing?.company_name || '')}" />
       </div>
       <div class="form-group">
         <label class="form-label">VKN <span style="color:var(--text-muted)">(opsiyonel)</span></label>
-        <input type="text" class="form-input" id="accVkn" value="${existing?.vkn || ''}" />
+        <input type="text" class="form-input" id="accVkn" value="${escapeHtml(existing?.vkn || '')}" />
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group">
         <label class="form-label">Fatura Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
-        <input type="text" class="form-input" id="accInvoiceSeries" maxlength="12" placeholder="Örn: AKA / BIR" value="${existingPrefs.invoice_series || ''}" />
+        <input type="text" class="form-input" id="accInvoiceSeries" maxlength="12" placeholder="Örn: AKA / BIR" value="${escapeHtml(existingPrefs.invoice_series || '')}" />
         <span class="form-hint">Fatura Oluştur ekranında seri otomatik gelir.</span>
       </div>
       <div class="form-group">
         <label class="form-label">İrsaliye Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
-        <input type="text" class="form-input" id="accDespatchSeries" maxlength="12" placeholder="Örn: AYK" value="${existing?.despatch_series || ''}" />
+        <input type="text" class="form-input" id="accDespatchSeries" maxlength="12" placeholder="Örn: AYK" value="${escapeHtml(existing?.despatch_series || '')}" />
         <span class="form-hint">İrsaliye Oluştur ekranında seri otomatik gelir.</span>
       </div>
     </div>
@@ -184,6 +196,7 @@ function showAccountForm(page, existing = null) {
     document.getElementById('formCancel')?.addEventListener('click', () => modal?.close());
 
     document.getElementById('formSave')?.addEventListener('click', async () => {
+      if (savingAccount) return;
       const name = document.getElementById('accName')?.value?.trim();
       const apiKey = document.getElementById('accApiKey')?.value?.trim();
       const env = document.getElementById('accEnv')?.value;
@@ -193,14 +206,17 @@ function showAccountForm(page, existing = null) {
       const despatchSeries = (document.getElementById('accDespatchSeries')?.value || '').trim().toUpperCase();
 
       if (!name) return showToast('Hesap adı gerekli', 'warning');
-      if (!apiKey) return showToast('API anahtarı gerekli', 'warning');
+      if (!isEdit && !apiKey) return showToast('API anahtarı gerekli', 'warning');
 
+      savingAccount = true;
+      const submit = footer.querySelector('#formSave');
+      submit.disabled = true;
       try {
         if (isEdit) {
           await updateAccount(existing.id, { name, api_key: apiKey, environment: env, color: selectedColor, company_name: company, vkn, invoice_series: invoiceSeries, despatch_series: despatchSeries });
           showToast('Hesap güncellendi', 'success');
         } else {
-          const newAcc = await addAccount({ name, apiKey, environment: env, color: selectedColor, companyName: company, vkn, invoiceSeries, despatchSeries });
+          const newAcc = await addAccount({ id: newAccountId, name, apiKey, environment: env, color: selectedColor, companyName: company, vkn, invoiceSeries, despatchSeries });
           const all = await listAccounts();
           if (all.length === 1) await setActiveAccount(newAcc.id);
           showToast('Hesap eklendi', 'success');
@@ -209,7 +225,7 @@ function showAccountForm(page, existing = null) {
         await refreshGrid(page);
       } catch (e) {
         showToast(`Hata: ${e.message}`, 'error');
-      }
+      } finally { savingAccount = false; submit.disabled = false; }
     });
   }, 100);
 }

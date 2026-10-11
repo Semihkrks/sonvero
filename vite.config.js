@@ -1,25 +1,12 @@
 import { defineConfig } from 'vite';
-
+import { readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 export default defineConfig({
-  server: {
-    port: 5173,
-    proxy: {
-      '/nilvera-api': {
-        target: 'https://apitest.nilvera.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/nilvera-api/, ''),
-        secure: true,
-      },
-      '/nilvera-live': {
-        target: 'https://api.nilvera.com',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/nilvera-live/, ''),
-        secure: true,
-      }
-    }
-  },
-  build: {
-    outDir: 'dist',
-    minify: 'terser'
-  }
+  plugins:[{name:'version-service-worker',apply:'build',closeBundle(){
+    const path='dist/sw.js';
+    writeFileSync(path,readFileSync(path,'utf8').replaceAll('__BUILD_ID__',randomUUID()));
+  }}],
+  server:{port:5173,host:'127.0.0.1'},
+  build:{outDir:'dist',minify:'terser',manifest:true},
+  worker:{format:'es'}
 });

@@ -1,3 +1,8 @@
+import {documentRecovery} from '../components/document-recovery.js';
+import {confirmDocument} from '../components/document-confirmation.js';
+import {escapeHtml} from '../lib/html.js';
+import { listenScoped } from '../lib/page-events.js';
+import { calculateLine, sumMoney, istanbulDate } from '../lib/money.js';
 import { EInvoice, EArchive, buildEInvoiceModel, General } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
 import { navigate } from '../router.js';
@@ -24,9 +29,16 @@ const UNITS = [
 ];
 
 export async function renderInvoiceCreate() {
+  const accountId = getActiveAccount()?.id;
+  const editContext = consumeInvoiceEditContext(accountId);
+  const recoveryKey = 'sonvera:draft:invoice:' + accountId;
+  let recovered = null;
+  try { recovered = JSON.parse(sessionStorage.getItem(recoveryKey) || 'null'); } catch {}
+  const documentId = normalizeDraftContext(editContext)?.uuid || (!editContext && recovered?.documentId) || crypto.randomUUID();
+  let invoiceBusy = false;
   const page = document.createElement('div');
   const now = new Date();
-  const currentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const currentDate = istanbulDate(now);
   const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
   page.innerHTML = `
@@ -55,7 +67,7 @@ export async function renderInvoiceCreate() {
           <h3 style="font-size:16px; font-weight:700;">👥 Alıcı Bilgileri</h3>
           <span id="tagInvoiceType" style="background:var(--accent); color:#fff; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; display:none;"></span>
         </div>
-        
+
         <div class="form-group" style="position:relative;">
           <div style="position:relative;">
             <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); pointer-events:none;">${ic.search}</span>
@@ -186,15 +198,15 @@ export async function renderInvoiceCreate() {
           <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">Para Birimi</label>
           <select class="form-select" id="g_currency" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
             <option value="TRY">Türk Lirası</option>
-            <option value="USD">Amerikan Doları</option>
-            <option value="EUR">Euro</option>
+
+
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0;">
           <input type="number" class="form-input" id="g_exchange" placeholder="Döviz Kuru" disabled style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1; background:#f8fafc; color:#94a3b8;">
         </div>
       </div>
-      
+
       <div class="form-group" id="g_kdv_istisna_container" style="margin-bottom:20px; display:none;">
           <select class="form-select" id="g_kdv_istisna" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1; color:#94a3b8;">
             <option value="">KDV İstisna Muafiyet Sebebi</option>
@@ -214,7 +226,7 @@ export async function renderInvoiceCreate() {
         </label>
         <span style="font-size:14px; color:var(--text-muted);">İrsaliye Bilgileri</span>
       </div>
-      
+
       <div id="irsaliyeDetails" class="invoice-irsaliye-details" style="display:none; gap:15px; align-items:flex-end;">
         <div class="form-group" style="margin-bottom:0; flex:1; position:relative;">
           <input type="text" class="form-input" id="irs_no" placeholder="İrsaliye Numarası" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
@@ -289,7 +301,7 @@ export async function renderInvoiceCreate() {
 
   const activeAccount = await getActiveAccount();
   applyAccountSeriesDefault(page, activeAccount);
-  const editContext = consumeInvoiceEditContext();
+
 
   const linesContainer = page.querySelector('#linesContainer');
 
@@ -403,17 +415,17 @@ export async function renderInvoiceCreate() {
           validList.sort((a, b) => {
             const nameA = (a.Name || a.StockName || a.Title || '').toLowerCase('tr-TR');
             const nameB = (b.Name || b.StockName || b.Title || '').toLowerCase('tr-TR');
-            
+
             // Eğer tam eşleşme varsa en tepeye
             if (nameA === searchVal && nameB !== searchVal) return -1;
             if (nameB === searchVal && nameA !== searchVal) return 1;
-            
+
             // Aranılan kelime ile başlıyorsa yukarı
             const startsA = nameA.startsWith(searchVal);
             const startsB = nameB.startsWith(searchVal);
             if (startsA && !startsB) return -1;
             if (startsB && !startsA) return 1;
-            
+
             // Aradığımız kelimeyi içerenleri yukarı al (başlamasa da içinde geçiyorsa)
             const includesA = nameA.includes(searchVal);
             const includesB = nameB.includes(searchVal);
@@ -449,7 +461,7 @@ export async function renderInvoiceCreate() {
 
                 const unitOpt = Array.from(tr.querySelector('.line-unit').options).find(o => o.value == stock.UnitCode);
                 if (unitOpt) tr.querySelector('.line-unit').value = stock.UnitCode;
-                
+
                 searchResults.style.display = 'none';
                 adjustRowQuantityToTarget(tr);
                 calculateGrid();
@@ -465,7 +477,7 @@ export async function renderInvoiceCreate() {
       }, 600);
     });
 
-    document.addEventListener('click', (e) => {
+    listenScoped(page, document, 'click', (e) => {
       if (!nameInput.contains(e.target) && !searchResults.contains(e.target)) {
         searchResults.style.display = 'none';
       }
@@ -477,38 +489,31 @@ export async function renderInvoiceCreate() {
   }
 
   function calculateGrid() {
-    let sumGross = 0;
-    let sumDisc = 0;
-    let sumTax = 0;
-
+    const totals = [];
     linesContainer.querySelectorAll('tr').forEach(tr => {
-      const q = parseFloat(tr.querySelector('.line-qty').value) || 0;
-      const p = parseFloat(tr.querySelector('.line-price').value) || 0;
-      const d = parseFloat(tr.querySelector('.line-disc').value) || 0;
-      const t = parseFloat(tr.querySelector('.line-tax').value) || 0;
-
-      const gross = q * p;
-      const discVal = gross * (d / 100);
-      const net = gross - discVal;
-      const taxVal = net * (t / 100);
-      const total = net + taxVal;
-
-      sumGross += gross;
-      sumDisc += discVal;
-      sumTax += taxVal;
-
-      tr.querySelector('.line-total-txt').textContent = numFmt(total);
+      try {
+        const line = calculateLine({
+          quantity: tr.querySelector('.line-qty').value,
+          unitPrice: tr.querySelector('.line-price').value || '0',
+          discountRate: tr.querySelector('.line-disc').value || '0',
+          taxRate: tr.querySelector('.line-tax').value || '0'
+        });
+        totals.push(line);
+        tr.querySelector('.line-total-txt').textContent = numFmt(line.total);
+      } catch {
+        tr.querySelector('.line-total-txt').textContent = 'Bilgileri kontrol edin';
+      }
     });
-
-    const matrah = sumGross - sumDisc;
-    const genelToplam = matrah + sumTax;
+    const sumGross = sumMoney(totals.map(x=>x.gross)), sumDisc = sumMoney(totals.map(x=>x.discount));
+    const sumTax = sumMoney(totals.map(x=>x.tax)), matrah = sumMoney(totals.map(x=>x.net));
+    const genelToplam = sumMoney(totals.map(x=>x.total));
 
     const needsExemption = Array.from(linesContainer.querySelectorAll('tr')).some(tr => {
       const tax = tr.querySelector('.line-tax').value;
       const price = parseFloat(tr.querySelector('.line-price').value) || 0;
       return tax === '0' || price === 0;
     });
-    
+
     const exemptionContainer = document.getElementById('g_kdv_istisna_container');
     if (exemptionContainer) {
       exemptionContainer.style.display = needsExemption ? 'block' : 'none';
@@ -613,7 +618,7 @@ export async function renderInvoiceCreate() {
     const ettnBadge = page.querySelector('#ettiBadge');
     if (ettnBadge) {
       ettnBadge.style.display = 'inline-flex';
-      page.querySelector('#ettiSpan').textContent = crypto.randomUUID();
+      page.querySelector('#ettiSpan').textContent = documentId;
     }
 
     return { isEInvoice, alias };
@@ -698,9 +703,27 @@ export async function renderInvoiceCreate() {
     calculateGrid();
   }
 
+  const recovery=documentRecovery({page,recoveryKey,accountId,onSuccess:(destination)=>{showToast('İşlem sunucuda tamamlanmış.','success');navigate(destination);}});
+  function persistForm() {
+    const fields = Object.fromEntries(Array.from(page.querySelectorAll('input[id],select[id],textarea[id]')).map(el=>[el.id,el.value]));
+    const lines = Array.from(linesContainer.querySelectorAll('tr')).map(tr=>Object.fromEntries(['name','qty','price','disc','tax','unit'].map(k=>[k,tr.querySelector('.line-'+k)?.value])));
+    try { sessionStorage.setItem(recoveryKey,JSON.stringify({documentId,fields,lines})); } catch { showToast('Taslak cihazda saklanamadı. Sayfayı kapatmayın.','warning'); }
+  }
+  page.addEventListener('input',persistForm);
+  page.addEventListener('change',persistForm);
   const hydratedFromEdit = hydrateInvoiceFormFromContext(page, editContext, createLine, linesContainer);
   if (!hydratedFromEdit) {
     createLine();
+  }
+  if (!editContext && recovered?.fields && recovered?.lines) {
+    linesContainer.replaceChildren();
+    for (const values of recovered.lines) {
+      createLine();
+      const tr=linesContainer.lastElementChild;
+      for (const [key,value] of Object.entries(values)) { const el=tr?.querySelector('.line-'+key); if(el)el.value=value; }
+    }
+    for(const [id,value] of Object.entries(recovered.fields)) { const el=page.querySelector('#'+CSS.escape(id)); if(el)el.value=value; }
+    showToast('Kaydedilmemiş fatura formunuz geri yüklendi.','info');
   }
   if (hydratedFromEdit && editContext?.source === 'einvoice') {
     await refreshAliasByTaxNumber(page, true);
@@ -726,20 +749,21 @@ export async function renderInvoiceCreate() {
       searchResults.style.display = 'none';
       return;
     }
-    
+
     searchTimeout = setTimeout(async () => {
       searchResults.innerHTML = '<div style="padding:10px; color:var(--text-muted); text-align:center;">Aranıyor...</div>';
       searchResults.style.display = 'block';
       try {
         const res = await General.searchCompany(val);
         // Sometimes the API returns paginated data in .Content, sometimes a flat array, or .data directly
+        if(!page.isConnected||getActiveAccount()?.id!==accountId||searchInput.value.trim()!==val)return;
         const list = Array.isArray(res.data) 
             ? res.data 
             : (res.data?.Content || res.data?.Items || Array.from(Object.values(res.data)).find(v => Array.isArray(v)) || []);
-            
+
         // Filter out empty Titles like "--" securely just in case
         const validList = list.filter(c => c && c.Title && c.Title.length > 2 && c.Title !== '--');
-        
+
         // If exact match on name exist, order them first
         validList.sort((a,b) => {
             const isA = a.Title.toLowerCase().includes(val.toLowerCase());
@@ -754,27 +778,28 @@ export async function renderInvoiceCreate() {
             const isEInvoice = c.ModuleType === 'eInvoice' || c.IsEInvoice;
             return `
             <div class="search-item" data-idx="${i}" style="padding:10px; cursor:pointer; border-bottom:1px solid var(--border);">
-              <div style="font-weight:600; font-size:13px; margin-bottom:4px;">${c.Title}</div>
+              <div style="font-weight:600; font-size:13px; margin-bottom:4px;">${escapeHtml(c.Title)}</div>
               <div style="font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between;">
-                <span>VKN: ${c.TaxNumber || 'Yok'}</span>
+                <span>VKN: ${escapeHtml(c.TaxNumber || 'Yok')}</span>
                 <span style="color:var(--accent)">${isEInvoice ? 'e-Fatura' : 'e-Arşiv'}</span>
               </div>
             </div>
           `}).join('');
-          
+
           searchResults.querySelectorAll('.search-item').forEach(item => {
             item.addEventListener('click', async () => {
               const cSearch = validList[item.getAttribute('data-idx')];
-              
+
               // Mobil/yavas baglantida detay endpoint'i gecikse bile alanlar aninda dolsun.
               applyCustomerToForm(page, cSearch, cSearch);
-              
+
               // Tıklandıktan sonra search kutusunu kapat, yükleniyor moduna al (Opsiyonel ama iyi olur)
               searchResults.innerHTML = '<div style="padding:10px; color:var(--text-muted); text-align:center;">Mükellef detayları getiriliyor...</div>';
-              
+
               try {
                 // Etiketler (Alias), VD, adres detayları için TaxNumber üzerinden ikinci sorguyu atıyoruz!
                 const detailRes = await General.getGlobalCustomerInfo(cSearch.TaxNumber);
+                if(!page.isConnected||getActiveAccount()?.id!==accountId||page.querySelector('#c_vkn').value!==String(cSearch.TaxNumber))return;
                 const detailData = detailRes?.success
                   ? (detailRes.data?.Content || detailRes.data?.Data || detailRes.data)
                   : null;
@@ -801,7 +826,7 @@ export async function renderInvoiceCreate() {
     }, 600);
   });
 
-  document.addEventListener('click', (e) => {
+  listenScoped(page, document, 'click', (e) => {
     if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
       searchResults.style.display = 'none';
     }
@@ -810,7 +835,14 @@ export async function renderInvoiceCreate() {
 
   // --- TASLAK KAYDET ---
   page.querySelector('#btnDraft').addEventListener('click', async () => {
+    if (invoiceBusy || recovery.blocked) return;
+    invoiceBusy = true;
+    persistForm();
+    page.inert = true;
+    page.querySelector('#btnDraft').disabled = true;
+    page.querySelector('#btnSend').disabled = true;
     try {
+      if (getActiveAccount()?.id !== accountId) throw new Error('Firma değişti. Formu yeniden açın.');
       const vkn = page.querySelector('#c_vkn').value.trim();
       const name = page.querySelector('#c_name').value.trim();
       if (!vkn || vkn.length < 10) throw new Error('Geçerli bir VKN/TCKN giriniz.');
@@ -828,7 +860,7 @@ export async function renderInvoiceCreate() {
         let _t = parseFloat(tr.querySelector('.line-tax').value);
         lines.push({
           name: nm,
-          quantity: parseFloat(tr.querySelector('.line-qty').value) || 1,
+          quantity: parseFloat(tr.querySelector('.line-qty').value),
           unitType: tr.querySelector('.line-unit').value,
           unitPrice: parseFloat(tr.querySelector('.line-price').value) || 0,
           discountRate: parseFloat(tr.querySelector('.line-disc').value) || 0,
@@ -845,6 +877,7 @@ export async function renderInvoiceCreate() {
 
       const profile = page.querySelector('#g_scenario').value;
       const model = buildEInvoiceModel({
+        uuid: documentId,
         profile: profile === 'EARSIV' ? 'EARSIVFATURA' : profile,
         type: page.querySelector('#g_type').value,
         exemptionCode: globalExemption,
@@ -873,25 +906,40 @@ export async function renderInvoiceCreate() {
         ? { ArchiveInvoice: model } 
         : { EInvoice: model, CustomerAlias: alias };
 
-      const res = isEArchive ? await EArchive.createDraft(draftPayload) : await EInvoice.createDraft(draftPayload);
-      
-      if (res && res.data) {
+      const options={onIntent:intent=>recovery.track(intent,'/drafts')};
+      const res = isEArchive ? await EArchive.createDraft(draftPayload,options) : await EInvoice.createDraft(draftPayload,options);
+      recovery.settle(res);
+
+      if (res?.success) {
+        sessionStorage.removeItem(recoveryKey);
         showToast('Taslak başarıyla kaydedildi!', 'success');
         navigate('/drafts');
       } else {
-        showToast('Taslak kaydedilirken bir sorun oluştu.', 'error');
+        showToast(res?.error || 'Taslak kaydedilemedi.', 'error');
       }
     } catch (e) {
       showToast(e.message, 'error');
     } finally {
+      invoiceBusy = false;
+      page.inert = false;
+      page.querySelector('#btnDraft').disabled = false;
+      page.querySelector('#btnSend').disabled = false;
       page.querySelector('#btnDraft').innerText = 'TASLAK KAYDET';
       page.querySelector('#btnDraft').disabled = false;
+      recovery.refresh();
     }
   });
 
   // --- ONAYLA ve GÖNDER ---
   page.querySelector('#btnSend').addEventListener('click', async () => {
+    if (invoiceBusy || recovery.blocked) return;
+    invoiceBusy = true;
+    persistForm();
+    page.inert = true;
+    page.querySelector('#btnDraft').disabled = true;
+    page.querySelector('#btnSend').disabled = true;
     try {
+      if (getActiveAccount()?.id !== accountId) throw new Error('Firma değişti. Formu yeniden açın.');
       const vkn = page.querySelector('#c_vkn').value.trim();
       const name = page.querySelector('#c_name').value.trim();
       if (!vkn || vkn.length < 10) throw new Error('Geçerli bir VKN/TCKN giriniz.');
@@ -909,7 +957,7 @@ export async function renderInvoiceCreate() {
         let _t = parseFloat(tr.querySelector('.line-tax').value);
         lines.push({
           name: nm,
-          quantity: parseFloat(tr.querySelector('.line-qty').value) || 1,
+          quantity: parseFloat(tr.querySelector('.line-qty').value),
           unitType: tr.querySelector('.line-unit').value,
           unitPrice: parseFloat(tr.querySelector('.line-price').value) || 0,
           discountRate: parseFloat(tr.querySelector('.line-disc').value) || 0,
@@ -925,6 +973,7 @@ export async function renderInvoiceCreate() {
       const globalExemption = document.getElementById('g_kdv_istisna')?.value || '';
 
       const model = buildEInvoiceModel({
+        uuid: documentId,
         profile: page.querySelector('#g_scenario').value === 'EARSIV' ? 'EARSIVFATURA' : page.querySelector('#g_scenario').value,
         type: page.querySelector('#g_type').value,
         exemptionCode: globalExemption,
@@ -946,12 +995,18 @@ export async function renderInvoiceCreate() {
         notes
       });
 
+      const confirmed=await confirmDocument({title:'Fatura gönderim özeti',fields:{Firma:getActiveAccount()?.name,Alıcı:name,'VKN / TCKN':vkn,'Belge türü':isEArchive?'e-Arşiv':'e-Fatura',Tarih:model.InvoiceInfo.IssueDate,'Belge kimliği':documentId},lines:lines.map(line=>line.name+' · '+line.quantity+' '+line.unitType),total:new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY'}).format(Number(sumMoney(lines.map(line=>calculateLine(line).total))))});
+      if(!confirmed)return;
+      if(getActiveAccount()?.id!==accountId||!page.isConnected)throw new Error('Firma veya ekran değişti. Gönderim yapılmadı.');
       page.querySelector('#btnSend').innerText = 'GÖNDERİLİYOR...';
       page.querySelector('#btnSend').disabled = true;
 
-      const res = isEArchive ? await EArchive.sendModel(model) : await EInvoice.sendModel(model);
+      const options={onIntent:intent=>recovery.track(intent,'/outgoing')};
+      const res = isEArchive ? await EArchive.sendModel(model,options) : await EInvoice.sendModel(model,options);
+      recovery.settle(res);
 
       if (res.success) {
+        sessionStorage.removeItem(recoveryKey);
         showToast('Fatura başarıyla oluşturuldu!', 'success');
         navigate('/outgoing');
       } else {
@@ -960,26 +1015,35 @@ export async function renderInvoiceCreate() {
     } catch (e) {
       showToast(e.message, 'warning');
     } finally {
+      invoiceBusy = false;
+      page.inert = false;
+      page.querySelector('#btnDraft').disabled = false;
+      page.querySelector('#btnSend').disabled = false;
       page.querySelector('#btnSend').disabled = false;
       page.querySelector('#btnSend').innerHTML = `${ic.send} ONAYLA GÖNDER`;
+      recovery.refresh();
     }
   });
 
   page.querySelector('#g_currency').addEventListener('change', (e) => {
     const exInput = page.querySelector('#g_exchange');
     exInput.disabled = e.target.value === 'TRY';
-    exInput.value = e.target.value !== 'TRY' ? '30.5000' : ''; // Mock rate
+    exInput.value = '';
+    if (e.target.value !== 'TRY') showToast('Yeni faturalar yalnızca TL olarak düzenlenebilir.', 'warning');
   });
 
+  persistForm();
+  recovery.refresh();
   return page;
 }
 
-function consumeInvoiceEditContext() {
+function consumeInvoiceEditContext(accountId) {
   try {
     const raw = sessionStorage.getItem(INVOICE_EDIT_CONTEXT_KEY);
     if (!raw) return null;
     sessionStorage.removeItem(INVOICE_EDIT_CONTEXT_KEY);
     const parsed = JSON.parse(raw);
+    if(parsed?.accountId!==accountId){showToast('Taslak başka firmaya ait veya firma bilgisi eksik. Doğru firmada taslağı yeniden açın.','warning');return null;}
     return parsed && typeof parsed === 'object' ? parsed : null;
   } catch {
     return null;
@@ -1070,6 +1134,7 @@ function normalizeDraftContext(context) {
     : [];
 
   return {
+    uuid: info.UUID || context.uuid || context.draftUuid,
     source: context.source,
     invoiceDate: info.IssueDate || info.issueDate || '',
     scenario: info.InvoiceProfile || (context.source === 'earchive' ? 'EARSIV' : 'TICARIFATURA'),
@@ -1090,7 +1155,7 @@ function normalizeDraftContext(context) {
       email: customer.Email || '',
     },
     notes: Array.isArray(notesRaw)
-      ? notesRaw.map(n => String(n || '')).filter(Boolean)
+      ? notesRaw.map(n => typeof n === 'string' ? n : String(n?.Note || '')).filter(Boolean)
       : (typeof notesRaw === 'string' ? [notesRaw] : []),
     lines,
   };

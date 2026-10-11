@@ -1,198 +1,12 @@
-// ══════════════════════════════════════════
-// Nilvera API Service Layer
-// All E-Fatura & E-Arşiv Endpoints
-// ══════════════════════════════════════════
-import axios from 'axios';
 import { getActiveAccount } from '../services/account-manager.js';
 import nilveraCatalog from './nilvera-catalog.generated.json';
+import { callNilvera, retryRead } from '../lib/api-transport.js';
+import { calculateLine } from '../lib/money.js';
 
-// ── Create Axios Instance ──
-function createApi() {
-  return axios.create({
-    timeout: 30000,
-    headers: { 'Content-Type': 'application/json' }
-  });
-}
-
-// ── Build base URL for a given account (or active account) ──
-// getActiveAccount() artık SENKRON: aktif hesap istek anında yeniden çözülmez,
-// bellek-içi tek kaynaktan okunur.
-function baseUrlFor(account) {
-  if (!account) throw new Error('Aktif hesap bulunamadı. Lütfen bir hesap seçin.');
-  // In dev mode, use Vite proxy to bypass CORS
-  return account.environment === 'live' ? '/nilvera-live' : '/nilvera-api';
-}
-
-// ── Build auth headers for a given account ──
-function headersFor(account) {
-  if (!account || !account.api_key) {
-    throw new Error('API anahtarı bulunamadı. Lütfen hesap ayarlarını kontrol edin.');
-  }
-  return {
-    'Authorization': `Bearer ${account.api_key}`,
-    'Content-Type': 'application/json'
-  };
-}
-
-// ── Generic request wrapper with error handling ──
-// Aktif hesabı TEK SEFER yakalar; baseUrl ve header aynı hesaptan türetilir.
-async function request(method, path, data = null, params = null, options = {}) {
-  const account = getActiveAccount();
-  const baseUrl = baseUrlFor(account);
-  const headers = headersFor(account);
-  const api = createApi();
-
-  try {
-    const config = {
-      method,
-      url: `${baseUrl}${path}`,
-      headers,
-      ...(data && { data }),
-      ...(params && { params }),
-      ...(options.signal && { signal: options.signal })
-    };
-
-    console.log(`[Nilvera API] Request -> ${method} ${config.url}`, params);
-
-    const response = await api(config);
-    return { success: true, data: response.data, status: response.status };
-  } catch (error) {
-    const errData = error.response?.data;
-    const status = error.response?.status;
-
-    // Parse Nilvera specific error codes
-    let message = 'Bilinmeyen bir hata oluştu';
-    let code = null;
-
-    if (errData) {
-      if (errData.Errors && errData.Errors.length > 0) {
-        message = errData.Errors.map(e => e.Message || e).join(', ');
-        code = errData.Errors[0]?.Code;
-      } else if (errData.Message) {
-        message = errData.Message;
-      } else if (typeof errData === 'string') {
-        message = errData;
-      }
-    }
-
-    // HTTP-level error descriptions
-    const httpErrors = {
-      400: 'Geçersiz istek — gönderilen veri yapısı hatalı',
-      403: 'Yetkisiz erişim — API anahtarı bu işlem için yetkili değil',
-      404: 'Kaynak bulunamadı — belge sistemde mevcut değil',
-      409: 'Çakışma — bu işlem daha önce zaten yapılmış',
-      422: 'İşlenemeyen veri — iş kurallarını ihlal ediyor',
-      500: 'Sunucu hatası — Nilvera tarafında bir sorun oluştu'
-    };
-
-    if (!errData && status && httpErrors[status]) {
-      message = httpErrors[status];
-    }
-
-    return { success: false, error: message, code, status };
-  }
-}
-
-// ── Account-specific request (bypasses getActiveAccount) ──
-// Bir yükleme boyunca hesap açıkça verilir: kullanıcı arada hesap değiştirse
-// bile bu isteğin anahtarı/ortamı değişmez. options.signal ile iptal edilebilir.
-async function requestWithAccount(account, method, path, data = null, params = null, options = {}) {
-  if (!account || !account.api_key) {
-    return { success: false, error: 'Hesap veya API anahtarı bulunamadı.', status: 0 };
-  }
-  const baseUrl = account.environment === 'live' ? '/nilvera-live' : '/nilvera-api';
-  const headers = {
-    'Authorization': `Bearer ${account.api_key}`,
-    'Content-Type': 'application/json'
-  };
-  const api = createApi();
-
-  try {
-    const config = {
-      method,
-      url: `${baseUrl}${path}`,
-      headers,
-      ...(data && { data }),
-      ...(params && { params }),
-      ...(options.signal && { signal: options.signal })
-    };
-    const response = await api(config);
-    return { success: true, data: response.data, status: response.status };
-  } catch (error) {
-    const errData = error.response?.data;
-    const status = error.response?.status;
-    let message = 'Bilinmeyen bir hata oluştu';
-    if (errData) {
-      if (errData.Errors && errData.Errors.length > 0) {
-        message = errData.Errors.map(e => e.Message || e).join(', ');
-      } else if (errData.Message) {
-        message = errData.Message;
-      } else if (typeof errData === 'string') {
-        message = errData;
-      }
-    }
-    return { success: false, error: message, status };
-  }
-}
-
-// ── Helper to extract items for counting ──
-function _extractItemsLength(data) {
-  if (!data) return 0;
-  if (Array.isArray(data)) return data.length;
-  if (Array.isArray(data.Content)) return data.Content.length;
-  if (Array.isArray(data.Items)) return data.Items.length;
-  if (Array.isArray(data.items)) return data.items.length;
-  return 0;
-}
-
-// ── 3x Retry: Call API up to 3 times, keep the result with the most items or last success ──
-async function requestRetry3(method, path, data = null, params = null) {
-  let bestResult = null;
-  let maxCount = -1;
-  let lastError = null;
-  
-  for (let i = 0; i < 3; i++) {
-    const result = await request(method, path, data, params);
-    if (result.success) {
-      const count = _extractItemsLength(result.data);
-      if (count > maxCount || !bestResult) {
-        maxCount = count;
-        bestResult = result;
-      }
-    } else {
-      lastError = result;
-    }
-    // Delay to avoid 429 Too Many Requests
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-  return bestResult || lastError;
-}
-
-async function requestWithAccountRetry3(account, method, path, data = null, params = null, options = {}) {
-  let bestResult = null;
-  let maxCount = -1;
-  let lastError = null;
-
-  for (let i = 0; i < 3; i++) {
-    if (options.signal?.aborted) return bestResult || lastError || { success: false, error: 'İstek iptal edildi', status: 0 };
-    const result = await requestWithAccount(account, method, path, data, params, options);
-    if (result.success) {
-      const count = _extractItemsLength(result.data);
-      if (count >= maxCount || !bestResult) {
-        maxCount = count;
-        bestResult = result;
-      }
-    } else {
-      lastError = result;
-    }
-    // Delay to avoid 429 Too Many Requests
-    await new Promise(resolve => setTimeout(resolve, 300));
-  }
-  return bestResult || lastError;
-}
-
-// ── Exported helpers for multi-account operations ──
-export { requestWithAccount, requestRetry3, requestWithAccountRetry3 };
+function request(method,path,data=null,params=null,options={}) { return callNilvera(getActiveAccount(),method,path,data,params,options); }
+export function requestWithAccount(account,method,path,data=null,params=null,options={}) { return callNilvera(account,method,path,data,params,options); }
+export function requestRetry3(method,path,data=null,params=null) { const account=getActiveAccount(); return method==='GET' ? retryRead(()=>callNilvera(account,method,path,data,params)) : callNilvera(account,method,path,data,params); }
+export function requestWithAccountRetry3(account,method,path,data=null,params=null,options={}) { return method==='GET' ? retryRead(()=>callNilvera(account,method,path,data,params,options),options) : callNilvera(account,method,path,data,params,options); }
 
 // ── Account-specific listeleme uçları ──
 // Sayfalar yükleme başında hesabı yakalar ve TÜM çağrılarını bu hesapla yapar.
@@ -247,7 +61,11 @@ export const NilveraApi = {
     if (!op) {
       return Promise.resolve({ success: false, error: `Operation bulunamadı: ${operationId}` });
     }
-    return request(op.method, op.path, options.data ?? null, options.params ?? null);
+    const pathParams=options.pathParams||{};
+    const missing=[];
+    const path=op.path.replace(/\{([^}]+)\}/g,(_,name)=>{const value=pathParams[name];if(value===undefined||value===null||value===''){missing.push(name);return ''; }return encodeURIComponent(String(value));});
+    if(missing.length)return Promise.resolve({success:false,status:400,error:'Eksik adres parametresi: '+missing.join(', ')});
+    return request(op.method, path, options.data ?? null, options.params ?? null);
   },
 
   findEndpoints: (query) => {
@@ -270,13 +88,13 @@ export const NilveraApi = {
 
 export const EInvoice = {
   // ── Draft ──
-  createDraft: (model) =>
-    request('POST', '/einvoice/Draft/Create', model),
+  createDraft: (model, options = {}) =>
+    request('POST', '/einvoice/Draft/Create', model, null, options),
   listDrafts: (params = {}) =>
     request('GET', '/einvoice/Draft', null, params),
 
   getDraft: (uuid) =>
-    request('GET', `/einvoice/Draft/${uuid}`),
+    request('GET', `/einvoice/Draft/${uuid}/model`),
 
   getDraftHtml: (uuid) =>
     request('GET', `/einvoice/Draft/${uuid}/html`),
@@ -291,7 +109,7 @@ export const EInvoice = {
     request('GET', `/einvoice/Draft/${uuid}/xml`),
 
   deleteDraft: (uuid) =>
-    request('DELETE', `/einvoice/Draft/${uuid}`),
+    request('DELETE', '/einvoice/Draft', [uuid]),
 
   deleteDrafts: (uuids) =>
     request('DELETE', '/einvoice/Draft', uuids),
@@ -320,8 +138,8 @@ export const EInvoice = {
   },
 
   // ── Send ──
-  sendModel: (invoiceModel) =>
-    request('POST', '/einvoice/Send/Model', invoiceModel),
+  sendModel: (invoiceModel, options = {}) =>
+    request('POST', '/einvoice/Send/Model', invoiceModel, null, options),
 
   sendXmlPreview: (invoiceModel) =>
     request('POST', '/einvoice/Send/Xml/Preview', invoiceModel),
@@ -340,7 +158,7 @@ export const EInvoice = {
     request('POST', '/einvoice/Sale/Email/Send', emailRequest),
 
   getSaleHtml: (uuid) =>
-    request('GET', `/einvoice/Sale/${uuid}/Html`),
+    request('GET', `/einvoice/Sale/${uuid}/html`),
 
   getSaleDetails: (uuid) =>
     request('GET', `/einvoice/Sale/${uuid}/Details`),
@@ -352,10 +170,10 @@ export const EInvoice = {
     request('GET', `/einvoice/Sale/${uuid}/EnvelopeInfo`),
 
   getSalePdf: (uuid) =>
-    request('GET', `/einvoice/Sale/${uuid}/Pdf`),
+    request('GET', `/einvoice/Sale/${uuid}/pdf`),
 
   getSaleXml: (uuid) =>
-    request('GET', `/einvoice/Sale/${uuid}/Xml`),
+    request('GET', `/einvoice/Sale/${uuid}/xml`),
 
   createSaleDraft: (uuid) =>
     request('POST', `/einvoice/Sale/${uuid}/CreateDraft`),
@@ -371,7 +189,7 @@ export const EInvoice = {
     request('GET', '/einvoice/Purchase', null, params),
 
   getPurchase: (uuid) =>
-    request('GET', `/einvoice/Purchase/${uuid}`),
+    request('GET', `/einvoice/Purchase/${uuid}/Details`),
 
   sendAnswer: (answerModel) =>
     request('POST', '/einvoice/Purchase/SendAnswer', answerModel),
@@ -388,14 +206,23 @@ export const EInvoice = {
   createReturn: (uuid) =>
     request('POST', `/einvoice/Purchase/${uuid}/CreateReturn`),
 
+  createPurchaseDraft: (uuid) =>
+    request('POST', `/einvoice/Purchase/${uuid}/CreateDraft`),
+
+  setPurchaseOperation: (operationType, uuids) =>
+    request('PUT', `/einvoice/Purchase/Operation/${operationType}`, uuids),
+
+  setPurchaseSpecialCode: (uuid, code) =>
+    request('PUT', '/einvoice/Purchase/SpecialCode', { UUID: uuid, SpecialCode: code }),
+
   getPurchaseHtml: (uuid) =>
-    request('GET', `/einvoice/Purchase/${uuid}/Html`),
+    request('GET', `/einvoice/Purchase/${uuid}/html`),
 
   getPurchasePdf: (uuid) =>
-    request('GET', `/einvoice/Purchase/${uuid}/Pdf`),
+    request('GET', `/einvoice/Purchase/${uuid}/pdf`),
 
   getPurchaseXml: (uuid) =>
-    request('GET', `/einvoice/Purchase/${uuid}/Xml`),
+    request('GET', `/einvoice/Purchase/${uuid}/xml`),
 
   // ── Statistics ──
   getPurchaseStats: () =>
@@ -413,11 +240,11 @@ export const EInvoice = {
 
   // ── Tags ──
   listTags: () =>
-    request('GET', '/einvoice/Tag'),
+    request('GET', '/einvoice/Tags'),
 
   // ── Templates ──
   listTemplates: () =>
-    request('GET', '/einvoice/Template'),
+    request('GET', '/einvoice/Templates'),
 };
 
 // ═══════════════════════════════════════
@@ -426,8 +253,8 @@ export const EInvoice = {
 
 export const EArchive = {
   // ── Draft ──
-  createDraft: (model) =>
-    request('POST', '/earchive/Draft/Create', model),
+  createDraft: (model, options = {}) =>
+    request('POST', '/earchive/Draft/Create', model, null, options),
   listDrafts: (params = {}) =>
     request('GET', '/earchive/Draft', null, params),
 
@@ -457,7 +284,7 @@ export const EArchive = {
     request('GET', '/earchive/Invoices', null, params),
 
   getInvoice: (uuid) =>
-    request('GET', `/earchive/Invoices/${uuid}`),
+    request('GET', `/earchive/Invoices/${uuid}/Details`),
 
   getInvoiceStatus: (uuid) =>
     request('GET', `/earchive/Invoices/${uuid}/Status`),
@@ -484,13 +311,13 @@ export const EArchive = {
     request('PUT', '/earchive/Invoices/Tags', tagModel),
 
   getInvoiceHtml: (uuid) =>
-    request('GET', `/earchive/Invoices/${uuid}/Html`),
+    request('GET', `/earchive/Invoices/${uuid}/html`),
 
   getInvoicePdf: (uuid) =>
-    request('GET', `/earchive/Invoices/${uuid}/Pdf`),
+    request('GET', `/earchive/Invoices/${uuid}/pdf`),
 
   getInvoiceXml: (uuid) =>
-    request('GET', `/earchive/Invoices/${uuid}/Xml`),
+    request('GET', `/earchive/Invoices/${uuid}/xml`),
 
   sendEmail: (emailRequest) =>
     request('POST', '/earchive/Invoices/Email/Send', emailRequest),
@@ -504,8 +331,8 @@ export const EArchive = {
     request('POST', '/earchive/Send/Report', reportData),
 
   // ── Send Model ──
-  sendModel: (invoiceModel) =>
-    request('POST', '/earchive/Send/Model', invoiceModel),
+  sendModel: (invoiceModel, options = {}) =>
+    request('POST', '/earchive/Send/Model', invoiceModel, null, options),
 };
 
 // ═══════════════════════════════════════
@@ -514,22 +341,24 @@ export const EArchive = {
 
 export const EDespatch = {
   // ── Draft ──
-  createDraft: (model) =>
-    request('POST', '/edespatch/Draft/Create', model),
+  createDraft: (model, options = {}) =>
+    request('POST', '/edespatch/Draft/Create', model, null, options),
+  editAndSend: (model, options = {}) =>
+    request('POST', '/edespatch/Draft/EditAndSend', model, null, options),
   listDrafts: (params = {}) =>
     request('GET', '/edespatch/Draft', null, params),
   getDraft: (uuid) =>
-    request('GET', `/edespatch/Draft/${uuid}`),
+    request('GET', `/edespatch/Draft/${uuid}/model`),
   deleteDraft: (uuid) =>
-    request('DELETE', `/edespatch/Draft/${uuid}`),
+    request('DELETE', '/edespatch/Draft', [uuid]),
   confirmAndSend: (items) => {
     const payload = Array.isArray(items) ? items.map(i => ({ UUID: i.UUID || i })).filter(x => x.UUID) : [];
     return request('POST', '/edespatch/Draft/ConfirmAndSend', payload);
   },
 
   // ── Send ──
-  sendModel: (despatchModel) =>
-    request('POST', '/edespatch/Send/Model', despatchModel),
+  sendModel: (despatchModel, options = {}) =>
+    request('POST', '/edespatch/Send/Model', despatchModel, null, options),
   sendXmlPreview: (despatchModel) =>
     request('POST', '/edespatch/Send/Xml/Preview', despatchModel),
 
@@ -566,6 +395,9 @@ export const EDespatch = {
 
   toInvoice: (uuids = []) =>
     request('POST', '/edespatch/Sale/ToInvoice', { UUIDS: uuids }),
+
+  setSaleSpecialCode: (uuid, code) =>
+    request('PUT', '/edespatch/Sale/SpecialCode', { UUID: uuid, SpecialCode: code }),
 
   getSaleEnvelopeInfo: (uuid) =>
     request('GET', `/edespatch/Sale/${uuid}/EnvelopeInfo`),
@@ -655,6 +487,7 @@ export const General = {
 // ═══════════════════════════════════════
 
 export function buildEInvoiceModel({
+  uuid,
   profile = 'TEMELFATURA',
   type = 'SATIS',
   issueDate = new Date().toISOString(),
@@ -666,12 +499,15 @@ export function buildEInvoiceModel({
   lines = [],
   notes = []
 }) {
+  if (currencyCode !== 'TRY') throw new Error('Yeni faturalar yalnızca TL olarak düzenlenebilir.');
+  if (!uuid) throw new Error('Belge kimliği eksik.');
   const needsExemption = type === 'ISTISNA' || lines.some(l => l.taxRate === 0 || l.unitPrice === 0 || l.discountRate === 100);
   const finalExemptionCode = exemptionCode || "351";
   const exemptionDesc = "KDV İstisnası";
 
   return {
     InvoiceInfo: {
+      UUID: uuid,
       InvoiceProfile: profile,
       InvoiceType: type,
       IssueDate: issueDate,
@@ -697,14 +533,13 @@ export function buildEInvoiceModel({
     },
     InvoiceLines: lines.map((line, idx) => {
       const p = line.unitPrice || 0;
-      const q = line.quantity || 1;
+      const q = line.quantity;
       const discountRate = line.discountRate || 0;
       const taxRate = typeof line.taxRate === 'number' ? line.taxRate : 20;
       
-      const gross = p * q;
-      const allowanceTotal = gross * (discountRate / 100);
-      const net = gross - allowanceTotal;
-      const kdvTotal = net * (taxRate / 100);
+      const totals = calculateLine({ unitPrice: p, quantity: q, discountRate, taxRate });
+      const allowanceTotal = Number(totals.discount);
+      const kdvTotal = Number(totals.tax);
 
       return {
         Index: (idx + 1).toString(),

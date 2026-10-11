@@ -1,3 +1,6 @@
+import {rememberExportPeriod,exportPeriod} from '../lib/export-context.js';
+import { invoiceLedgerAmount, addAmount } from '../lib/ledger-finance.js';
+import { parseTurkishAmount, istanbulDate, Decimal } from '../lib/money.js';
 // ══════════════════════════════════════════
 // Canlı Cari Sistemi — Müşteri Bazlı Cari Takip
 // ══════════════════════════════════════════
@@ -8,7 +11,7 @@ import { showModal } from '../components/modal.js';
 import { attachDatePicker } from '../lib/date-picker.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
-import { exportCustomerCari } from '../services/cari-export.js';
+import { exportCustomerCari } from '../services/cari-export-worker-client.js';
 import { addCollection, listCollections, updateCollection, deleteCollection } from '../services/tahsilat-manager.js';
 import { parseUserAmount, formatUserAmount, isDecimalInProgress } from '../services/bank-statement-parser.js';
 
@@ -92,9 +95,7 @@ function toTs(v) {
   return Number.isFinite(t) ? t : 0;
 }
 
-function parseAmountInput(value) {
-  return parseUserAmount(value);
-}
+function parseAmountInput(value) { return Number(parseTurkishAmount(value)); }
 
 function formatAmountInput(value) {
   return formatUserAmount(value);
@@ -264,6 +265,7 @@ export async function renderCariPage() {
   // Sayfa açılır açılmaz verileri listele ki müşteriler ekranı boş kalmasın ve anlık filtreleme çalışsın
   setTimeout(() => loadCariData(page), 50);
 
+  const notice=document.createElement('div');notice.className='sv-notice';notice.textContent='Bu görünüm yüklenen dönem kayıtlarını içerir. Dövizli, para birimi belirsiz ve iptal edilen belgeler TL bakiyesine katılmaz. Eksik hesap sonuçları tam bakiye değildir.';page.prepend(notice);
   return page;
 }
 
@@ -334,7 +336,7 @@ async function loadCariData(page) {
 
     const results = await Promise.allSettled(tasks);
     results.forEach(res => {
-      if (res.status === 'fulfilled' && Array.isArray(res.value)) fetchedInvoices.push(...res.value);
+      if (res.status === 'fulfilled' && Array.isArray(res.value)) for(const invoice of res.value)fetchedInvoices.push(invoice);
     });
 
     let fetchedCollections = [];
@@ -354,6 +356,7 @@ async function loadCariData(page) {
       return;
     }
 
+    rememberExportPeriod(page,{start:dateStart,end:dateEnd,complete:!collectionError&&results.every(result=>result.status==='fulfilled')});
     allInvoices = fetchedInvoices;
     allCollections = fetchedCollections;
     buildCustomerMap();
@@ -375,6 +378,7 @@ async function loadCariData(page) {
     const searchInput = page.querySelector('#cariSearchInput');
     const searchValue = searchInput ? searchInput.value.trim() : '';
     
+    if(results.some(result=>result.status==='rejected'))showToast('Bazı fatura kaynakları yüklenemedi. Görünen bakiye eksiktir; Ara ile tekrar deneyin.','warning');
     if (collectionError) {
       showToast(`Faturalar geldi ama tahsilatlar yüklenemedi: ${collectionError.message}. ARA ile tekrar deneyin.`, 'warning');
     } else if (searchValue) {
@@ -405,7 +409,7 @@ function buildCustomerMap() {
 
   allInvoices.forEach(inv => {
     // Reddedilen faturalar cari hesabına dahil edilmez (bakiyeyi şişirir).
-    if (isRejected(inv)) return;
+    if (isRejected(inv) || invoiceLedgerAmount(inv) === null) return;
 
     // Yön faturanın kendi etiketinden gelir (_direction). 'tumu' modunda her fatura
     // kendi yönüne göre işlenir: giden→alıcı/borç, gelen→gönderici/alacak.
@@ -434,14 +438,14 @@ function buildCustomerMap() {
       customerMap[key].name = name;
     }
 
-    const amount = parseFloat(getAmount(inv) || 0);
+    const amount = Number(invoiceLedgerAmount(inv));
 
     if (isGiden) {
       // Giden = Satış faturası = Müşteriye borç yazılır
-      customerMap[key].totalBorc += amount;
+      customerMap[key].totalBorc = new Decimal(customerMap[key].totalBorc).plus(amount).toNumber();
     } else {
       // Gelen = Alım faturası = Müşteriden alacak
-      customerMap[key].totalAlacak += amount;
+      customerMap[key].totalAlacak = new Decimal(customerMap[key].totalAlacak).plus(amount).toNumber();
     }
 
     customerMap[key].invoices.push(inv);
@@ -495,7 +499,7 @@ function buildCustomerMap() {
     }
 
     const amount = Number(col.amount) || 0;
-    customerMap[key].totalAlacak += amount;
+    customerMap[key].totalAlacak = new Decimal(customerMap[key].totalAlacak).plus(amount).toNumber();
     customerMap[key].tahsilatCount += 1;
     customerMap[key].movements.push({
       _isCollection: true,
@@ -716,7 +720,7 @@ function renderDetailPanel(page, customer, key) {
       <div class="cari-tahsilat-grid">
         <div>
           <label class="cari-tahsilat-label">Tarih</label>
-          <input type="date" id="tahsilatDate" class="form-input" value="${new Date().toISOString().slice(0, 10)}" />
+          <input type="date" id="tahsilatDate" class="form-input" value="${istanbulDate()}" />
         </div>
         <div>
           <label class="cari-tahsilat-label">Tür</label>
@@ -805,6 +809,9 @@ function renderDetailPanel(page, customer, key) {
 
   const tahsilatWrap = panel.querySelector('#tahsilatFormWrap');
   const saveBtn = panel.querySelector('#saveTahsilatBtn');
+  const formAccountId = getActiveAccount()?.id;
+  let savingCollection = false;
+  let editingVersion = null;
 
   const resetTahsilatForm = () => {
     editingCollectionId = null;
@@ -824,6 +831,7 @@ function renderDetailPanel(page, customer, key) {
     const movement = customer.movements.find((mv) => mv._isCollection && mv.raw?.id === collectionId);
     if (!movement) return;
     editingCollectionId = collectionId;
+    editingVersion = movement.raw.version;
     if (tahsilatDateInput?._flatpickr) {
       tahsilatDateInput._flatpickr.setDate(movement.date || '', true, 'Y-m-d');
     } else if (tahsilatDateInput) {
@@ -840,7 +848,7 @@ function renderDetailPanel(page, customer, key) {
     const body = document.createElement('div');
     body.innerHTML = `
       <p style="margin:0; color: var(--text-secondary); line-height:1.5;">
-        Bu tahsilat kaydi kalici olarak silinecek. Devam etmek istiyor musunuz?
+        Bu tahsilat iptal edilecek. İşlem geçmişi korunacak. Devam etmek istiyor musunuz?
       </p>
     `;
 
@@ -902,7 +910,7 @@ function renderDetailPanel(page, customer, key) {
       if (!confirmed) return;
 
       try {
-        const accountId = (await getActiveAccount())?.id;
+        const accountId = formAccountId;
         if (!accountId) throw new Error('Aktif hesap bulunamadi.');
         await deleteCollection(collectionId, accountId);
         showToast('Tahsilat silindi.', 'success');
@@ -918,8 +926,15 @@ function renderDetailPanel(page, customer, key) {
   });
 
   panel.querySelector('#saveTahsilatBtn')?.addEventListener('click', async () => {
+    if (savingCollection) return;
+    savingCollection = true;
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Kaydediliyor…';
+    const frozenControls = [...panel.querySelectorAll('input,select,button')].filter(el => !el.disabled);
+    frozenControls.forEach(el => el.disabled = true);
+    let committed = false;
     try {
-      const accountId = (await getActiveAccount())?.id;
+      const accountId = formAccountId;
       const date = panel.querySelector('#tahsilatDate')?.value || '';
       const type = panel.querySelector('#tahsilatType')?.value?.trim() || 'Tahsilat';
       const amountRaw = panel.querySelector('#tahsilatAmount')?.value || '';
@@ -934,6 +949,7 @@ function renderDetailPanel(page, customer, key) {
 
       if (editingCollectionId) {
         savedCollection = await updateCollection(editingCollectionId, accountId, {
+          version: editingVersion,
           type,
           description,
           amount,
@@ -954,6 +970,7 @@ function renderDetailPanel(page, customer, key) {
         showToast('Tahsilat kaydedildi.', 'success');
       }
 
+      committed = true;
       if (savedCollection?.id) {
         const idx = allCollections.findIndex((c) => c.id === savedCollection.id);
         if (idx >= 0) allCollections[idx] = savedCollection;
@@ -970,7 +987,12 @@ function renderDetailPanel(page, customer, key) {
         renderDetailPanel(page, customerMap[key], key);
       }
     } catch (e) {
-      showToast(`Tahsilat kaydedilemedi: ${e.message}`, 'error');
+      showToast(committed ? 'Tahsilat kaydedildi; görünüm yenilenemedi. Sayfayı yenileyin, tekrar kayıt oluşturmayın.' : `Tahsilat kaydedilemedi: ${e.message}`, committed ? 'warning' : 'error');
+    } finally {
+      savingCollection = false;
+      frozenControls.forEach(el => el.disabled = false);
+      saveBtn.disabled = false;
+      saveBtn.textContent = editingCollectionId ? 'Güncelle' : 'Kaydet';
     }
   });
 
@@ -978,7 +1000,7 @@ function renderDetailPanel(page, customer, key) {
   panel.querySelector('#exportCariBtn')?.addEventListener('click', async () => {
     try {
       showToast('Cari defter hazırlanıyor...', 'info');
-      const result = await exportCustomerCari(customer.movements, customer.name, currentSource);
+      const result = await exportCustomerCari(customer.movements, customer.name, currentSource, {dateRange:exportPeriod(page,'#cariDateStart','#cariDateEnd')});
       if (result.success) {
         showToast(`${customer.name} — ${result.count} hareket Excel'e aktarıldı`, 'success');
       } else {

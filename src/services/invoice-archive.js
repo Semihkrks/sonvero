@@ -1,21 +1,10 @@
-// ══════════════════════════════════════════
-// Fatura Arşivi — Supabase destekli akıllı veri katmanı
-//
-// Kural: Fatura kesildikten sonra iptal/silme kısa süre içinde
-// yapılabilir. Bu yüzden "ay sonu + 20 gün" geçmiş aylar KESİNLEŞMİŞ
-// sayılır → bir kez API'den çekilip arşive yazıldıysa artık hep
-// arşivden okunur (hızlı + Nilvera 6 ay limitinden bağımsız).
-// Son ~20 günü kapsayan aylar HER ZAMAN API'den taze çekilir ve
-// arşivdeki kopyaları güncellenir (silinen fatura arşivden de düşer).
-//
-// Supabase erişilemezse sessizce salt-API (chunked) moduna düşer.
-// ══════════════════════════════════════════
+// Arşiv güncellemeleri atomiktir; eksik API listesi mevcut belgeleri silmez.
+// Eski aylar süreli önbellekten okunur ve yeniden taranabilir.
 import { getSupabase } from '../lib/supabase.js';
 import { fetchAllPagesChunked, getInvoiceUuid, fmtDateParam } from './nilvera-fetcher.js';
 
-// Kesinleşme penceresi: ay sonundan sonra bu kadar gün geçtiyse ay artık değişmez
+// Daha seyrek yenilenecek geçmiş dönemlerin yaş eşiği.
 const FINAL_AFTER_DAYS = 20;
-const INSERT_BATCH = 400;
 const READ_BATCH = 1000;
 
 // ── Tarih yardımcıları ──
@@ -42,7 +31,7 @@ function getIssueDateStr(inv) {
   return d ? fmtDateParam(d) : null;
 }
 
-// Ay kesinleşmiş mi? (ay sonu + 35 gün bugünden önce mi)
+// Ay, geçmiş dönem yenileme sıklığına uygun mu?
 function isMonthFinal(mStart) {
   return addDays(monthEndOf(mStart), FINAL_AFTER_DAYS) < today0();
 }
@@ -72,7 +61,7 @@ async function readArchive(userId, accountId, docType, startStr, endStr) {
       .eq('doc_type', docType)
       .gte('issue_date', startStr)
       .lte('issue_date', endStr)
-      .order('issue_date', { ascending: true })
+      .order('issue_date', { ascending: true }).order('id', { ascending: true })
       .range(from, from + READ_BATCH - 1);
     if (error) throw error;
     (data || []).forEach(r => { if (r?.payload) out.push(r.payload); });
@@ -85,47 +74,12 @@ async function readArchive(userId, accountId, docType, startStr, endStr) {
 // ── Arşiv yazma: aralıktaki eski kayıtları sil, yenileri yaz ──
 // Sil+yaz stratejisi Nilvera'da silinen/iptal edilen faturaların
 // arşivden de düşmesini garanti eder.
-async function writeArchive(userId, accountId, docType, startStr, endStr, invoices) {
-  const sb = getSupabase();
-
-  const { error: delErr } = await sb
-    .from('invoice_archive')
-    .delete()
-    .eq('user_id', userId)
-    .eq('account_id', accountId)
-    .eq('doc_type', docType)
-    .gte('issue_date', startStr)
-    .lte('issue_date', endStr);
-  if (delErr) throw delErr;
-
-  // Aynı UUID bir dilimde iki kez gelirse tekilleştir (unique constraint koruması)
-  const rows = [];
-  const seen = new Set();
-  for (const inv of invoices) {
-    const uuid = getInvoiceUuid(inv);
-    const issueDate = getIssueDateStr(inv);
-    if (!uuid || !issueDate) continue;             // yerleştirilemeyen kayıt arşivlenmez
-    if (issueDate < startStr || issueDate > endStr) continue; // sadece silinen aralığa yaz
-    if (seen.has(uuid)) continue;
-    seen.add(uuid);
-    rows.push({
-      user_id: userId,
-      account_id: accountId,
-      doc_type: docType,
-      invoice_uuid: uuid,
-      issue_date: issueDate,
-      payload: inv,
-      updated_at: new Date().toISOString()
-    });
-  }
-
-  for (let i = 0; i < rows.length; i += INSERT_BATCH) {
-    const batch = rows.slice(i, i + INSERT_BATCH);
-    const { error } = await sb
-      .from('invoice_archive')
-      .upsert(batch, { onConflict: 'account_id,doc_type,invoice_uuid' });
-    if (error) throw error;
-  }
+async function writeArchive(userId, accountId, docType, startStr, endStr, invoices, months = []) {
+  const rows = invoices.map(inv => ({ invoice_uuid: getInvoiceUuid(inv), issue_date: getIssueDateStr(inv), payload: inv }));
+  if (rows.some(row => !row.invoice_uuid || !row.issue_date)) throw new Error('Eksik belge kimliği veya tarihi: arşiv değiştirilmedi.');
+  const inRange = rows.filter(row => row.issue_date >= startStr && row.issue_date <= endStr);
+  const { error } = await getSupabase().rpc('replace_invoice_archive', { p_account_id: accountId, p_doc_type: docType, p_start: startStr, p_end: endStr, p_invoices: inRange, p_months: months.map(fmtDateParam) });
+  if (error) throw error;
 }
 
 // ── Senkron kayıtları ──
@@ -145,21 +99,7 @@ async function readSyncMonths(userId, accountId, docType, months) {
   return map;
 }
 
-async function markMonthsSynced(userId, accountId, docType, months) {
-  if (months.length === 0) return;
-  const sb = getSupabase();
-  const rows = months.map(m => ({
-    user_id: userId,
-    account_id: accountId,
-    doc_type: docType,
-    month: fmtDateParam(m),
-    synced_at: new Date().toISOString()
-  }));
-  const { error } = await sb
-    .from('invoice_archive_sync')
-    .upsert(rows, { onConflict: 'account_id,doc_type,month' });
-  if (error) throw error;
-}
+
 
 // Bir ay arşivden okunabilir mi?
 // 1) Ay kesinleşmiş olmalı (ay sonu + 20 gün geçmiş), 2) senkron kaydı olmalı,
@@ -170,7 +110,7 @@ function isMonthArchived(mStart, syncedAtStr) {
   if (!syncedAtStr) return false;
   const syncedAt = new Date(syncedAtStr);
   if (isNaN(syncedAt.getTime())) return false;
-  return syncedAt >= addDays(monthEndOf(mStart), FINAL_AFTER_DAYS);
+  return syncedAt >= addDays(monthEndOf(mStart), FINAL_AFTER_DAYS) && Date.now() - syncedAt.getTime() < 7 * 86400000;
 }
 
 /**
@@ -234,7 +174,7 @@ export async function fetchInvoicesSmart(apiFn, account, docType, params = {}, o
     };
 
     for (const seg of segments) {
-      if (options.signal?.aborted) break;
+      if (options.signal?.aborted) { if (options.stats) options.stats.failed = true; break; }
       const segMonthStart = seg.months[0];
       const segMonthEnd = monthEndOf(seg.months[seg.months.length - 1]);
       // İstenen pencereye kırp (görüntüleme için)
@@ -267,9 +207,8 @@ export async function fetchInvoicesSmart(apiFn, account, docType, params = {}, o
         // Arşivleme: fetch başarılıysa yaz + tam kapsanan ayları senkronla
         if (!stats.failed) {
           try {
-            await writeArchive(userId, account.id, docType, fetchStart, fetchEnd, items);
             const fullyCovered = seg.months.filter(m => fmtDateParam(monthEndOf(m)) <= fetchEnd);
-            await markMonthsSynced(userId, account.id, docType, fullyCovered);
+            await writeArchive(userId, account.id, docType, fetchStart, fetchEnd, items, fullyCovered);
           } catch (e) {
             console.warn('[invoice-archive] Arşive yazılamadı (görüntü etkilenmez):', e?.message || e);
           }

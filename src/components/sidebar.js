@@ -1,3 +1,5 @@
+import { listenScoped } from '../lib/page-events.js';
+import { escapeHtml, safeColor } from '../lib/html.js';
 // ══════════════════════════════════════════
 // Sidebar Component — Nilvera-Inspired Navigation
 // ══════════════════════════════════════════
@@ -173,6 +175,11 @@ const adminItems = [
   { id: 'destek', label: 'Destek Talepleri', icon: 'headphones', route: '/destek' },
 ];
 
+
+const availableRoutes=new Set(["/dashboard","/create","/incoming","/outgoing","/earsiv-faturalar","/drafts","/accounts","/export","/settings","/cari","/tum-hesaplar-cari","/secili-hesaplar-cari","/toplu-tahsilat","/eirsaliye-giden","/eirsaliye-gelen","/efatura-arsiv-giden","/efatura-arsiv-gelen","/eirsaliye-arsiv-giden","/eirsaliye-arsiv-gelen","/firma","/musteriler","/efatura-etiketler","/efatura-sablonlar","/gib-earsiv","/eirsaliye-olustur"]);
+function pruneMenu(items){return items.flatMap(item=>{if(item.children){const children=pruneMenu(item.children);return children.length?[{...item,children}]:[];}return availableRoutes.has(item.route)?[item]:[];});}
+const visibleMenuItems=pruneMenu(menuItems);
+
 // ── State ──
 let expandedSections = {};
 let isCollapsed = false;
@@ -233,15 +240,15 @@ function renderMenuItem(item, currentRoute, depth = 0) {
 
 export function renderSidebar(currentRoute) {
   // Auto-expand sections
-  autoExpand(menuItems, currentRoute);
+  autoExpand(visibleMenuItems, currentRoute);
   autoExpand(adminItems, currentRoute);
 
   const sidebar = document.createElement('aside');
   sidebar.className = `sidebar ${isCollapsed ? 'sidebar-collapsed' : ''}`;
   sidebar.id = 'mainSidebar';
 
-  const menuHtml = menuItems.map(item => renderMenuItem(item, currentRoute, 0)).join('');
-  const adminHtml = adminItems.map(item => renderMenuItem(item, currentRoute, 0)).join('');
+  const menuHtml = visibleMenuItems.map(item => renderMenuItem(item, currentRoute, 0)).join('');
+  const adminHtml = [...pruneMenu(adminItems), {id:'accounts',label:'Hesaplar',route:'/accounts',icon:'building'}, {id:'settings',label:'Ayarlar',route:'/settings',icon:'settings'}].map(item => renderMenuItem(item, currentRoute, 0)).join('');
 
   sidebar.innerHTML = `
     <div class="sidebar-brand">
@@ -326,7 +333,7 @@ export function renderSidebar(currentRoute) {
       e.stopPropagation();
       dropdown?.classList.toggle('open');
     });
-    document.addEventListener('click', () => {
+    listenScoped(sidebar, document, 'click', () => {
       dropdown?.classList.remove('open');
     });
     loadAccountSwitcher(sidebar);
@@ -358,8 +365,8 @@ async function loadAccountSwitcher(sidebar) {
 
   dropdown.innerHTML = accounts.map(acc => `
     <button class="account-dropdown-item ${acc.id === activeId ? 'active' : ''}" data-id="${acc.id}">
-      <span class="account-dot" style="background:${acc.color || '#3b82f6'}"></span>
-      ${acc.name}
+      <span class="account-dot" style="background:${safeColor(acc.color)}"></span>
+      ${escapeHtml(acc.name)}
       <span class="account-switcher-env" style="${acc.environment === 'live' ? 'background:var(--success-bg);color:var(--success)' : ''}">${acc.environment === 'live' ? 'CANLI' : 'TEST'}</span>
     </button>
   `).join('') + `
@@ -376,10 +383,7 @@ async function loadAccountSwitcher(sidebar) {
         navigate('/accounts');
       } else {
         const id = item.dataset.id;
-        if (id) {
-          await setActiveAccount(id);
-          window.dispatchEvent(new CustomEvent('accountChanged', { detail: { accountId: id } }));
-        }
+        if (id) await setActiveAccount(id);
       }
     });
   });

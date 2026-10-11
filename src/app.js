@@ -4,47 +4,51 @@
 import './styles/main.css';
 import './styles/mobile.css';
 import 'flatpickr/dist/flatpickr.min.css';
+import '@fontsource/inter/400.css';
+import '@fontsource/inter/500.css';
+import '@fontsource/inter/600.css';
+import './styles/system.css';
+import { clearPrivateStorage, hasPendingMutation } from './lib/operations.js';
+import { clearAccounts } from './services/account-manager.js';
+import { showToast } from './components/toast.js';
+import { startPwa } from './lib/pwa.js';
+import { closeAllModals } from './components/modal.js';
+import { disposeEventScope } from './lib/page-events.js';
 import { registerRoute, startRouter } from './router.js';
 import { renderSidebar } from './components/sidebar.js';
 import { renderHeader } from './components/header.js';
 import { renderBottomNav } from './components/bottom-nav.js';
-import { startInvoiceNotificationMonitor } from './services/invoice-notification-monitor.js';
+import { startInvoiceNotificationMonitor, stopInvoiceNotificationMonitor } from './services/invoice-notification-monitor.js';
 import { startDatePickerAutoBind } from './lib/date-picker.js';
-import { getSession, signIn, signUp, signOut, getSupabase } from './lib/supabase.js';
+import { getSession, signIn, signOut, getSupabase } from './lib/supabase.js';
 import { listAccounts, getActiveAccountId, setActiveAccount, syncAccounts } from './services/account-manager.js';
 
 // Pages
-import { renderDashboard } from './pages/dashboard.js';
-import { renderInvoiceCreate } from './pages/invoice-create.js';
-import { renderIncomingInvoices } from './pages/invoices-incoming.js';
-import { renderOutgoingInvoices } from './pages/invoices-outgoing.js';
-import { renderEArsivInvoices } from './pages/earsiv-faturalar.js';
-import { renderDrafts } from './pages/drafts.js';
-import { renderAccounts } from './pages/accounts.js';
-import { renderExportPage } from './pages/export.js';
-import { renderSettings } from './pages/settings.js';
-import { renderCariPage } from './pages/cari.js';
-import { renderMultiAccountCari } from './pages/multi-account-cari.js';
-import { renderSelectedAccountCari } from './pages/selected-account-cari.js';
-import { renderTopluTahsilat } from './pages/toplu-tahsilat.js';
-import { renderPlaceholderPage } from './pages/placeholder-page.js';
-import { renderCompanyInfo } from './pages/company-info.js';
-import { renderCustomers } from './pages/customers.js';
-import { renderTagsPage } from './pages/tags.js';
-import { renderTemplatesPage } from './pages/templates.js';
-import { renderGibEarsiv } from './pages/gib-earsiv.js';
-import { renderEirsaliyeCreate } from './pages/eirsaliye-create.js';
-import { renderEDespatchOutgoing } from './pages/eirsaliye-outgoing.js';
-import { renderEDespatchIncoming } from './pages/eirsaliye-incoming.js';
-import {
-  renderEFaturaArchiveOutgoing,
-  renderEFaturaArchiveIncoming,
-  renderEirsaliyeArchiveOutgoing,
-  renderEirsaliyeArchiveIncoming,
-} from './pages/archive-boxes.js';
+
+const renderInvoiceCreate = (...args) => import('./pages/invoice-create.js').then(m => m.renderInvoiceCreate(...args));
+const renderIncomingInvoices = (...args) => import('./pages/invoices-incoming.js').then(m => m.renderIncomingInvoices(...args));
+const renderOutgoingInvoices = (...args) => import('./pages/invoices-outgoing.js').then(m => m.renderOutgoingInvoices(...args));
+const renderEArsivInvoices = (...args) => import('./pages/earsiv-faturalar.js').then(m => m.renderEArsivInvoices(...args));
+const renderDrafts = (...args) => import('./pages/drafts.js').then(m => m.renderDrafts(...args));
+const renderAccounts = (...args) => import('./pages/accounts.js').then(m => m.renderAccounts(...args));
+const renderExportPage = (...args) => import('./pages/export.js').then(m => m.renderExportPage(...args));
+const renderSettings = (...args) => import('./pages/settings.js').then(m => m.renderSettings(...args));
+const renderCariPage = (...args) => import('./pages/cari.js').then(m => m.renderCariPage(...args));
+const renderMultiAccountCari = (...args) => import('./pages/multi-account-cari.js').then(m => m.renderMultiAccountCari(...args));
+const renderSelectedAccountCari = (...args) => import('./pages/selected-account-cari.js').then(m => m.renderSelectedAccountCari(...args));
+const renderTopluTahsilat = (...args) => import('./pages/toplu-tahsilat.js').then(m => m.renderTopluTahsilat(...args));
+const renderPlaceholderPage = (...args) => import('./pages/placeholder-page.js').then(m => m.renderPlaceholderPage(...args));
+const renderGibEarsiv = (...args) => import('./pages/gib-earsiv.js').then(m => m.renderGibEarsiv(...args));
+const renderEirsaliyeCreate = (...args) => import('./pages/eirsaliye-create.js').then(m => m.renderEirsaliyeCreate(...args));
+const renderEDespatchOutgoing = (...args) => import('./pages/eirsaliye-outgoing.js').then(m => m.renderEDespatchOutgoing(...args));
+const renderEDespatchIncoming = (...args) => import('./pages/eirsaliye-incoming.js').then(m => m.renderEDespatchIncoming(...args));
+const renderEFaturaArchiveOutgoing = (...args) => import('./pages/archive-boxes.js').then(m => m.renderEFaturaArchiveOutgoing(...args));
+const renderEFaturaArchiveIncoming = (...args) => import('./pages/archive-boxes.js').then(m => m.renderEFaturaArchiveIncoming(...args));
+const renderEirsaliyeArchiveOutgoing = (...args) => import('./pages/archive-boxes.js').then(m => m.renderEirsaliyeArchiveOutgoing(...args));
+const renderEirsaliyeArchiveIncoming = (...args) => import('./pages/archive-boxes.js').then(m => m.renderEirsaliyeArchiveIncoming(...args));
 
 // ── Apply saved theme ──
-const savedTheme = localStorage.getItem('nilfatura_theme') || 'dark';
+const savedTheme = localStorage.getItem('nilfatura_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 document.documentElement.setAttribute('data-theme', savedTheme);
 
 // ── iOS viewport height fix ──
@@ -56,7 +60,6 @@ window.addEventListener('resize', setAppHeight);
 window.addEventListener('orientationchange', () => setTimeout(setAppHeight, 100));
 
 const ALLOWED_LOGIN_EMAIL = 'sonvera@gmail.com';
-const ALLOWED_LOGIN_PASSWORD = '123659789sK.';
 
 // ── Rate Limiting ──
 let loginFailCount = 0;
@@ -87,56 +90,12 @@ function recordLoginFail() {
   return cooldown;
 }
 
-async function signInFixedUser() {
-  try {
-    await signIn(ALLOWED_LOGIN_EMAIL, ALLOWED_LOGIN_PASSWORD);
-    loginFailCount = 0;
-    loginLockUntil = 0;
-  } catch (err) {
-    const msg = String(err?.message || '');
-    const lower = msg.toLowerCase();
-
-    if (lower.includes('email not confirmed')) {
-      throw new Error('Giris su an dogrulanamadi. Lutfen yonetici ayarlarini kontrol edip tekrar dene.');
-    }
-
-    if (lower.includes('invalid login credentials')) {
-      try {
-        const signUpResult = await signUp(ALLOWED_LOGIN_EMAIL, ALLOWED_LOGIN_PASSWORD);
-
-        if (!signUpResult?.session) {
-          throw new Error('Kullanici olusturuldu ancak oturum acilamadi. Lutfen daha sonra tekrar dene.');
-        }
-
-        loginFailCount = 0;
-        loginLockUntil = 0;
-        return;
-      } catch (signUpErr) {
-        const signUpMsg = String(signUpErr?.message || '').toLowerCase();
-
-        if (signUpMsg.includes('user already registered')) {
-          throw new Error('Supabase Auth kullanicisi mevcut ama sifre farkli. Dashboard > Authentication > Users ekranindan sonvera@gmail.com sifresini 123659789sK. yap.');
-        }
-
-        if (signUpMsg.includes('email signups are disabled')) {
-          throw new Error('Supabase Auth\'ta Email sign-up kapali. Dashboard > Authentication > Providers > Email\'de Enable email provider ve Enable signups acik olmali.');
-        }
-
-        throw signUpErr;
-      }
-    }
-
-    throw err;
-  }
-}
-
 // ── Register Routes ──
 
 // Core pages (existing)
-registerRoute('/dashboard', async () => ({
-  page: await renderDashboard(),
-  title: 'Dashboard'
-}));
+registerRoute('/belge', async (route) => (await import('./react/documents.tsx')).mountSharedDocument(route));
+registerRoute('/belgeler', async (route) => (await import('./react/documents.tsx')).mountDocuments(route));
+registerRoute('/dashboard', async () => (await import('./react/workspace.tsx')).mountWorkspace('dashboard'));
 
 registerRoute('/create', async () => ({
   page: await renderInvoiceCreate(),
@@ -173,15 +132,11 @@ registerRoute('/export', async () => ({
   title: 'Excel Export'
 }));
 
-registerRoute('/settings', async () => ({
-  page: await renderSettings(),
-  title: 'Ayarlar'
-}));
+registerRoute('/settings', async () => (await import('./react/workspace.tsx')).mountWorkspace('settings'));
 
-registerRoute('/cari', async () => ({
-  page: await renderCariPage(),
-  title: 'Canlı Cari Sistemi'
-}));
+registerRoute('/cari', async () => (await import('./react/workspace.tsx')).mountWorkspace('ledger'));
+registerRoute('/cari-ozet', async () => (await import('./react/workspace.tsx')).mountWorkspace('customers'));
+registerRoute('/cari-musteriler', async () => ({page:await renderCariPage(),title:'Müşteri Cari Detayı'}));
 
 registerRoute('/tum-hesaplar-cari', async () => ({
   page: await renderMultiAccountCari(),
@@ -229,25 +184,13 @@ registerRoute('/eirsaliye-arsiv-gelen', async () => ({
 }));
 
 // ── Functional routes (formerly placeholders) ──
-registerRoute('/firma', async () => ({
-  page: await renderCompanyInfo(),
-  title: 'Firma Bilgileri'
-}));
+registerRoute('/firma', async () => (await import('./react/directory.tsx')).mountDirectory('company'));
 
-registerRoute('/musteriler', async () => ({
-  page: await renderCustomers(),
-  title: 'Musteriler'
-}));
+registerRoute('/musteriler', async () => (await import('./react/directory.tsx')).mountDirectory('customers'));
 
-registerRoute('/efatura-etiketler', async () => ({
-  page: await renderTagsPage(),
-  title: 'e-Fatura Etiketler'
-}));
+registerRoute('/efatura-etiketler', async () => (await import('./react/directory.tsx')).mountDirectory('tags'));
 
-registerRoute('/efatura-sablonlar', async () => ({
-  page: await renderTemplatesPage(),
-  title: 'e-Fatura Sablonlar'
-}));
+registerRoute('/efatura-sablonlar', async () => (await import('./react/directory.tsx')).mountDirectory('templates'));
 
 registerRoute('/gib-earsiv', async () => ({
   page: await renderGibEarsiv(),
@@ -298,7 +241,7 @@ const placeholderRoutes = [
 placeholderRoutes.forEach(({ path, title }) => {
   const routeKey = path.replace('/', '');
   registerRoute(path, async () => ({
-    page: renderPlaceholderPage(routeKey),
+    page: await renderPlaceholderPage(routeKey),
     title
   }));
 });
@@ -446,7 +389,7 @@ function renderLoginPage(info = '', infoType = 'error') {
 
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    if (isLoginLocked()) return;
+    if (isLoginLocked() || submitBtn?.disabled) return;
 
     const email = app.querySelector('#authEmail')?.value?.trim();
     const password = app.querySelector('#authPassword')?.value || '';
@@ -459,14 +402,9 @@ function renderLoginPage(info = '', infoType = 'error') {
     if (btnSpinner) btnSpinner.style.display = 'inline-block';
 
     try {
-      if (email !== ALLOWED_LOGIN_EMAIL || password !== ALLOWED_LOGIN_PASSWORD) {
-        const cooldown = recordLoginFail();
-        const lockMsg = cooldown > 0 ? ` ${cooldown} saniye beklemeniz gerekiyor.` : '';
-        renderLoginPage(`Yetkisiz giris. Mail veya sifre hatali.${lockMsg}`);
-        return;
-      }
-
-      await signInFixedUser();
+      await signIn(email, password);
+      loginFailCount = 0;
+      loginLockUntil = 0;
     } catch (err) {
       const cooldown = recordLoginFail();
       const lockMsg = cooldown > 0 ? ` ${cooldown} saniye beklemeniz gerekiyor.` : '';
@@ -480,6 +418,8 @@ function renderLoginPage(info = '', infoType = 'error') {
 }
 
 function teardownAppRuntime() {
+  closeAllModals();
+  stopInvoiceNotificationMonitor();
   if (stopRouter) {
     stopRouter();
     stopRouter = null;
@@ -496,7 +436,10 @@ function teardownAppRuntime() {
 
 async function handleLogout() {
   try {
+    if (hasPendingMutation()) { showToast("İşlem sürüyor; sonuçlanmasını bekleyin.", "warning"); return; }
     await signOut();
+    clearPrivateStorage();
+    clearAccounts();
   } catch (e) {
     console.warn('Cikis hatasi:', e?.message || e);
   }
@@ -515,9 +458,8 @@ async function handleAccountSwitch(accountId) {
   try {
     await setActiveAccount(accountId);
     if (seq !== accountSwitchSeq) return;
-
-    // Sayfayı yenilemek yerine custom event fırlat ve re-render et
-    window.dispatchEvent(new CustomEvent('accountChanged', { detail: { accountId } }));
+  } catch (error) {
+    showToast(error.message || 'Hesap değiştirilemedi.', 'warning');
   } finally {
     isAccountSwitching = false;
   }
@@ -532,7 +474,7 @@ async function bootAuthedApp(user) {
 
   // Hesap listesini buluttan (Supabase) tazele: yeni cihazda bellek-içi state boş
   // olabilir. Router başlamadan önce tamamlanmalı ki ilk render doğru hesabı görsün.
-  try { await syncAccounts(); } catch (e) { console.warn('Hesap senkronu başarısız:', e?.message || e); }
+  try { await syncAccounts().catch(error => showToast(error.message, 'error')); } catch (e) { console.warn('Hesap senkronu başarısız:', e?.message || e); }
 
   if (!window.location.hash || window.location.hash === '#') {
     window.location.hash = '#/dashboard';
@@ -562,16 +504,18 @@ function bindAuthState() {
       // olayları tetikler; eskiden bunlar bootAuthedApp -> hashchange -> tam re-render
       // yapıp açık sayfanın verilerini (ör. "Tüm Hesaplar Cari" taraması) sıfırlıyordu.
       // Artık sadece kullanıcı referansını güncelliyoruz.
-      if (stopRouter) {
+      if (stopRouter && currentAuthUser?.id===session.user.id) {
         currentAuthUser = session.user;
         return;
       }
+      if(currentAuthUser&&currentAuthUser.id!==session.user.id){teardownAppRuntime();clearPrivateStorage();clearAccounts();}
       bootAuthedApp(session.user);
       return;
     }
 
     currentAuthUser = null;
     teardownAppRuntime();
+    if(event==='SIGNED_OUT'){clearPrivateStorage();clearAccounts();}
     renderLoginPage();
   });
 }
@@ -580,7 +524,7 @@ function bindAuthState() {
 function renderLayout(pageElement, title, currentRoute) {
   const app = document.getElementById('app');
   if (!app) return;
-
+  disposeEventScope(app);
   app.innerHTML = '';
 
   const layout = document.createElement('div');
@@ -643,32 +587,8 @@ getSession().then((session) => {
   renderLoginPage();
 });
 
-window.addEventListener('beforeunload', () => {
-  teardownAppRuntime();
+window.addEventListener('beforeunload', (event) => {
+  if (hasPendingMutation()) { event.preventDefault(); event.returnValue = ''; }
 }, { once: true });
 
-// ── PWA & Service Worker Registration ──
-// Service Worker YALNIZCA production'da kayıtlanır. Geliştirme/test ortamında
-// (vite dev) SW statik dosyaları cache-first servis edip ESKİ kodu çalıştırır ve
-// API yanıtlarını önbellekleyip hesaplar arası veri sızdırır. Bu yüzden dev'de
-// SW'yi tamamen devre dışı bırakır ve mevcut kayıt + önbellekleri temizleriz.
-if ('serviceWorker' in navigator) {
-  if (import.meta.env.PROD) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js')
-        .then((reg) => console.log('%cPWA Service Worker Aktif', 'color:#10b981;font-weight:bold;', reg.scope))
-        .catch((err) => console.warn('Service Worker hatası:', err));
-    });
-  } else {
-    navigator.serviceWorker.getRegistrations()
-      .then((regs) => regs.forEach((r) => r.unregister()))
-      .catch(() => {});
-    if (window.caches) {
-      caches.keys().then((keys) => keys.forEach((k) => caches.delete(k))).catch(() => {});
-    }
-  }
-}
-
-console.log('%c🧾 Sonvera 2.0', 'font-size:16px;font-weight:bold;color:#3b82f6');
-console.log('%cE-Fatura Yönetim Platformu başlatıldı', 'color:#94a3b8');
-
+startPwa();

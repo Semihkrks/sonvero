@@ -1,0 +1,9 @@
+project_id = "sonvera"
+
+[functions.nilvera]
+verify_jwt = false
+# JWT is verified with auth.getUser and OWNER_USER_ID inside the function.
+
+[functions.job-runner]
+verify_jwt = false
+# Scheduler authenticates with a separate secret; never use a publishable key as authorization.

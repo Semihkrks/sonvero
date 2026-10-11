@@ -1,3 +1,7 @@
+import {fingerprint} from '../lib/operations.js';
+import {listDocumentBatchKinds,runDocumentBatch} from '../services/document-batch.js';
+import {renderBatchResults,restoreBatchResults} from '../components/batch-results.js';
+import { listenScoped } from '../lib/page-events.js';
 // ══════════════════════════════════════════
 // Outgoing Invoices (Giden Faturalar) Page
 // Nilvera-Style with İşlemler Dropdown
@@ -9,7 +13,7 @@ import { redactNilveraFooter, base64ToBytes, bytesToBase64 } from '../services/p
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
-import { exportCariDefter } from '../services/cari-export.js';
+import { exportCariDefter } from '../services/cari-export-worker-client.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
@@ -76,7 +80,7 @@ function setupFilterToggle(page) {
     setExpanded(next);
   });
 
-  window.addEventListener('resize', () => {
+  listenScoped(page, window, 'resize', () => {
     if (!isMobileViewport()) setExpanded(true);
   });
 }
@@ -298,11 +302,17 @@ export async function renderOutgoingInvoices(options = {}) {
   });
 
   // Close dropdowns on outside click
-  document.addEventListener('click', () => {
+  listenScoped(page, document, 'click', () => {
     document.querySelectorAll('.action-dropdown').forEach(d => d.remove());
   });
 
   loadOutgoing(page, options);
+  const batchAccountId = getActiveAccountId();
+  if (batchAccountId) {
+    for (const kind of listDocumentBatchKinds(batchAccountId)) {
+      if (kind.startsWith('outgoing:')) restoreBatchResults(page, batchAccountId, kind);
+    }
+  }
   return page;
 }
 
@@ -444,7 +454,7 @@ async function loadOutgoing(page, options = {}) {
     }
     // E-Arşiv 'Onay Bekleyenler' ve Taslaklar
     if (earsivDraftRes.status === 'fulfilled' && earsivDraftRes.value.success) {
-      allInvoices.push(...extractItems(earsivDraftRes.value.data).map(inv => ({ ...inv, _source: 'earsiv' })));
+      allInvoices.push(...extractItems(earsivDraftRes.value.data).map(inv => ({ ...inv, _source: 'earsiv', _draft: true })));
     }
 
     if (archivedOnly) {
@@ -780,31 +790,23 @@ function summarizeBulkResult(okCount, failCount, actionLabel) {
 }
 
 async function runBulkSelected(page, actionLabel, worker) {
-  const selected = getSelectedInvoices(page);
-  if (selected.length === 0) {
-    showToast('Önce en az bir kayıt seçmelisiniz', 'warning');
-    return { okCount: 0, failCount: 0 };
-  }
-
-  let okCount = 0;
-  let failCount = 0;
-  for (const item of selected) {
-    try {
-      const ok = await worker(item);
-      if (ok) okCount++;
-      else failCount++;
-    } catch {
-      failCount++;
-    }
-  }
-  summarizeBulkResult(okCount, failCount, actionLabel);
-  return { okCount, failCount };
+  if(page.dataset.batchBusy==='true')return {okCount:0,failCount:0};
+  const selected=getSelectedInvoices(page),account=getActiveAccount();
+  if(!selected.length||!account){showToast('Önce firma ve kayıt seçin.','warning');return {okCount:0,failCount:0};}
+  page.dataset.batchBusy='true';page.inert=true;
+  try{
+    const kind='outgoing:'+actionLabel;
+    const results=await runDocumentBatch({accountId:account.id,kind,items:selected,execute:worker,onProgress:results=>renderBatchResults(page,{accountId:account.id,kind,results,total:selected.length})});
+    const okCount=results.filter(row=>row.status==='succeeded').length,failCount=results.length-okCount;
+    summarizeBulkResult(okCount,failCount,actionLabel);return {okCount,failCount};
+  }catch(error){showToast(error.message,'error');return {okCount:0,failCount:selected.length};}
+  finally{page.dataset.batchBusy='false';page.inert=false;}
 }
 
 async function bulkArchiveSelected(page, options = {}) {
   const result = await runBulkSelected(page, 'arşive kaldırma', async ({ uuid, source }) => {
     const res = await tryOperationWithFallback(source, uuid, ['Archive', 'archive', 'ArsiveKaldir']);
-    return res.success;
+    return res;
   });
   if (result.okCount > 0) {
     await loadOutgoing(page, options);
@@ -814,7 +816,7 @@ async function bulkArchiveSelected(page, options = {}) {
 async function bulkUnarchiveSelected(page, options = {}) {
   const result = await runBulkSelected(page, 'arşivden çıkarma', async ({ uuid, source }) => {
     const res = await tryOperationWithFallback(source, uuid, ['Unarchive', 'UnArchive', 'ArchiveRemove', 'ArsivdenCikar']);
-    return res.success;
+    return res;
   });
   if (result.okCount > 0) {
     await loadOutgoing(page, options);
@@ -825,7 +827,7 @@ async function bulkCreateDraftSelected(page) {
   await runBulkSelected(page, 'taslak oluşturma', async ({ uuid, source }) => {
     const fn = source === 'earsiv' ? EArchive.createInvoiceDraft : EInvoice.createSaleDraft;
     const res = await fn(uuid);
-    return !!res.success;
+    return res;
   });
 }
 
@@ -835,7 +837,7 @@ async function bulkTransferMarkSelected(page, transferred) {
     : ['NotTransferred', 'Aktarilmadi', 'SetNotTransferred'];
   await runBulkSelected(page, transferred ? 'aktarıldı işaretleme' : 'aktarılmadı işaretleme', async ({ uuid, source }) => {
     const res = await tryOperationWithFallback(source, uuid, operationTypes);
-    return res.success;
+    return res;
   });
 }
 
@@ -864,20 +866,18 @@ function showBulkSpecialCodeModal(page) {
 
   const modal = showModal({ title: 'Toplu Özel Kod', body: bodyEl, footer: footerEl });
   footerEl.querySelector('#cancelBulkCode')?.addEventListener('click', () => modal?.close());
+  let busy=false;
   footerEl.querySelector('#saveBulkCode')?.addEventListener('click', async () => {
-    const code = bodyEl.querySelector('#bulkSpecialCodeInput')?.value?.trim();
-    if (!code) return showToast('Özel kod boş bırakılamaz', 'warning');
-
-    let okCount = 0;
-    let failCount = 0;
-    for (const item of selected) {
-      const fn = item.source === 'earsiv' ? EArchive.setInvoiceSpecialCode : EInvoice.setSaleSpecialCode;
-      const res = await fn(item.uuid, code);
-      if (res.success) okCount++;
-      else failCount++;
-    }
-    summarizeBulkResult(okCount, failCount, 'özel kod atama');
-    if (okCount > 0) modal?.close();
+    if(busy)return;
+    const code=bodyEl.querySelector('#bulkSpecialCodeInput')?.value?.trim(),account=getActiveAccount();
+    if(!code||!account)return showToast('Firma ve özel kod gerekli.','warning');
+    busy=true;bodyEl.inert=true;footerEl.querySelector('#saveBulkCode').disabled=true;
+    try{
+      const kind='outgoing:special-code:'+await fingerprint(code);
+      const results=await runDocumentBatch({accountId:account.id,kind,items:selected,execute:item=>(item.source==='earsiv'?EArchive.setInvoiceSpecialCode:EInvoice.setSaleSpecialCode)(item.uuid,code),onProgress:results=>renderBatchResults(page,{accountId:account.id,kind,results,total:selected.length})});
+      const ok=results.filter(row=>row.status==='succeeded').length;summarizeBulkResult(ok,results.length-ok,'özel kod atama');
+      if(ok===selected.length)modal.close();
+    }catch(error){showToast(error.message,'error');}finally{busy=false;bodyEl.inert=false;footerEl.querySelector('#saveBulkCode').disabled=false;}
   });
 }
 
@@ -1046,14 +1046,10 @@ function showSpecialCodeModal(uuid, source) {
 }
 
 async function tryOperationWithFallback(source, uuid, operationTypes) {
-  const fn = source === 'earsiv' ? EArchive.setInvoiceOperation : EInvoice.setSaleOperation;
-  let lastErr = null;
-  for (const operationType of operationTypes) {
-    const res = await fn(operationType, [uuid]);
-    if (res.success) return { success: true, operationType };
-    lastErr = res.error || 'İşlem başarısız';
-  }
-  return { success: false, error: lastErr || 'İşlem tipi bulunamadı' };
+  const fn=source==='earsiv'?EArchive.setInvoiceOperation:EInvoice.setSaleOperation;
+  // A write with an uncertain result must never be repeated under a different operation name.
+  const res=await fn(operationTypes[0],[uuid]);
+  return {...res,operationType:operationTypes[0]};
 }
 
 async function archiveInvoice(uuid, source) {
@@ -1100,7 +1096,11 @@ async function openTransferModal(uuid, source) {
 }
 
 async function copyInvoiceShareLink(uuid, source) {
-  const link = `${window.location.origin}${window.location.pathname}#/outgoing?uuid=${encodeURIComponent(uuid)}&source=${encodeURIComponent(source || 'efatura')}`;
+  const accountId=getActiveAccountId();
+  if(!accountId){showToast('Firma hesabı seçilmedi.','warning');return;}
+  if(!uuid){showToast('Belge kimliği bulunamadı; bağlantı oluşturulamadı.','warning');return;}
+  if(getInvoiceRecord(uuid, source)?._draft){showToast('Taslak faturalar için paylaşım bağlantısı oluşturulamaz.','warning');return;}
+  const link = `${window.location.origin}${window.location.pathname}#/belge/${encodeURIComponent(accountId)}/${source==='earsiv'?'archive':'outgoing'}/${encodeURIComponent(uuid)}`;
   try {
     if (navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(link);
@@ -1181,7 +1181,7 @@ async function exportFiltered(page) {
   const data = filteredOutgoing.length > 0 ? filteredOutgoing : cachedOutgoing;
   if (data.length === 0) return showToast('Dışa aktarılacak fatura yok', 'warning');
   const account = await getActiveAccount();
-  const result = exportInvoicesToExcel(data, { accountName: account?.name || '', fileName: 'giden_faturalar' });
+  const result = exportInvoicesToExcel(data, { accountName: account?.name || '', dateRange: { start:page.querySelector('#dateStart')?.value, end:page.querySelector('#dateEnd')?.value } });
   showToast(`${result.count} fatura Excel'e aktarıldı`, 'success');
 }
 
@@ -1191,7 +1191,7 @@ async function exportCariFiltered(page) {
     if (data.length === 0) return showToast('Aktarılacak fatura yok', 'warning');
     const account = await getActiveAccount();
     showToast('Cari Defter hazırlanıyor...', 'info');
-    const result = await exportCariDefter(data, 'giden', account?.name || '');
+    const result = await exportCariDefter(data, 'giden', account?.name || '', {dateRange:{ start:page.querySelector('#dateStart')?.value, end:page.querySelector('#dateEnd')?.value }});
     if (result.success) {
       showToast(`${result.count} fatura Cari Defter'e eklendi`, 'success');
     } else {

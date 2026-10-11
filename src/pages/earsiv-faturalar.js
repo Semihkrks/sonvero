@@ -1,15 +1,18 @@
+import {fingerprint} from '../lib/operations.js';
+import {listDocumentBatchKinds,runDocumentBatch} from '../services/document-batch.js';
+import {renderBatchResults,restoreBatchResults} from '../components/batch-results.js';
+import { listenScoped } from '../lib/page-events.js';
 // ══════════════════════════════════════════
 // E-Archive Invoices (e-Arşiv Faturaları) Page
 // Nilvera-Style with İşlemler Dropdown
 // ══════════════════════════════════════════
-import { EInvoice, EArchive, EArchiveWithAccount } from '../api/nilvera.js';
-import { fetchAllPagesChunked } from '../services/nilvera-fetcher.js';
+import { EArchive, EArchiveWithAccount } from '../api/nilvera.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { redactNilveraFooter, base64ToBytes, bytesToBase64 } from '../services/pdf-redact.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
-import { exportCariDefter } from '../services/cari-export.js';
+import { exportCariDefter } from '../services/cari-export-worker-client.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
@@ -82,14 +85,6 @@ export async function renderEArsivInvoices() {
       <div class="filter-group">
         <label class="filter-label">Bitiş Tarihi</label>
         <input type="date" class="filter-input" id="dateEnd" value="${end}" />
-      </div>
-      <div class="filter-group">
-        <label class="filter-label">Filtre</label>
-        <select class="filter-input" id="sourceFilter">
-          <option value="">Tümü</option>
-          <option value="efatura">E-Fatura</option>
-          <option value="earsiv">E-Arşiv</option>
-        </select>
       </div>
       <div class="filter-group">
         <label class="filter-label">Sıralama</label>
@@ -198,11 +193,11 @@ export async function renderEArsivInvoices() {
     const dd = document.createElement('div');
     dd.className = 'action-dropdown';
     dd.innerHTML = `
-      <button class="action-dropdown-item">${ic.archive} Arşiv'e Kaldır</button>
-      <button class="action-dropdown-item">${ic.fileText} Taslak Oluştur</button>
-      <button class="action-dropdown-item">${ic.tag} Özel Kod Alanı</button>
-      <button class="action-dropdown-item">${ic.check} Aktarıldı Olarak İşaretle</button>
-      <button class="action-dropdown-item">${ic.x} Aktarılmadı Olarak İşaretle</button>
+      <button class="action-dropdown-item" data-act="archive">${ic.archive} Arşiv'e Kaldır</button>
+      <button class="action-dropdown-item" data-act="draft">${ic.fileText} Taslak Oluştur</button>
+      <button class="action-dropdown-item" data-act="special-code">${ic.tag} Özel Kod Alanı</button>
+      <button class="action-dropdown-item" data-act="transferred">${ic.check} Aktarıldı Olarak İşaretle</button>
+      <button class="action-dropdown-item" data-act="not-transferred">${ic.x} Aktarılmadı Olarak İşaretle</button>
     `;
     const rect = e.target.closest('button').getBoundingClientRect();
     dd.style.top = `${rect.bottom + 4}px`;
@@ -210,10 +205,15 @@ export async function renderEArsivInvoices() {
     document.body.appendChild(dd);
     
     dd.querySelectorAll('.action-dropdown-item').forEach(btn => {
-      btn.addEventListener('click', (ev) => {
+      btn.addEventListener('click', async (ev) => {
         ev.stopPropagation();
         dd.remove();
-        showToast('Toplu işlem seçimi yapmadınız.', 'warning');
+        const act = btn.dataset.act;
+        if (act === 'archive') await bulkArchiveSelected(page);
+        else if (act === 'draft') await bulkCreateDraftSelected(page);
+        else if (act === 'special-code') showBulkSpecialCodeModal(page);
+        else if (act === 'transferred') await bulkTransferMarkSelected(page, true);
+        else if (act === 'not-transferred') await bulkTransferMarkSelected(page, false);
       });
     });
   });
@@ -223,11 +223,17 @@ export async function renderEArsivInvoices() {
   });
 
   // Close dropdowns on outside click
-  document.addEventListener('click', () => {
+  listenScoped(page, document, 'click', () => {
     document.querySelectorAll('.action-dropdown').forEach(d => d.remove());
   });
 
   loadEarsiv(page);
+  const batchAccountId = getActiveAccountId();
+  if (batchAccountId) {
+    for (const kind of listDocumentBatchKinds(batchAccountId)) {
+      if (kind.startsWith('earsiv:')) restoreBatchResults(page, batchAccountId, kind);
+    }
+  }
   return page;
 }
 
@@ -296,7 +302,7 @@ async function loadEarsiv(page) {
   tbody.innerHTML = `<tr><td colspan="8" class="table-empty">
     <div style="padding:40px;text-align:center">
       <div style="animation:pulse 1.5s infinite">${ic.noData}</div>
-      <p style="color:var(--text-muted);margin-top:12px">E-Fatura ve E-Arşiv verileri yükleniyor...</p>
+      <p style="color:var(--text-muted);margin-top:12px">E-Arşiv verileri yükleniyor...</p>
       <p style="font-size:11px;color:var(--text-muted)">${account.name} · ${account.environment === 'live' ? 'Canlı' : 'Test'}</p>
     </div>
   </td></tr>`;
@@ -306,34 +312,21 @@ async function loadEarsiv(page) {
     const dateStart = page.querySelector('#dateStart')?.value || start;
     const dateEnd = page.querySelector('#dateEnd')?.value || end;
 
-    // 6 ay limiti: uzun aralıklar merkezi fetcher'da dilimlenip birleştirilir.
-    async function fetchAllPages(apiFn, baseParams) {
-      const stats = { failed: false };
-      const allItems = await fetchAllPagesChunked(apiFn, account, baseParams, { signal, stats, maxPages: 10 });
-      if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
-      if (allItems.length === 0 && stats.failed) return { success: false, error: 'Veri alınamadı' };
-      return { success: true, data: allItems };
-    }
+    // Arşiv destekli tek çağrı: kesinleşmiş aylar Supabase'den, son dönem API'den (6 ay dilimli).
+    const stats = { failed: false };
+    const items = await fetchInvoicesSmart(EArchiveWithAccount.listInvoices, account, 'earsiv', { StartDate: dateStart, EndDate: dateEnd }, { signal, stats, maxPages: 10 });
+    if (signal.aborted) return;
+    const fetchOk = !(items.length === 0 && stats.failed);
 
-    // İlk çağrı arşiv destekli (Supabase'e de yazar); ikinci çağrı aynı uç olduğu için
-    // arşiv yazma yarışı olmasın diye salt-API (chunked) kalır.
-    const [efaturaRes, earsivRes] = await Promise.allSettled([
-      (async () => {
-        const stats = { failed: false };
-        const items = await fetchInvoicesSmart(EArchiveWithAccount.listInvoices, account, 'earsiv', { StartDate: dateStart, EndDate: dateEnd }, { signal, stats, maxPages: 10 });
-        if (signal.aborted) return { success: false, error: 'İptal edildi', aborted: true };
-        if (items.length === 0 && stats.failed) return { success: false, error: 'Veri alınamadı' };
-        return { success: true, data: items };
-      })(),
-      fetchAllPages(EArchiveWithAccount.listInvoices, { StartDate: dateStart, EndDate: dateEnd })
-    ]);
-
-    let allInvoices = [];
-    if (efaturaRes.status === 'fulfilled' && efaturaRes.value.success) {
-      allInvoices.push(...extractItems(efaturaRes.value.data).map(inv => ({ ...inv, _source: 'efatura' })));
-    }
-    if (earsivRes.status === 'fulfilled' && earsivRes.value.success) {
-      allInvoices.push(...extractItems(earsivRes.value.data).map(inv => ({ ...inv, _source: 'earsiv' })));
+    const seen = new Set();
+    const allInvoices = [];
+    for (const inv of extractItems(items)) {
+      const uuid = inv.UUID || inv.uuid || inv.Id || '';
+      if (uuid) {
+        if (seen.has(uuid)) continue;
+        seen.add(uuid);
+      }
+      allInvoices.push({ ...inv, _source: 'earsiv' });
     }
 
     // Bu yükleme bayatladıysa (hesap değişti / yeni yükleme başladı) yazma.
@@ -342,10 +335,8 @@ async function loadEarsiv(page) {
     }
 
     if (allInvoices.length === 0) {
-      const efOk = efaturaRes.status === 'fulfilled' && efaturaRes.value.success;
-      const eaOk = earsivRes.status === 'fulfilled' && earsivRes.value.success;
-      if (efOk || eaOk) {
-        tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.noData}<h3>Giden fatura bulunamadı</h3><p>Bu dönemde e-Fatura veya e-Arşiv gönderilmiş fatura yok</p></div></td></tr>`;
+      if (fetchOk) {
+        tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.noData}<h3>Giden fatura bulunamadı</h3><p>Bu dönemde gönderilmiş e-Arşiv fatura yok</p></div></td></tr>`;
       } else {
         tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.error}<h3>Veri alınamadı</h3><p>API bağlantısını kontrol edin</p><button class="btn btn-primary" id="retryBtn">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
         tbody.querySelector('#retryBtn')?.addEventListener('click', () => loadEarsiv(page));
@@ -406,10 +397,8 @@ function applyFilters(page) {
   const search = (page.querySelector('#searchInput')?.value || '').toLowerCase().trim();
   const dateStart = page.querySelector('#dateStart')?.value;
   const dateEnd = page.querySelector('#dateEnd')?.value;
-  const source = page.querySelector('#sourceFilter')?.value;
 
   filteredEarsiv = (cachedEarsiv || []).filter(inv => {
-    if (source && inv._source !== source) return false;
     if (search) {
       const haystack = [getInvoiceNumber(inv), getReceiverName(inv), getReceiverTaxNo(inv), inv.UUID || ''].join(' ').toLowerCase();
       if (!haystack.includes(search)) return false;
@@ -451,7 +440,7 @@ function renderTable(page, invoices) {
     const taxNo = getReceiverTaxNo(inv) || '—';
 
     return `<tr>
-      <td data-label="Seçim"><input type="checkbox" class="row-check" data-idx="${idx}" /></td>
+      <td data-label="Seçim"><input type="checkbox" class="row-check" data-idx="${idx}" data-uuid="${uuid}" data-source="${inv._source}" /></td>
       <td data-label="ERP">
         <div style="display:flex;gap:4px">
           <button class="action-menu-btn" data-action="query" data-uuid="${uuid}" title="GİB'den Sorgula">${ic.query}</button>
@@ -600,7 +589,7 @@ async function exportFiltered(page) {
   const data = filteredEarsiv.length > 0 ? filteredEarsiv : cachedEarsiv;
   if (data.length === 0) return showToast('Dışa aktarılacak fatura yok', 'warning');
   const account = await getActiveAccount();
-  const result = exportInvoicesToExcel(data, { accountName: account?.name || '', fileName: 'giden_faturalar' });
+  const result = exportInvoicesToExcel(data, { accountName: account?.name || '', dateRange: { start:page.querySelector('#dateStart')?.value, end:page.querySelector('#dateEnd')?.value } });
   showToast(`${result.count} fatura Excel'e aktarıldı`, 'success');
 }
 
@@ -610,7 +599,7 @@ async function exportCariFiltered(page) {
     if (data.length === 0) return showToast('Aktarılacak fatura yok', 'warning');
     const account = await getActiveAccount();
     showToast('Cari Defter hazırlanıyor...', 'info');
-    const result = await exportCariDefter(data, 'giden', account?.name || '');
+    const result = await exportCariDefter(data, 'giden', account?.name || '', {dateRange:{ start:page.querySelector('#dateStart')?.value, end:page.querySelector('#dateEnd')?.value }});
     if (result.success) {
       showToast(`${result.count} fatura Cari Defter'e eklendi`, 'success');
     } else {
@@ -637,6 +626,84 @@ function summarizeBulkResult(ok, fail, label) {
   if (ok > 0 && fail === 0) showToast(`${ok} kayıt ${label} başarılı`, 'success');
   else if (ok > 0) showToast(`${ok} başarılı, ${fail} başarısız — ${label}`, 'warning');
   else showToast(`${label} başarısız (${fail} hata)`, 'error');
+}
+
+function getSelectedInvoices(page) {
+  const uuids = [...page.querySelectorAll('.row-check:checked')].map(cb => cb.dataset.uuid || '').filter(Boolean);
+  return [...new Set(uuids)].map(uuid => ({ uuid, source: 'earsiv' }));
+}
+
+async function runBulkSelected(page, actionLabel, worker) {
+  if(page.dataset.batchBusy==='true')return {okCount:0,failCount:0};
+  const selected=getSelectedInvoices(page),account=getActiveAccount();
+  if(!selected.length||!account){showToast('Önce firma ve kayıt seçin.','warning');return {okCount:0,failCount:0};}
+  page.dataset.batchBusy='true';page.inert=true;
+  try{
+    const kind='earsiv:'+actionLabel;
+    const results=await runDocumentBatch({accountId:account.id,kind,items:selected,execute:worker,onProgress:results=>renderBatchResults(page,{accountId:account.id,kind,results,total:selected.length})});
+    const okCount=results.filter(row=>row.status==='succeeded').length,failCount=results.length-okCount;
+    summarizeBulkResult(okCount,failCount,actionLabel);return {okCount,failCount};
+  }catch(error){showToast(error.message,'error');return {okCount:0,failCount:selected.length};}
+  finally{page.dataset.batchBusy='false';page.inert=false;}
+}
+
+async function runOperation(uuid, operationType) {
+  const res=await EArchive.setInvoiceOperation(operationType,[uuid]);
+  return {...res,operationType};
+}
+
+async function bulkArchiveSelected(page) {
+  const result = await runBulkSelected(page, 'arşive kaldırma', ({ uuid }) => runOperation(uuid, 'Archive'));
+  if (result.okCount > 0) await loadEarsiv(page);
+}
+
+async function bulkCreateDraftSelected(page) {
+  await runBulkSelected(page, 'taslak oluşturma', ({ uuid }) => EArchive.createInvoiceDraft(uuid));
+}
+
+async function bulkTransferMarkSelected(page, transferred) {
+  await runBulkSelected(page, transferred ? 'aktarıldı işaretleme' : 'aktarılmadı işaretleme', ({ uuid }) =>
+    runOperation(uuid, transferred ? 'Transferred' : 'NotTransferred'));
+}
+
+function showBulkSpecialCodeModal(page) {
+  const selected = getSelectedInvoices(page);
+  if (selected.length === 0) {
+    showToast('Önce en az bir kayıt seçmelisiniz', 'warning');
+    return;
+  }
+
+  const bodyEl = document.createElement('div');
+  bodyEl.innerHTML = `
+    <p style="margin:0 0 10px;color:var(--text-muted)">${selected.length} kayıt için özel kod atanacak</p>
+    <div class="form-group">
+      <label class="form-label">Özel Kod</label>
+      <input type="text" class="form-input" id="bulkSpecialCodeInput" placeholder="Örn: TOPLU-2026" maxlength="64" />
+    </div>
+  `;
+
+  const footerEl = document.createElement('div');
+  footerEl.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
+  footerEl.innerHTML = `
+    <button class="btn btn-secondary" id="cancelBulkCode">İptal</button>
+    <button class="btn btn-primary" id="saveBulkCode">Kaydet</button>
+  `;
+
+  const modal = showModal({ title: 'Toplu Özel Kod', body: bodyEl, footer: footerEl });
+  footerEl.querySelector('#cancelBulkCode')?.addEventListener('click', () => modal?.close());
+  let busy=false;
+  footerEl.querySelector('#saveBulkCode')?.addEventListener('click', async () => {
+    if(busy)return;
+    const code=bodyEl.querySelector('#bulkSpecialCodeInput')?.value?.trim(),account=getActiveAccount();
+    if(!code||!account)return showToast('Firma ve özel kod gerekli.','warning');
+    busy=true;bodyEl.inert=true;footerEl.querySelector('#saveBulkCode').disabled=true;
+    try{
+      const kind='earsiv:special-code:'+await fingerprint(code);
+      const results=await runDocumentBatch({accountId:account.id,kind,items:selected,execute:item=>EArchive.setInvoiceSpecialCode(item.uuid,code),onProgress:results=>renderBatchResults(page,{accountId:account.id,kind,results,total:selected.length})});
+      const ok=results.filter(row=>row.status==='succeeded').length;summarizeBulkResult(ok,results.length-ok,'özel kod atama');
+      if(ok===selected.length)modal.close();
+    }catch(error){showToast(error.message,'error');}finally{busy=false;bodyEl.inert=false;footerEl.querySelector('#saveBulkCode').disabled=false;}
+  });
 }
 
 async function bulkDownloadForFiltered(page, type) {
@@ -682,13 +749,7 @@ async function bulkDownloadForFiltered(page, type) {
 async function downloadFile(uuid, source, type) {
   try {
     let res;
-    if (source === 'earsiv') {
-      res = type === 'pdf' ? await EArchive.getInvoicePdf(uuid) : await EArchive.getInvoiceHtml(uuid); // EArchive has getInvoicePdf, missing XML handling directly, fallback handled if needed
-      // To strictly download EArchive XML, API usually lacks isolated XML endpoint, but let's assume it returns standard base64 from generic if needed
-      if (type === 'xml') return showToast('E-Arşiv XML indirme için güncelleniyor...', 'info');
-    } else {
-      res = type === 'pdf' ? await EArchive.getInvoicePdf(uuid) : await EArchive.getInvoiceXml(uuid);
-    }
+    res = type === 'pdf' ? await EArchive.getInvoicePdf(uuid) : await EArchive.getInvoiceXml(uuid);
 
     if (res.success && res.data) {
       // Nilvera API commonly returns PDF/XML strings directly or wrapped in data/String/File property

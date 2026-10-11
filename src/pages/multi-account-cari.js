@@ -1,10 +1,12 @@
+import {rememberExportPeriod,exportPeriod} from '../lib/export-context.js';
+import { invoiceLedgerAmount, addAmount } from '../lib/ledger-finance.js';
 import { EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { listAccounts } from '../services/account-manager.js';
 import { listCollections } from '../services/tahsilat-manager.js';
 import { showToast } from '../components/toast.js';
 import { attachDatePicker } from '../lib/date-picker.js';
-import { exportMultiAccountCari } from '../services/cari-export.js';
+import { exportMultiAccountCari } from '../services/cari-export-worker-client.js';
 
 const ic = {
   search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
@@ -83,6 +85,7 @@ export async function renderMultiAccountCari() {
   page.querySelector('#macApplyBtn')?.addEventListener('click', () => loadMultiAccountData(page));
   page.querySelector('#macSearchInput')?.addEventListener('input', () => renderCustomerList(page));
 
+  const notice=document.createElement('div');notice.className='sv-notice';notice.textContent='Bu görünüm yüklenen dönem kayıtlarını içerir. Dövizli, para birimi belirsiz ve iptal edilen belgeler TL bakiyesine katılmaz. Eksik hesap sonuçları tam bakiye değildir.';page.prepend(notice);
   return page;
 }
 
@@ -119,6 +122,7 @@ async function loadMultiAccountData(page) {
   const pendingInvoices = []; // { inv, acc }
   const pendingTahsilats = []; // { t, acc }
   const failedTahsilat = [];
+  let completeScan=true;
 
   for (const acc of allAccounts) {
     try {
@@ -128,6 +132,7 @@ async function loadMultiAccountData(page) {
         fetchInvoicesSmart(EArchiveWithAccount.listInvoices, acc, 'earsiv', { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) }),
         listCollections({ accountId: acc.id, startDate, endDate, searchText })
       ]);
+      if([efRes,eaRes,thRes].some(result=>result.status!=='fulfilled'))completeScan=false;
       if (efRes.status === 'fulfilled') efRes.value.forEach(i => pendingInvoices.push({ inv: { ...i, _type: 'efatura' }, acc }));
       if (eaRes.status === 'fulfilled') eaRes.value.forEach(i => pendingInvoices.push({ inv: { ...i, _type: 'earsiv' }, acc }));
       if (thRes.status === 'fulfilled') thRes.value.forEach(t => pendingTahsilats.push({ t: { ...t, _type: 'tahsilat' }, acc }));
@@ -136,10 +141,13 @@ async function loadMultiAccountData(page) {
         console.error(`${acc.name} tahsilatları yüklenemedi:`, thRes.reason);
       }
     } catch (e) {
+      completeScan=false;
       console.error(`Error scanning account ${acc.name}:`, e);
     }
   }
 
+  rememberExportPeriod(page,{start:startDate,end:endDate,complete:completeScan});
+  if(!completeScan)showToast('Bazı kaynaklar yüklenemedi. Görünen bakiye eksiktir; dışa aktarmadan önce taramayı yenileyin.','warning');
   function ensureCustomer(key, name, taxNo) {
     if (!customerMap[key]) {
       customerMap[key] = { name, taxNo, invoices: [], totalAmount: 0, totalTahsilat: 0, accountBreakdown: {} };
@@ -161,19 +169,19 @@ async function loadMultiAccountData(page) {
   // GEÇİŞ 1 — Tüm hesapların FATURALARI: müşteri haritasını VKN (yoksa isim) ile kur.
   for (const { inv, acc } of pendingInvoices) {
     // Reddedilen faturalar bakiye ve fatura sayacına dahil edilmez.
-    if (isRejected(inv)) continue;
+    if (isRejected(inv) || invoiceLedgerAmount(inv) === null) continue;
 
     const name = getReceiverName(inv) || 'Bilinmeyen';
     const taxNo = getReceiverTaxNo(inv) || '—';
-    const amount = parseFloat(getAmount(inv) || 0);
+    const amount = Number(invoiceLedgerAmount(inv));
     const key = customerKey(taxNo, name);
 
     ensureCustomer(key, name, taxNo);
     customerMap[key].invoices.push({ ...inv, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
     ensureBreakdown(key, acc);
-    customerMap[key].totalAmount += amount;
+    customerMap[key].totalAmount = addAmount(customerMap[key].totalAmount, amount);
     customerMap[key].accountBreakdown[acc.id].invoiceCount++;
-    customerMap[key].accountBreakdown[acc.id].totalAmount += amount;
+    customerMap[key].accountBreakdown[acc.id].totalAmount = addAmount(customerMap[key].accountBreakdown[acc.id].totalAmount, amount);
     totalInvoices++;
   }
 
@@ -188,10 +196,9 @@ async function loadMultiAccountData(page) {
     if (taxNo === '—' || !taxNo) {
       const normName = name.toLocaleLowerCase('tr-TR').trim();
       const match = Object.entries(customerMap).find(([k, c]) => {
+        if (!c.accountBreakdown?.[acc.id]) return false;
         const cName = c.name.toLocaleLowerCase('tr-TR').trim();
         if (cName === normName) return true;
-        if (cName.includes(normName) && normName.length > 4) return true;
-        if (normName.includes(cName) && cName.length > 4) return true;
         return false;
       });
       if (match) {
@@ -204,7 +211,7 @@ async function loadMultiAccountData(page) {
     ensureCustomer(key, name, taxNo);
     customerMap[key].invoices.push({ ...t, _accountName: acc.name, _accountId: acc.id, _accountColor: acc.color });
     ensureBreakdown(key, acc);
-    customerMap[key].totalTahsilat += amount;
+    customerMap[key].totalTahsilat = addAmount(customerMap[key].totalTahsilat, amount);
     customerMap[key].accountBreakdown[acc.id].totalTahsilat += amount;
     totalTahsilats++;
   }
@@ -337,7 +344,7 @@ function renderDetailPanel(page, customer) {
   panel.querySelector('#macExportBtn')?.addEventListener('click', async () => {
     try {
       showToast('Excel hazırlanıyor...', 'info');
-      await exportMultiAccountCari(customer.invoices, customer.name, customer.accountBreakdown);
+      await exportMultiAccountCari(customer.invoices, customer.name, customer.accountBreakdown, {dateRange:exportPeriod(page,'#macDateStart','#macDateEnd')});
       showToast('Excel başarıyla indirildi.', 'success');
     } catch (e) {
       showToast('Hata: ' + e.message, 'error');

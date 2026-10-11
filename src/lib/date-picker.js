@@ -4,7 +4,7 @@ import { Turkish } from 'flatpickr/dist/l10n/tr.js';
 const pickerMap = new WeakMap();
 
 function isDateInput(node) {
-  return node instanceof HTMLInputElement && node.type === 'date';
+  return node instanceof HTMLInputElement && node.type === 'date' && !node.closest('.sv-workspace,.sv-form');
 }
 
 export function attachDatePicker(input, options = {}) {

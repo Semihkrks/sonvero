@@ -1,8 +1,14 @@
+import {Decimal} from '../lib/money.js';
+import {excelFileName} from '../lib/export-filename.js';
 import ExcelJS from 'exceljs';
-import { saveAs } from 'file-saver';
+import { saveExportFile } from './export-delivery.js';
+import { invoiceLedgerAmount } from '../lib/ledger-finance.js';
 
 // ── Field extractors (self-contained to avoid circular deps) ──
-function _getAmount(inv) { return inv.PayableAmount || inv.payableAmount || inv.TotalAmount || inv.totalAmount || inv.amount || 0; }
+function _getAmount(inv) {
+  const amount=inv.PayableAmount ?? inv.payableAmount ?? inv.TotalAmount ?? inv.totalAmount ?? inv.amount ?? 0;
+  return ['IADE','İADE','RETURN'].includes(String(inv.InvoiceType||inv.InvoiceInfo?.InvoiceType||'').toUpperCase()) ? -Math.abs(Number(amount)) : amount;
+}
 function _getInvoiceDate(inv) { return inv.IssueDate || inv.issueDate || inv.CreateDate || inv.CreatedDate || ''; }
 function _getReceiverName(inv) { return inv.ReceiverName || inv.receiverName || inv.CustomerName || (inv.ReceiverInfo || inv.CustomerInfo || {}).Name || ''; }
 function _getSenderName(inv) { return inv.SenderName || inv.senderName || inv.SupplierName || (inv.SenderInfo || {}).Name || ''; }
@@ -778,7 +784,7 @@ function createCariWorkbook(records, titleText) {
   return workbook;
 }
 
-export async function exportCariDefter(invoices, source, accountName = '') {
+export async function exportCariDefter(invoices, source, accountName = '', options = {}) {
   try {
     const records = invoices.map(i => normalizeForCari(i, source, false)).sort((a,b) => a.Tarih - b.Tarih);
     const title = `${(accountName || 'TÜM').toUpperCase()} - CARİ HAREKETLER (Toplu)`;
@@ -787,8 +793,8 @@ export async function exportCariDefter(invoices, source, accountName = '') {
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const fileName = `Cari_Defter_${accountName}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    saveAs(blob, fileName);
+    const fileName = excelFileName({name:accountName,items:invoices,dateRange:options.dateRange});
+    await saveExportFile(blob, fileName);
 
     return { success: true, count: records.length };
   } catch (error) {
@@ -797,7 +803,7 @@ export async function exportCariDefter(invoices, source, accountName = '') {
   }
 }
 
-export async function exportCustomerCari(invoices, customerName, source) {
+export async function exportCustomerCari(invoices, customerName, source, options = {}) {
   try {
     const records = invoices.map(i => normalizeForCari(i, source, true)).sort((a,b) => a.Tarih - b.Tarih);
     const title = `${customerName.toUpperCase()} - CANLI CARİ SİSTEMİ`;
@@ -807,9 +813,8 @@ export async function exportCustomerCari(invoices, customerName, source) {
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     
-    const safeName = customerName.replace(/[^a-zA-ZğüşöçıİĞÜŞÖÇ0-9]/g, '_');
-    const fileName = `${safeName}_Canli_Cari_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    saveAs(blob, fileName);
+    const fileName = excelFileName({name:customerName,items:invoices,dateRange:options.dateRange});
+    await saveExportFile(blob, fileName);
 
     return { success: true, count: records.length };
   } catch (error) {
@@ -1067,6 +1072,13 @@ function _writeCustomerSummarySheet(workbook, customers, titleText) {
 export async function exportAllTransactions(items, accounts, opts = {}) {
   const { layout = 'tum', direction = 'both', withTahsilat = true } = opts;
   try {
+    const accountIds=new Set((accounts||[]).map(account=>account.id));
+    items=items.filter(item=>{
+      if(accountIds.size&&!accountIds.has(item._accountId))return false;
+      if(item._type==='tahsilat')return withTahsilat;
+      if(invoiceLedgerAmount(item.raw||item)===null)return false;
+      return direction==='both'||(direction==='alis'?item._direction==='gelen':item._direction!=='gelen');
+    });
     const workbook = new ExcelJS.Workbook();
 
     // Hesap sırası: verilen accounts listesi (id/name/color). Yoksa item'lerden çıkar.
@@ -1088,7 +1100,7 @@ export async function exportAllTransactions(items, accounts, opts = {}) {
 
     // Tüm satırları düz listede topla (müşteri bazlı sayfalar için)
     const allRows = [];
-    Object.values(rowsByAccount).forEach(arr => allRows.push(...arr));
+    for (const rows of Object.values(rowsByAccount)) for (const row of rows) allRows.push(row);
 
     // ── SAYFA 1: MÜŞTERİ ÖZETİ (sadece firma isimleri + toplamlar) ──
     const custMap = _aggregateCustomers(allRows);
@@ -1197,8 +1209,8 @@ export async function exportAllTransactions(items, accounts, opts = {}) {
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    const fileName = `Tum_Islemler_${layout === 'ayri' ? 'Ayri' : 'TekSayfa'}_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    saveAs(blob, fileName);
+    const fileName = excelFileName({name:opts.name||(accounts?.length===1?accounts[0].name:'Tüm Firmalar'),items,dateRange:opts.dateRange});
+    await saveExportFile(blob, fileName);
 
     return { success: true, count: items.length };
   } catch (error) {
@@ -1207,7 +1219,7 @@ export async function exportAllTransactions(items, accounts, opts = {}) {
   }
 }
 
-export async function exportMultiAccountCari(invoices, customerName, accountBreakdown) {
+export async function exportMultiAccountCari(invoices, customerName, accountBreakdown, options = {}) {
   const _getInvoiceDate = inv => inv.IssueDate || inv.issueDate || inv.CreateDate || inv.CreatedDate || '';
   const _getInvoiceNumber = inv => inv.InvoiceNumber || inv.invoiceNumber || inv.InvoiceSerieOrNumber || '';
   const _getReceiverName = inv => inv.ReceiverName || inv.receiverName || inv.CustomerName || inv.customerName || (inv.CustomerInfo || {}).Name || '';
@@ -1520,13 +1532,33 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     
-    const safeName = customerName.replace(/[^a-zA-ZğüşöçıİĞÜŞÖÇ0-9]/g, '_');
-    const fileName = `${safeName}_Cari_${new Date().toISOString().slice(0, 10)}.xlsx`;
-    saveAs(blob, fileName);
+    const fileName = excelFileName({name:customerName,items:invoices,dateRange:options.dateRange});
+    await saveExportFile(blob, fileName);
 
     return { success: true, count: invoices.length };
   } catch (error) {
     console.error('Multi account cari export error:', error);
     return { success: false, error: error.message };
   }
+}
+
+// Explicit ledger columns: do not invent tax breakdowns from archived document totals.
+export async function exportLedgerRows(rows,options={}){
+ try{
+  const workbook=new ExcelJS.Workbook();workbook.creator='Sonvera';
+  const sheet=workbook.addWorksheet('Cari Hareketler',{views:[{state:'frozen',ySplit:1}]});
+  sheet.columns=[{header:'Tarih',key:'date',width:14},{header:'Firma',key:'account_name',width:28},{header:'Müşteri',key:'customer_name',width:34},{header:'VKN / TCKN',key:'customer_tax_no',width:18},{header:'İşlem',key:'type',width:23},{header:'Açıklama / Belge',key:'description',width:35},{header:'Borç (TL)',key:'debit',width:20},{header:'Alacak (TL)',key:'credit',width:20},{header:'Dönem içi net (TL)',key:'net',width:22}];
+  let debit=new Decimal(0),credit=new Decimal(0);
+  for(const row of rows){
+   debit=debit.plus(row.debit);credit=credit.plus(row.credit);
+   const added=sheet.addRow({date:String(row.date).split('-').reverse().join('.'),account_name:String(row.account_name||''),customer_name:String(row.customer_name||''),customer_tax_no:String(row.customer_tax_no||''),type:String(row.type||''),description:String(row.description||''),debit:Number(row.debit),credit:Number(row.credit),net:new Decimal(row.debit).minus(row.credit).toNumber()});
+   for(const index of [7,8,9])added.getCell(index).numFmt='#,##0.00;[Red]-#,##0.00';
+  }
+  sheet.autoFilter={from:'A1',to:'I1'};sheet.getRow(1).font={bold:true,color:{argb:'FFFFFFFF'}};sheet.getRow(1).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF2563EB'}};
+  const summary=workbook.addWorksheet('Kapsam');summary.columns=[{width:34},{width:65}];
+  summary.addRows([['Sonvera Cari Dışa Aktarma',options.name||'Seçili firmalar'],['Başlangıç',options.dateRange?.start||'Sınırsız'],['Bitiş',options.dateRange?.end||'Sınırsız'],['Hareket sayısı',rows.length],['Borç (TL)',debit.toNumber()],['Alacak (TL)',credit.toNumber()],['Dönem neti (TL)',debit.minus(credit).toNumber()],['Kapsam','Arşivdeki TL hareketleri; dövizli ve tutarı doğrulanamayan belgeler hariç.'],['Bakiye açıklaması','Dönem neti açılış bakiyesini içermez; tüm ticari geçmişin tamlığı garanti edilmez.']]);
+  const buffer=await workbook.xlsx.writeBuffer(),fileName=excelFileName({name:options.name,dateRange:options.dateRange,items:rows});
+  await saveExportFile(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),fileName);
+  return {success:true,count:rows.length,fileName};
+ }catch(error){return {success:false,error:error.message||'Cari dosyası oluşturulamadı.'};}
 }

@@ -1,3 +1,4 @@
+import {excelFileName} from '../lib/export-filename.js';
 // ══════════════════════════════════════════
 // Excel Export Engine — SheetJS (XLSX)
 // ══════════════════════════════════════════
@@ -80,7 +81,7 @@ function normalizeInvoice(raw) {
 // ── Export invoices to Excel with multi-sheet ──
 export function exportInvoicesToExcel(invoices, options = {}) {
   const {
-    fileName = `efatura_export_${new Date().toISOString().slice(0, 10)}`,
+    fileName = null,
     accountName = '',
     selectedColumns = INVOICE_COLUMNS.filter(c => c.checked),
     selectedLineColumns = LINE_COLUMNS.filter(c => c.checked),
@@ -182,9 +183,7 @@ export function exportInvoicesToExcel(invoices, options = {}) {
   }
 
   // ── Generate file ──
-  const finalName = accountName
-    ? `${accountName}_${fileName}.xlsx`
-    : `${fileName}.xlsx`;
+  const finalName = excelFileName({name:fileName||accountName||'Faturalar',dateRange,items:normalized});
 
   XLSX.writeFile(workbook, finalName);
   return { fileName: finalName, count: normalized.length };
@@ -234,7 +233,7 @@ export function exportSingleInvoice(invoice, accountName = '') {
     XLSX.utils.book_append_sheet(workbook, ws2, 'Kalemler');
   }
 
-  const fileName = `${accountName ? accountName + '_' : ''}fatura_${inv.invoiceNumber || inv.ettn}.xlsx`;
+  const fileName = excelFileName({name:accountName||inv.customerName||'Fatura',items:[inv]});
   XLSX.writeFile(workbook, fileName);
   return { fileName };
 }
