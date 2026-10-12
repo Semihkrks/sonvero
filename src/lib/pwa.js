@@ -41,22 +41,13 @@ export function startPwa() {
   });
   if (!('serviceWorker' in navigator) || !import.meta.env.PROD) return;
   navigator.serviceWorker.register('/sw.js').then(reg => {
-    const offerUpdate = () => {
-      if (!reg.waiting || document.getElementById('app-update')) return;
-      const box = document.createElement('div'); box.id='app-update'; box.className='app-update'; box.setAttribute('role','status');
-      const text = document.createElement('span'); text.textContent='Sonvera’nın yeni sürümü hazır.';
-      const button = document.createElement('button'); button.className='btn btn-primary'; button.textContent='Güncelle';
-      button.onclick = () => {
-        if (hasPendingMutation()) { text.textContent='Önce devam eden işlemin bitmesini bekleyin.'; return; }
-        if (dirty && !confirm('Kaydedilmemiş alanlar olabilir. Yeni sürüme geçilsin mi?')) return;
-        reloadApproved = true;
-        if (reg.waiting) reg.waiting.postMessage({ type:'ACTIVATE_UPDATE' });
-        else location.reload();
-      };
-      box.append(text,button); document.body.append(box);
+    const applyUpdate = () => {
+      if (!reg.waiting || dirty || hasPendingMutation()) return;
+      reloadApproved = true;
+      reg.waiting.postMessage({ type: 'ACTIVATE_UPDATE' });
     };
-    offerUpdate();
-    reg.addEventListener('updatefound',()=>reg.installing?.addEventListener('statechange',offerUpdate));
+    applyUpdate();
+    reg.addEventListener('updatefound', () => reg.installing?.addEventListener('statechange', applyUpdate));
   }).catch(()=>{ /* Application remains usable without PWA installation. */ });
   navigator.serviceWorker.addEventListener('controllerchange',()=>{
     if (!hadController) return;

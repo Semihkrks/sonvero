@@ -56,6 +56,9 @@
     min-height: 58px;
     height: auto;
     border-radius: 0;
+    background: var(--bg-secondary);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     padding: max(10px, var(--safe-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(12px, env(safe-area-inset-left, 0px));
     margin: 0;
     width: 100%;
@@ -584,19 +587,28 @@
   }
 
   #toast-container {
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
-    left: 8px;
-    right: 8px;
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    left: auto;
+    right: 10px;
     bottom: auto;
-    width: auto;
+    width: min(260px, calc(100vw - 56px));
     gap: 8px;
+    align-items: stretch;
     pointer-events: none;
   }
 
   .toast {
     width: 100%;
-    max-width: none;
+    max-width: min(260px, calc(100vw - 56px));
     pointer-events: auto;
+  }
+
+  .app-update {
+    left: auto;
+    right: 10px;
+    width: min(260px, calc(100vw - 56px));
+    max-width: min(260px, calc(100vw - 56px));
+    bottom: calc(72px + var(--safe-bottom, 10px));
   }
 
   #toast-container .toast-close,
@@ -1502,6 +1514,15 @@
     will-change: transform;
     -webkit-transform: translateZ(0);
     transform: translateZ(0);
+  }
+}
+
+/* PWA: saat şeridinin altı düz renk olsun. black-translucent bu bölgeyi buzlu gösteriyordu. */
+@media (max-width: 768px) and (display-mode: standalone) {
+  html, body, .header {
+    background: var(--bg-secondary);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 

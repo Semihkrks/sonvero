@@ -1,6 +1,34 @@
 # Sonvera — devir teslim ve yapılacaklar
 
-Son güncelleme: **12 Ekim 2026 (Sonvera marka/logo + GitHub main push + ALLOWED_ORIGINS)**. Bu dosya başka IDE/AI ajanına geçiş için ana başlangıç noktasıdır. HER OTURUM / YANIT BİTİŞİNDE bu dosyayı güncellemek zorunludur; bu kural sonraki IDE ve ajanlar için de geçerlidir. Yapılanları, kalanları, doğrulanmayanları ve sıradaki somut adımı yazın. Tamamlanan işlerin üzerine yazmayın; mevcut kullanıcı değişikliklerini koruyun.
+Son güncelleme: **12 Ekim 2026 (mobil bildirim + PWA üst bulanıklık)**. Bu dosya başka IDE/AI ajanına geçiş için ana başlangıç noktasıdır. HER OTURUM / YANIT BİTİŞİNDE bu dosyayı güncellemek zorunludur; bu kural sonraki IDE ve ajanlar için de geçerlidir. Yapılanları, kalanları, doğrulanmayanları ve sıradaki somut adımı yazın. Tamamlanan işlerin üzerine yazmayın; mevcut kullanıcı değişikliklerini koruyun.
+
+
+## 12 Ekim mobil bildirim + PWA üst şerit
+
+- "Sonvera'nın yeni sürümü hazır / Güncelle" kutusu kaldırıldı. Yeni sürüm, form dolu değilse ve süren işlem yoksa kendiliğinden açılır.
+- Mobil bildirim (toast) artık kenardan kenara değil: sağ üstte en fazla 260px. 390px genişlikte ölçüldü (255px, sağdan ~13px).
+- PWA üst bulanıklığı: `apple-mobile-web-app-status-bar-style` `black-translucent` idi. iOS saat/pil şeridini sayfanın üstüne buzlu cam olarak bindiriyor; tarayıcıda bu olmaz, sadece kurulu uygulamada görünür. `black` (açık temada `default`) yapıldı. Üst çubuğun `backdrop-filter` bulanıklığı mobilde kapatıldı.
+- Kurulu PWA eski meta'yı bir sonraki tam kapanışa kadar tutabilir. Uygulamayı kaydırıp kapatıp yeniden açmak gerekir.
+
+## 12 Ekim — son kodlama ve canlı tarayıcı kontrolü
+
+**Yeni kullanıcı talimatı:** sonvera.com.tr üzerinde tarayıcı testleri istendi. Önceki testleri erteleme talimatı, bu canlı tarayıcı kontrolü için kaldırıldı. Finansal kayıt oluşturma/gönderme/iptal yapılmıyor. Yerel yeni kodun canlıya dağıtıldığı varsayılmamalı.
+
+Son kodlama ekleri (henüz build/typecheck/unit test çalıştırılmadı):
+- Migration **013_restore_verification**: service_role ile yedek kimliği ve SHA-256 eşleşerek finansal geri yükleme doğrulama metadata’sı kaydetme.
+- Migration **014_document_operation_index**: tek/çok UUID ve yol UUID’sini çıkarma; GIN belge dizini; belirsiz işlemlerde çakışma engeli; önceki başarılı gönderim yalnız tekrar gönderimi engeller, arşivleme gibi farklı işlemleri gereksiz engellemez. SQL çalıştırılmadı.
+- scripts/financial-manifest.mjs, verify-restored-backup.mjs, backup.mjs: yedek öncesi/sonrası finansal referans kararlılığı, ayrıca şifreli manifest, izole hedefte salt okunur kayıt/toplam karşılaştırması; isteğe bağlı --report metadata kaydı. Gerçek backup/restore yapılmadı. Ayrıntı docs/BACKUP-RESTORE.md.
+- document-files.js: izinli belge türlerinde PDF/XML içerik kontrolü, iptal edilebilir indirme; yeni belge kartlarına bağlandı. GİB e-Arşiv için yeni dosya yolu varsayılmadı.
+- document-recovery.js + invoice/eirsaliye create: işlem anahtarı istekten önce kalıcı sekme kaydına yazılır; belirsiz sonuçta alanlar kilitlenir; yalnız operation_receipts sorgusuyla durum kontrol edilir. Kayıt bulunamadığında otomatik yeniden gönderim yapılmaz.
+- İrsaliye taslak kaydı artık boş menü yerine #/belgeler/despatchDraft listesine gider. Bu listeden düzenleme/gönderme henüz tamamlanmadı.
+- directory.tsx: firma/müşteri/etiket/şablon mevcut okuma ekranları React’e geçti; güvenli metin render, firma bazlı sorgu, arama debounce/iptal, ilk 50 kayıt ve daha fazlasını gösterme.
+- API X-Sonvera-Client:2 başlığı ve Edge minimum sürüm kontrolü, 426 güncelleme bildirimi; CORS güncellendi. İstemci ve Edge birlikte dağıtılmalı.
+- Belge filtreleri sekmede firma bazlı korunur. Belge paylaşım bağlantısı #/belge/{accountId}/{kind}/{uuid} ile açık hesap kimliğine bağlı salt okunur görünüm açar; herkese açık belge bağlantısı değildir.
+- Oturum sahibi değiştiğinde cache/özel yerel veriler temizlenir.
+
+Canlı tarayıcı çalışması sürüyor: /browse kullanıldı. İlk yanıt HTTPS 200, ilk giriş ekranında JS hata kaydı yoktu; ilk oturum devrinde test tarayıcısı yeniden başlayıp giriş kayboldu. Kalıcı browse connect ile tekrar açıldı ve kullanıcıdan giriş istendi. Bu erişim sorunu uygulama hatası olarak raporlanmamalı. Giriş ekranında iki input için bağlı label/aria-label bulunmadığı gözlendi; erişilebilirlik bulgusu. Son canlı rapor ayrıca yazılacak.
+
+Final test kapsamına 008–014 migration’lar, yeni React ekranları, belge indirme/iptal, belirsiz işlem kilidi, minimum istemci sürümü ve yedek manifest karşılaştırması eklenmeli. Eski 48 test sonucu yeni kodun kanıtı değildir.
 
 ## Yeni IDE'ye verilecek mesaj
 

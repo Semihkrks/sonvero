@@ -53,7 +53,12 @@ const renderDashboard = (...args) => import('./pages/dashboard.js').then(m => m.
 const savedTheme = localStorage.getItem('nilfatura_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 document.documentElement.setAttribute('data-theme', savedTheme);
 // PWA durum çubuğu (saat/pil şeridi) temayı takip etsin; tema sonradan değişince de güncellenir.
-const syncThemeColor = () => document.querySelector('meta[name="theme-color"]')?.setAttribute('content', document.documentElement.getAttribute('data-theme') === 'dark' ? '#1a1d26' : '#ffffff');
+const syncThemeColor = () => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#1a1d26' : '#ffffff');
+  // black-translucent iOS'ta saat şeridini buzlu cam yapıyor; opak çubuk o bulanıklığı kaldırır.
+  document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.setAttribute('content', dark ? 'black' : 'default');
+};
 syncThemeColor();
 new MutationObserver(syncThemeColor).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
