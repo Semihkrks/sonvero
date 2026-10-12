@@ -11,6 +11,8 @@ import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { redactNilveraFooter, base64ToBytes, bytesToBase64 } from '../services/pdf-redact.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
+import { openPdfViewer, pdfMetaAttrs, readPdfMeta } from '../components/pdf-viewer.js';
+import { escapeHtml } from '../lib/html.js';
 import { exportInvoicesToExcel } from '../services/excel-export.js';
 import { exportCariDefter } from '../services/cari-export-worker-client.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
@@ -101,18 +103,19 @@ export async function renderEArsivInvoices() {
           <option value="asc">Artan</option>
         </select>
       </div>
-      <div class="filter-actions" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:-4px;">
-        <button class="btn btn-sm" id="applyFilter" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--accent); color:white; border:none">${ic.search} ARA</button>
+      <div class="filter-actions"><span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span><div class="filter-actions-row">
+        <button class="btn btn-sm btn-primary" id="applyFilter" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
         <div style="position:relative">
-          <button class="btn btn-sm" id="exportBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--success); border:none; color:white">
+          <button class="btn btn-sm btn-success" id="exportBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.cloudDownload} DIŞA AKTAR ${ic.chevronDown}
           </button>
         </div>
         <div style="position:relative">
-          <button class="btn btn-sm" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--info); border:none; color:white">
+          <button class="btn btn-sm btn-primary" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.gear} İŞLEMLER ${ic.chevronDown}
           </button>
         </div>
+      </div>
       </div>
     </div>
 
@@ -443,11 +446,11 @@ function renderTable(page, invoices) {
       <td data-label="Seçim"><input type="checkbox" class="row-check" data-idx="${idx}" data-uuid="${uuid}" data-source="${inv._source}" /></td>
       <td data-label="ERP">
         <div style="display:flex;gap:4px">
-          <button class="action-menu-btn" data-action="query" data-uuid="${uuid}" title="GİB'den Sorgula">${ic.query}</button>
+          <button class="action-menu-btn" data-action="query" data-uuid="${escapeHtml(uuid)}" ${pdfMetaAttrs({ party: receiver, number: invoiceNo, date: fmtDateShort(issueDate), amount })} title="PDF Önizle">${ic.query}</button>
         </div>
       </td>
       <td data-label="Fatura Bilgisi">
-        <div><strong>${invoiceNo}</strong></div>
+        <div><strong>${escapeHtml(invoiceNo)}</strong></div>
         <div style="font-size:11px;color:var(--text-muted)">${srcBadge} / ${amount}</div>
       </td>
       <td data-label="Tarih">
@@ -455,8 +458,8 @@ function renderTable(page, invoices) {
         <div style="font-size:11px;color:var(--text-muted)">Zarf : ${fmtDateFull(envelopeDate || issueDate)}</div>
       </td>
       <td data-label="Alıcı Bilgisi">
-        <div style="font-size:12px;font-weight:600">${receiver}</div>
-        <div style="font-size:11px;color:var(--text-muted)">Vergi No : ${taxNo}</div>
+        <div style="font-size:12px;font-weight:600">${escapeHtml(receiver)}</div>
+        <div style="font-size:11px;color:var(--text-muted)">Vergi No : ${escapeHtml(taxNo)}</div>
       </td>
       <td data-label="Fatura Durumu">${statusDisplay(inv)}</td>
       
@@ -530,7 +533,7 @@ function renderTable(page, invoices) {
     btn.addEventListener('click', () => {
       const uuid = btn.dataset.uuid;
       const source = btn.dataset.source || 'earsiv';
-      showPdfPreviewModal(uuid, source);
+      showPdfPreviewModal(uuid, source, readPdfMeta(btn));
     });
   });
 }
@@ -839,83 +842,17 @@ function fmtDateFull(d) {
 }
 function fmtCur(a, c) { if (!a && a !== 0) return '—'; try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: c || 'TRY' }).format(a); } catch { return `${a} ${c}`; } }
 
-async function showPdfPreviewModal(uuid, source) {
-  const bodyEl = document.createElement('div');
-  bodyEl.style.height = '80vh';
-  bodyEl.style.minHeight = '600px';
-  bodyEl.style.display = 'flex';
-  bodyEl.style.alignItems = 'center';
-  bodyEl.style.justifyContent = 'center';
-  bodyEl.innerHTML = `<div style="animation:pulse 1.5s infinite">${ic.refresh} Yükleniyor...</div>`;
+function fmtDateShort(d) {
+  if (!d) return '';
+  try { return new Date(d).toLocaleDateString('tr-TR'); } catch { return ''; }
+}
 
-  const footerEl = document.createElement('div');
-  footerEl.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
-  footerEl.innerHTML = `
-    <button class="btn btn-secondary" id="closePdfModal">Kapat</button>
-    <button class="btn btn-info" id="mailPdfBtn" style="color:white;display:none">${ic.mail} Mail Gönder</button>
-    <button class="btn btn-success" id="downloadPdfBtn" style="display:none">${ic.download} İndir</button>
-    <button class="btn btn-primary" id="printPdfBtn" style="display:none">${ic.fileText} Yazdır</button>
-  `;
-  const modal = showModal({ title: 'Fatura Önizleme', body: bodyEl, footer: footerEl, size: 'xlarge' });
-
-  footerEl.querySelector('#closePdfModal')?.addEventListener('click', () => modal?.close());
-
-  try {
-    const res = source === 'earsiv' ? await EArchive.getInvoicePdf(uuid) : await EArchive.getInvoicePdf(uuid);
-    if (!res.success || !res.data) throw new Error(res.error || 'PDF alınamadı');
-
-    const content = typeof res.data === 'string' ? res.data : (res.data.File || res.data.String || res.data[0]);
-    if (!content) throw new Error('PDF içeriği boş');
-
-    const isBase64 = content.match(/^[a-zA-Z0-9+/=\s]+$/);
-    let blobUrl;
-    if (isBase64) {
-      const byteNumbers = await redactNilveraFooter(base64ToBytes(content));
-      blobUrl = URL.createObjectURL(new Blob([byteNumbers], { type: 'application/pdf' }));
-    } else {
-      blobUrl = URL.createObjectURL(new Blob([content], { type: 'application/pdf' }));
-    }
-
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || window.innerWidth < 768;
-    if (isMobile) {
-      bodyEl.style.height = 'auto'; bodyEl.style.minHeight = 'auto';
-      bodyEl.innerHTML = `
-        <div style="text-align:center;padding:30px">
-          <div style="width:64px;height:64px;border-radius:16px;background:var(--accent-bg);display:inline-flex;align-items:center;justify-content:center;margin-bottom:16px">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          </div>
-          <h3 style="font-size:16px;margin-bottom:8px">PDF Hazır</h3>
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Mobil tarayıcıda önizleme için PDF'i yeni sekmede açın</p>
-          <div style="display:flex;flex-direction:column;gap:10px;max-width:280px;margin:0 auto">
-            <a href="${blobUrl}" target="_blank" rel="noopener" class="btn btn-primary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none">${ic.fileText} PDF'i Aç</a>
-            <a href="${blobUrl}" download="Fatura_${uuid}.pdf" class="btn btn-secondary" style="display:flex;align-items:center;justify-content:center;gap:8px;text-decoration:none">${ic.download} PDF İndir</a>
-          </div>
-        </div>`;
-    } else {
-      bodyEl.innerHTML = `<iframe src="${blobUrl}#toolbar=0&navpanes=0&scrollbar=0" width="100%" height="100%" style="border:none;border-radius:4px;"></iframe>`;
-    }
-
-    const mailBtn = footerEl.querySelector('#mailPdfBtn');
-    const dlBtn = footerEl.querySelector('#downloadPdfBtn');
-    const printBtn = footerEl.querySelector('#printPdfBtn');
-    if (!isMobile) { mailBtn.style.display = 'flex'; dlBtn.style.display = 'flex'; printBtn.style.display = 'flex'; }
-
-    mailBtn.addEventListener('click', () => { modal?.close(); showEmailModal(uuid, source); });
-    dlBtn.addEventListener('click', () => {
-      const link = document.createElement('a'); link.href = blobUrl; link.download = `Fatura_${uuid}.pdf`;
-      document.body.appendChild(link); link.click(); document.body.removeChild(link);
-    });
-    printBtn.addEventListener('click', () => {
-      const iframe = bodyEl.querySelector('iframe');
-      if (iframe) { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
-    });
-
-    const origClose = modal?.close?.bind(modal);
-    if (modal && origClose) { modal.close = () => { URL.revokeObjectURL(blobUrl); origClose(); }; }
-
-  } catch (err) {
-    bodyEl.innerHTML = `<div class="empty-state">${ic.error}<h3>Önizleme Yüklenemedi</h3><p>${err.message}</p></div>`;
-  }
+function showPdfPreviewModal(uuid, source, meta = {}) {
+  openPdfViewer({
+    load: () => EArchive.getInvoicePdf(uuid),
+    meta: { ...meta, direction: 'outgoing', badge: 'E-Arşiv' },
+    actions: [{ label: 'Mail Gönder', icon: ic.mail, onClick: ({ close }) => { close(); showEmailModal(uuid, source); } }],
+  });
 }
 
 

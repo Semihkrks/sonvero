@@ -1,11 +1,15 @@
 import {saveAs} from 'file-saver';
 const active=new Map();
+async function exportOnMainThread(name,args){
+ try{const mod=await import('./cari-export.js');return await mod[name](...args);}
+ catch(error){console.error('[cari-export]',error);return {success:false,error:'Dosya hazırlanamadı. Sayfayı yenileyip tekrar deneyin.'};}
+}
 function exportInWorker(name,args,{signal}={}){
  if(signal?.aborted)return Promise.resolve({success:false,error:'Dışa aktarma iptal edildi.'});
  if(active.has(name))return Promise.resolve({success:false,error:'Önce devam eden dışa aktarmanın bitmesini bekleyin.'});
  const promise=new Promise(resolve=>{
   let worker;
-  try{worker=new Worker(new URL('../workers/cari-export.js',import.meta.url),{type:'module'});}catch{resolve({success:false,error:'Dosya işleyicisi başlatılamadı.'});return;}
+  try{worker=new Worker(new URL('../workers/cari-export.js',import.meta.url),{type:'module'});}catch{resolve(exportOnMainThread(name,args));return;}
   let delivered=false,finished=false;
   const finish=result=>{if(finished)return;finished=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);worker.terminate();resolve(result);};
   const abort=()=>finish({success:false,error:'Dışa aktarma iptal edildi.'});
@@ -16,7 +20,12 @@ function exportInWorker(name,args,{signal}={}){
    if(data.type==='file'){if(!delivered){delivered=true;saveAs(data.blob,data.fileName);}}
    else if(data.type==='result')finish(data.result);
   };
-  worker.onerror=()=>finish({success:false,error:'Dosya hazırlanamadı. Bilgilerinizi ve tarih aralığını kontrol edin.'});
+  worker.onerror=event=>{
+   event.preventDefault?.();
+   if(finished)return;
+   finished=true;clearTimeout(timer);signal?.removeEventListener('abort',abort);worker.terminate();
+   resolve(delivered?{success:true}:exportOnMainThread(name,args));
+  };
   try{worker.postMessage({name,args});}catch{finish({success:false,error:'Dışa aktarma verisi işleyiciye aktarılamadı.'});}
  });
  const tracked=promise.finally(()=>active.delete(name));active.set(name,tracked);return tracked;

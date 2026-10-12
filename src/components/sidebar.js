@@ -5,6 +5,7 @@ import { escapeHtml, safeColor } from '../lib/html.js';
 // ══════════════════════════════════════════
 import { listAccounts, getActiveAccountId, setActiveAccount } from '../services/account-manager.js';
 import { navigate } from '../router.js';
+import { logoMark } from './logo.js';
 
 // ── SVG Icons ──
 const icons = {
@@ -252,9 +253,9 @@ export function renderSidebar(currentRoute) {
 
   sidebar.innerHTML = `
     <div class="sidebar-brand">
-      <div class="sidebar-brand-icon">SV</div>
+      <div class="sidebar-brand-icon">${logoMark(36)}</div>
       <div class="sidebar-brand-text">
-        <h1>Sonvera 2.0</h1>
+        <h1>Sonvera</h1>
         <span>E-Fatura Platformu</span>
       </div>
       <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="Menüyü Daralt">
@@ -279,7 +280,7 @@ export function renderSidebar(currentRoute) {
     </nav>
 
     <div class="sidebar-footer">
-      <div class="sidebar-version">© 2026 Sonvera 2.0</div>
+      <div class="sidebar-version">© 2026 Sonvera</div>
     </div>
   `;
 

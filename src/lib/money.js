@@ -41,3 +41,18 @@ export function sumMoney(values) { return values.reduce((s, v) => s.plus(v ?? 0)
 export function istanbulDate(date = new Date()) {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
+/** Istanbul takvimine göre içinde bulunulan ayın son günü (YYYY-MM-DD). */
+export function istanbulMonthEnd(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]));
+  const y = Number(parts.year);
+  const m = Number(parts.month);
+  const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+}
+/** Filtre varsayılanı: yıl başı → ay sonu (bugün değil). */
+export function defaultFilterRange(date = new Date()) {
+  const end = istanbulMonthEnd(date);
+  return { start: `${end.slice(0, 4)}-01-01`, end };
+}

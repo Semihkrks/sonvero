@@ -27,7 +27,7 @@ async function setup(page:Page,{loseResponse=false}={}){
   if(url.pathname.includes('/functions/'))return send({success:true,data:[]});
   return send([]);
  });
- await page.goto('/#/cari');
+ await page.goto('/#/cari-react');
  await expect(page.getByRole('heading',{name:'Cari ve tahsilat',exact:true})).toBeVisible();
 }
 async function fillPayment(page:Page){

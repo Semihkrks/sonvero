@@ -12,9 +12,11 @@ Deno.serve(async request=>{
     const b=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(supplied)));
     allowed=a.reduce((v,x,i)=>v|(x^b[i]),0)===0;
   }
+  const admin=adminClient();
+  // pg_cron sends the Vault-generated secret, which never leaves the database.
+  if(!allowed&&supplied) { const {data}=await admin.rpc('scheduler_secret_matches',{p_secret:supplied}); allowed=data===true; }
   if(!allowed) { try{await authenticated(request);allowed=true;}catch{} }
   if(!allowed) return json(request,{error:'Yetkisiz'},401);
-  const admin=adminClient();
   await admin.rpc('schedule_recent_sync',{p_owner:Deno.env.get('OWNER_USER_ID')});
   const {data:jobs,error}=await admin.rpc('claim_background_jobs',{p_limit:2});
   if(error) return json(request,{error:'İş kuyruğu kullanılamıyor'},503);

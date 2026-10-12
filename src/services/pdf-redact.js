@@ -19,7 +19,7 @@ const FOOTER_PATTERNS = [
 ];
 
 let pdfjsLibPromise = null;
-async function getPdfjs() {
+export async function getPdfjs() {
   if (!pdfjsLibPromise) {
     pdfjsLibPromise = (async () => {
       const pdfjsLib = await import('pdfjs-dist');

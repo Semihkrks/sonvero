@@ -1,5 +1,5 @@
 import {exportCariDefter,exportCustomerCari,exportAllTransactions,exportMultiAccountCari,exportLedgerRows} from '../services/cari-export.js';
-const operations={exportCariDefter,exportCustomerCari,exportAllTransactions,exportMultiAccountCari};
+const operations={exportCariDefter,exportCustomerCari,exportAllTransactions,exportMultiAccountCari,exportLedgerRows};
 self.onmessage=async({data})=>{
  try{
   if(!Object.hasOwn(operations,data.name))throw new Error('Geçersiz dışa aktarma');

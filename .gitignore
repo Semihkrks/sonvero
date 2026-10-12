@@ -34,3 +34,8 @@ test-results/
 playwright-report/
 backups/
 supabase/.temp/
+
+# Local deploy scratch, plain DB dumps and personal bank statements
+SAFE/
+*.dump
+DEKONTÖRNEKLERİ/

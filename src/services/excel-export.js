@@ -150,7 +150,7 @@ export function exportInvoicesToExcel(invoices, options = {}) {
     const totalSubtotal = normalized.reduce((s, i) => s + (Number(i.subtotal) || 0), 0);
 
     const summaryData = [
-      ['Sonvera 2.0 — Export Özeti'],
+      ['Sonvera — Export Özeti'],
       [],
       ['Hesap', accountName || 'Bilinmiyor'],
       ['Export Tarihi', new Date().toLocaleDateString('tr-TR')],

@@ -1,5 +1,5 @@
 const CACHE_NAME = 'sonvera-shell-__BUILD_ID__';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/logo.svg'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL))));
 self.addEventListener('message',event=>{ if(event.data?.type==='ACTIVATE_UPDATE') self.skipWaiting(); });
 self.addEventListener('activate',event=>event.waitUntil((async()=>{

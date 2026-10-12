@@ -1,11 +1,14 @@
 import {rememberExportPeriod,exportPeriod} from '../lib/export-context.js';
 import { invoiceLedgerAmount, addAmount } from '../lib/ledger-finance.js';
+import { defaultFilterRange } from '../lib/money.js';
+import { escapeHtml, safeColor } from '../lib/html.js';
 import { EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { listAccounts } from '../services/account-manager.js';
 import { listCollections } from '../services/tahsilat-manager.js';
 import { showToast } from '../components/toast.js';
 import { exportAllTransactions } from '../services/cari-export-worker-client.js';
+import { forEachLimited } from '../lib/concurrency.js';
 
 const ic = {
   search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
@@ -38,7 +41,7 @@ function isRejected(inv) {
 }
 function fmtCur(a) { try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(a); } catch { return `${a} TRY`; } }
 function fmtDate(d) { try { return new Date(d).toLocaleDateString('tr-TR'); } catch { return d; } }
-function getDefaultRange() { const now = new Date(); return { start: `${now.getFullYear()}-01-01`, end: now.toISOString().slice(0, 10) }; }
+function getDefaultRange() { return defaultFilterRange(); }
 
 // ── State ──
 let customerMap = {};
@@ -71,10 +74,10 @@ export async function renderSelectedAccountCari() {
   allAccounts.forEach(a => selectedIds.add(a.id));
 
   const accountChips = allAccounts.map(a => `
-    <label class="sac-chip" data-id="${a.id}" style="--chip-color:${a.color || '#3b82f6'}">
-      <input type="checkbox" class="sac-acc-cb" value="${a.id}" checked />
-      <span class="sac-dot" style="background:${a.color || '#3b82f6'}"></span>
-      <span>${a.name}</span>
+    <label class="sac-chip" data-id="${escapeHtml(a.id)}" style="--chip-color:${safeColor(a.color)}">
+      <input type="checkbox" class="sac-acc-cb" value="${escapeHtml(a.id)}" checked />
+      <span class="sac-dot" style="background:${safeColor(a.color)}"></span>
+      <span>${escapeHtml(a.name)}</span>
     </label>
   `).join('') || `<span style="color:var(--text-muted);font-size:13px">Kayıtlı hesap yok.</span>`;
 
@@ -103,16 +106,19 @@ export async function renderSelectedAccountCari() {
         <label class="sac-toggle"><input type="checkbox" id="sacTahsilat" checked /> <span>Dahil et</span></label>
       </div>
       <div class="filter-group filter-search"><label class="filter-label">Müşteri Ara</label><input type="text" class="filter-input" id="sacSearchInput" placeholder="Ad veya VKN ile ara..." style="width:100%" /></div>
-      <div class="filter-actions" style="display:flex; align-items:flex-end; gap:8px;">
-        <button class="btn btn-sm btn-primary" id="sacApplyBtn" style="height:34px; padding:0 20px; font-weight:600; display:flex; gap:6px;">${ic.search} SEÇİLİ HESAPLARI TARA</button>
+      <div class="filter-actions">
+        <span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span>
+        <div class="filter-actions-row">
+          <button type="button" class="btn btn-sm btn-primary" id="sacApplyBtn">${ic.search} SEÇİLİ HESAPLARI TARA</button>
+        </div>
       </div>
     </div>
 
-    <div class="sac-export-bar" id="sacExportBar" style="display:none; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 14px; padding:10px 14px; background:var(--card-bg,#fff); border:1px solid var(--border,#e5e7eb); border-radius:8px;">
-      <span style="font-weight:600; font-size:13px;" id="sacExportLabel">Tüm işlemleri Excel'e aktar:</span>
-      <button class="btn btn-sm btn-success" id="sacExportTum" style="display:flex; gap:6px;">${ic.download} Tek Sayfa</button>
-      <button class="btn btn-sm btn-success" id="sacExportAyri" style="display:flex; gap:6px;">${ic.download} Hesaplar Ayrı</button>
-      <span id="sacExportInfo" style="font-size:12px; color:var(--text-muted); margin-left:auto;"></span>
+    <div class="sac-export-bar" id="sacExportBar" style="display:none">
+      <span class="sac-export-label" id="sacExportLabel">Tüm işlemleri Excel'e aktar:</span>
+      <button type="button" class="btn btn-sm btn-success" id="sacExportTum">${ic.download} Tek Sayfa</button>
+      <button type="button" class="btn btn-sm btn-success" id="sacExportAyri">${ic.download} Hesaplar Ayrı</button>
+      <span class="sac-export-info" id="sacExportInfo"></span>
     </div>
 
     <div class="cari-main-content" id="sacMainContent">
@@ -177,7 +183,6 @@ export async function renderSelectedAccountCari() {
     renderCustomerList(page);
   });
 
-  const notice=document.createElement('div');notice.className='sv-notice';notice.textContent='Bu görünüm yüklenen dönem kayıtlarını içerir. Dövizli, para birimi belirsiz ve iptal edilen belgeler TL bakiyesine katılmaz. Eksik hesap sonuçları tam bakiye değildir.';page.prepend(notice);
   return page;
 }
 
@@ -215,7 +220,7 @@ async function loadData(page) {
   const failedTahsilat = [];
   let completeScan=true;
 
-  for (const acc of accountsToScan) {
+  await forEachLimited(accountsToScan, 3, async (acc) => {
     try {
       // Akıllı fetch: 6 ay limiti chunking ile aşılır, kesin aylar arşivden gelir.
       const baseParams = { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) };
@@ -252,7 +257,7 @@ async function loadData(page) {
       completeScan=false;
       console.error(`Error scanning account ${acc.name}:`, e);
     }
-  }
+  });
 
   rememberExportPeriod(page,{start:startDate,end:endDate,complete:completeScan});
   if(!completeScan)showToast('Bazı kaynaklar yüklenemedi. Görünen bakiye eksiktir; dışa aktarmadan önce taramayı yenileyin.','warning');
@@ -358,27 +363,27 @@ function renderCustomerList(page) {
   }
 
   listEl.innerHTML = entries.map(([key, c]) => {
-    const initials = c.name.substring(0, 2).toUpperCase() || '??';
+    const initials = (c.name || '??').substring(0, 2).toLocaleUpperCase('tr-TR') || '??';
     const satisCount = c.items.filter(x => x._type !== 'tahsilat' && x._direction !== 'gelen').length;
     const alisCount = c.items.filter(x => x._direction === 'gelen').length;
     const tahCount = c.items.filter(x => x._type === 'tahsilat').length;
     const bakiye = c.totalSatis - c.totalAlis - c.totalTahsilat;
     const isChecked = exportCustomerKeys.has(key);
     return `
-      <div class="cari-customer-item ${selectedCustomerKey === key ? 'active' : ''} ${isChecked ? 'export-selected' : ''}" data-key="${key}">
+      <div class="cari-customer-item ${selectedCustomerKey === key ? 'active' : ''} ${isChecked ? 'export-selected' : ''}" data-key="${escapeHtml(key)}">
         <label class="sac-customer-check" title="Excel'e dahil et">
-          <input type="checkbox" class="sac-customer-cb" value="${key}" ${isChecked ? 'checked' : ''} />
+          <input type="checkbox" class="sac-customer-cb" value="${escapeHtml(key)}" ${isChecked ? 'checked' : ''} />
         </label>
-        <div class="cari-customer-avatar">${initials}</div>
+        <div class="cari-customer-avatar">${escapeHtml(initials)}</div>
         <div class="cari-customer-info">
-          <span class="cari-customer-name">${c.name}</span>
-          <span class="cari-customer-vkn">VKN: ${c.taxNo}</span>
+          <span class="cari-customer-name">${escapeHtml(c.name)}</span>
+          <span class="cari-customer-vkn">VKN: ${escapeHtml(c.taxNo)}</span>
           <span class="cari-customer-meta">${satisCount} satış · ${alisCount} alış · ${tahCount} tahsilat · ${Object.keys(c.accountBreakdown).length} hesap</span>
         </div>
         <div class="cari-customer-amounts" style="display:flex; gap:10px; margin-top:8px;">
           <div style="text-align:right"><div class="cari-customer-bakiye" style="color:var(--success);font-size:12px">${fmtCur(c.totalSatis)}</div><div class="cari-customer-bakiye-label" style="font-size:10px">Satış</div></div>
           <div style="text-align:right"><div class="cari-customer-bakiye" style="color:var(--warning);font-size:12px">${fmtCur(c.totalAlis)}</div><div class="cari-customer-bakiye-label" style="font-size:10px">Alış</div></div>
-          <div style="text-align:right"><div class="cari-customer-bakiye" style="color:var(--info);font-size:12px">${fmtCur(c.totalTahsilat)}</div><div class="cari-customer-bakiye-label" style="font-size:10px">Tahsilat</div></div>
+          <div style="text-align:right"><div class="cari-customer-bakiye" style="color:var(--tahsilat);font-size:12px">${fmtCur(c.totalTahsilat)}</div><div class="cari-customer-bakiye-label" style="font-size:10px">Tahsilat</div></div>
           <div style="text-align:right"><div class="cari-customer-bakiye" style="color:${bakiye > 0 ? 'var(--warning)' : 'var(--success)'};font-size:14px;font-weight:700">${fmtCur(bakiye)}</div><div class="cari-customer-bakiye-label" style="font-size:10px">Bakiye</div></div>
         </div>
       </div>`;
@@ -386,17 +391,21 @@ function renderCustomerList(page) {
 
   listEl.querySelectorAll('.cari-customer-item').forEach(item => {
     item.addEventListener('click', () => {
-      selectedCustomerKey = item.dataset.key;
+      const key = item.getAttribute('data-key');
+      if (!key || !customerMap[key]) return;
+      selectedCustomerKey = key;
       listEl.querySelectorAll('.cari-customer-item').forEach(i => i.classList.remove('active'));
       item.classList.add('active');
-      renderDetailPanel(page, customerMap[selectedCustomerKey]);
+      renderDetailPanel(page, customerMap[key]);
     });
 
-    // Checkbox: satırın "detay göster" tıklamasını tetiklemeden Excel seçimini değiştirir.
+    const checkWrap = item.querySelector('.sac-customer-check');
     const cb = item.querySelector('.sac-customer-cb');
+    checkWrap?.addEventListener('click', (e) => e.stopPropagation());
     cb?.addEventListener('click', (e) => e.stopPropagation());
     cb?.addEventListener('change', () => {
-      const key = item.dataset.key;
+      const key = item.getAttribute('data-key');
+      if (!key) return;
       if (cb.checked) exportCustomerKeys.add(key); else exportCustomerKeys.delete(key);
       item.classList.toggle('export-selected', cb.checked);
       updateExportBar(page);
@@ -422,58 +431,102 @@ function updateExportBar(page) {
 
 function renderDetailPanel(page, customer) {
   const panel = page.querySelector('#sacDetailPanel');
-  if (!panel) return;
+  if (!panel || !customer) return;
 
-  const breakdownHtml = Object.values(customer.accountBreakdown).sort((a, b) => (b.satis + b.alis) - (a.satis + a.alis)).map(acc => `
-    <div class="cari-detail-stat" style="border-left: 4px solid ${acc.color || '#ccc'}; flex: 1; min-width: 150px;">
-      <span class="cari-detail-stat-label">${acc.name}</span>
+  const breakdownHtml = Object.values(customer.accountBreakdown || {}).sort((a, b) => (b.satis + b.alis) - (a.satis + a.alis)).map(acc => `
+    <div class="cari-detail-stat" style="border-left: 4px solid ${safeColor(acc.color)}; flex: 1; min-width: 150px;">
+      <span class="cari-detail-stat-label">${escapeHtml(acc.name)}</span>
       <span class="cari-detail-stat-value" style="font-size:12px">${acc.count} hareket</span>
       <div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">
         <span class="cari-detail-stat-value" style="color:var(--success);font-size:12px">Satış: ${fmtCur(acc.satis)}</span>
         <span class="cari-detail-stat-value" style="color:var(--warning);font-size:12px">Alış: ${fmtCur(acc.alis)}</span>
-        <span class="cari-detail-stat-value" style="color:var(--info);font-size:12px">Tahsilat: ${fmtCur(acc.tahsilat)}</span>
+        <span class="cari-detail-stat-value" style="color:var(--tahsilat);font-size:12px">Tahsilat: ${fmtCur(acc.tahsilat)}</span>
       </div>
     </div>
   `).join('');
 
-  const rows = customer.items.map(inv => {
-    const isTahsilat = inv._type === 'tahsilat';
+  const invoices = (customer.items || []).filter((inv) => inv._type !== 'tahsilat');
+  const tahsilats = (customer.items || []).filter((inv) => inv._type === 'tahsilat');
+
+  const invoiceRows = invoices.map((inv) => {
     const isGelen = inv._direction === 'gelen';
-    const tur = isTahsilat ? 'Tahsilat' : (isGelen ? 'Alış' : 'Satış');
-    const turColor = isTahsilat ? 'var(--info)' : (isGelen ? 'var(--warning)' : 'var(--success)');
-    const amount = isTahsilat ? inv.amount : getAmount(inv);
-    return `
-    <tr>
-      <td>${fmtDate(isTahsilat ? inv.date : getInvoiceDate(inv))}</td>
-      <td><span class="badge" style="background:${inv._accountColor || '#666'};color:#fff">${inv._accountName}</span></td>
+    const tur = isGelen ? 'Alış' : 'Satış';
+    const turColor = isGelen ? 'var(--warning)' : 'var(--success)';
+    return `<tr>
+      <td>${fmtDate(getInvoiceDate(inv))}</td>
+      <td><span class="badge" style="background:${safeColor(inv._accountColor)};color:#fff">${escapeHtml(inv._accountName || '')}</span></td>
       <td><span style="color:${turColor};font-weight:600">${tur}</span></td>
-      <td>${isTahsilat ? (inv.description || '—') : getInvoiceNumber(inv)}</td>
-      <td style="text-align:right; font-weight:600; color:${turColor}">${fmtCur(amount)}</td>
+      <td>${escapeHtml(getInvoiceNumber(inv) || '—')}</td>
+      <td style="text-align:right; font-weight:600; color:${turColor}">${fmtCur(getAmount(inv))}</td>
     </tr>`;
   }).join('');
+
+  const tahsilatRows = tahsilats.map((inv) => `<tr>
+      <td>${fmtDate(inv.date)}</td>
+      <td><span class="badge" style="background:${safeColor(inv._accountColor)};color:#fff">${escapeHtml(inv._accountName || '')}</span></td>
+      <td><span style="color:var(--tahsilat);font-weight:600">Tahsilat</span></td>
+      <td>${escapeHtml(inv.description || '—')}</td>
+      <td style="text-align:right; font-weight:600; color:var(--tahsilat)">${fmtCur(inv.amount)}</td>
+    </tr>`).join('');
 
   const bakiye = customer.totalSatis - customer.totalAlis - customer.totalTahsilat;
 
   panel.innerHTML = `
     <div class="cari-detail-header">
       <div class="cari-detail-title">
-        <h3>${customer.name}</h3><span class="cari-detail-vkn">VKN: ${customer.taxNo}</span>
+        <h3>${escapeHtml(customer.name)}</h3><span class="cari-detail-vkn">VKN: ${escapeHtml(customer.taxNo)}</span>
       </div>
       <div class="cari-detail-actions" style="font-weight:700; color:${bakiye > 0 ? 'var(--warning)' : 'var(--success)'}">Bakiye: ${fmtCur(bakiye)}</div>
     </div>
 
     <div style="margin-bottom:15px">
       <h4 style="margin-bottom:10px; font-size:13px; color:var(--text-muted); text-transform:uppercase;">Hesaplara Göre Kırılım</h4>
-      <div class="cari-detail-summary">${breakdownHtml}</div>
+      <div class="cari-detail-summary">${breakdownHtml || '<div class="cari-section-empty">Kırılım yok</div>'}</div>
     </div>
 
-    <div class="cari-detail-table-wrap">
-      <table class="cari-detail-table">
-        <thead><tr><th>Tarih</th><th>Hesap</th><th>Tür</th><th>Belge</th><th style="text-align:right">Tutar</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="5">Kayıt yok</td></tr>'}</tbody>
-      </table>
+    <div class="cari-tabs" role="tablist" aria-label="Hareket türü">
+      <button type="button" class="cari-tab active" role="tab" aria-selected="true" data-cari-tab="faturalar">
+        Faturalar <span class="cari-tab-count">${invoices.length}</span>
+      </button>
+      <button type="button" class="cari-tab" role="tab" aria-selected="false" data-cari-tab="tahsilatlar">
+        Tahsilatlar <span class="cari-tab-count">${tahsilats.length}</span>
+      </button>
     </div>
+
+    <section class="cari-tab-panel active" data-cari-panel="faturalar" role="tabpanel">
+      <div class="cari-detail-table-wrap">
+        <table class="cari-detail-table">
+          <thead><tr><th>Tarih</th><th>Hesap</th><th>Tür</th><th>Belge</th><th style="text-align:right">Tutar</th></tr></thead>
+          <tbody>${invoiceRows || '<tr><td colspan="5" class="cari-section-empty">Bu dönemde fatura yok</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="cari-tab-panel" data-cari-panel="tahsilatlar" role="tabpanel" hidden>
+      <div class="cari-detail-table-wrap">
+        <table class="cari-detail-table">
+          <thead><tr><th>Tarih</th><th>Hesap</th><th>Tür</th><th>Açıklama</th><th style="text-align:right">Tutar</th></tr></thead>
+          <tbody>${tahsilatRows || '<tr><td colspan="5" class="cari-section-empty">Bu dönemde tahsilat yok</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
   `;
+
+  panel.querySelectorAll('[data-cari-tab]').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const name = tab.getAttribute('data-cari-tab');
+      panel.querySelectorAll('[data-cari-tab]').forEach((t) => {
+        const on = t === tab;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      panel.querySelectorAll('[data-cari-panel]').forEach((p) => {
+        const on = p.getAttribute('data-cari-panel') === name;
+        p.classList.toggle('active', on);
+        p.hidden = !on;
+      });
+    });
+  });
 }
 
 // Firma seçimi yapıldıysa sadece o firmaların hareketlerini döner, yoksa hepsini.
@@ -488,6 +541,14 @@ function getExportItems(page) {
   return items;
 }
 
+function getExportName(page) {
+  const visibleKeys = getVisibleCustomerEntries(page).map(([key]) => key);
+  const keys = exportCustomerKeys.size ? [...exportCustomerKeys].filter(k => visibleKeys.includes(k)) : visibleKeys;
+  if (keys.length === 1) return customerMap[keys[0]]?.name || '';
+  if (exportCustomerKeys.size > 1) return `Seçili ${keys.length} Firma`;
+  return selectedAccounts.length === 1 ? selectedAccounts[0].name : 'Tüm Firmalar';
+}
+
 async function doExport(page, layout) {
   const items = getExportItems(page);
   if (items.length === 0) {
@@ -497,7 +558,7 @@ async function doExport(page, layout) {
   try {
     const selCount = exportCustomerKeys.size;
     showToast(selCount > 0 ? `${selCount} firma için Excel hazırlanıyor...` : 'Excel hazırlanıyor...', 'info');
-    const res = await exportAllTransactions(items, selectedAccounts, { layout, direction, withTahsilat, dateRange:exportPeriod(page,'#sacDateStart','#sacDateEnd') });
+    const res = await exportAllTransactions(items, selectedAccounts, { layout, direction, withTahsilat, name:getExportName(page), dateRange:exportPeriod(page,'#sacDateStart','#sacDateEnd') });
     if (res.success) showToast(`Excel indirildi (${res.count} hareket${selCount > 0 ? `, ${selCount} firma` : ''}).`, 'success');
     else showToast('Hata: ' + res.error, 'error');
   } catch (e) {

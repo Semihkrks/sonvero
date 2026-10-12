@@ -1,6 +1,7 @@
 import {rememberExportPeriod,exportPeriod} from '../lib/export-context.js';
 import { invoiceLedgerAmount, addAmount } from '../lib/ledger-finance.js';
-import { parseTurkishAmount, istanbulDate, Decimal } from '../lib/money.js';
+import { parseTurkishAmount, istanbulDate, defaultFilterRange, Decimal } from '../lib/money.js';
+import { escapeHtml } from '../lib/html.js';
 // ══════════════════════════════════════════
 // Canlı Cari Sistemi — Müşteri Bazlı Cari Takip
 // ══════════════════════════════════════════
@@ -115,12 +116,9 @@ function extractItems(data) {
   return [];
 }
 
-// ── Default date range: Jan 1st of current year → today ──
+// ── Default date range: yıl başı → ayın sonu ──
 function getDefaultRange() {
-  const now = new Date();
-  const e = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-  const start = `${now.getFullYear()}-01-01`;
-  return { start, end: e };
+  return defaultFilterRange();
 }
 
 // ── State ──
@@ -186,12 +184,15 @@ export async function renderCariPage() {
         <label class="filter-label">Müşteri Ara</label>
         <input type="text" class="filter-input" id="cariSearchInput" placeholder="Ad veya VKN ile ara..." style="width:100%" />
       </div>
-      <div class="filter-actions" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:-4px;">
-        <button class="btn btn-sm" id="cariApplyBtn" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--accent); color:white; border:none">${ic.search} ARA</button>
-        <button class="btn btn-sm" id="cariImportBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--warning); color:white; border:none">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-          Toplu Tahsilat
-        </button>
+      <div class="filter-actions">
+        <span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span>
+        <div class="filter-actions-row">
+          <button type="button" class="btn btn-sm btn-primary" id="cariApplyBtn">${ic.search} ARA</button>
+          <button type="button" class="btn btn-sm btn-warning" id="cariImportBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Toplu Tahsilat
+          </button>
+        </div>
       </div>
     </div>
 
@@ -265,7 +266,6 @@ export async function renderCariPage() {
   // Sayfa açılır açılmaz verileri listele ki müşteriler ekranı boş kalmasın ve anlık filtreleme çalışsın
   setTimeout(() => loadCariData(page), 50);
 
-  const notice=document.createElement('div');notice.className='sv-notice';notice.textContent='Bu görünüm yüklenen dönem kayıtlarını içerir. Dövizli, para birimi belirsiz ve iptal edilen belgeler TL bakiyesine katılmaz. Eksik hesap sonuçları tam bakiye değildir.';page.prepend(notice);
   return page;
 }
 
@@ -570,11 +570,11 @@ function renderCustomerList(page) {
     const initials = customer.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() || '??';
 
     return `
-      <div class="cari-customer-item ${selectedCustomer === key ? 'active' : ''}" data-key="${key}">
-        <div class="cari-customer-avatar">${initials}</div>
+      <div class="cari-customer-item ${selectedCustomer === key ? 'active' : ''}" data-key="${escapeHtml(key)}">
+        <div class="cari-customer-avatar">${escapeHtml(initials)}</div>
         <div class="cari-customer-info">
-          <span class="cari-customer-name">${customer.name}</span>
-          <span class="cari-customer-vkn">VKN: ${customer.taxNo}</span>
+          <span class="cari-customer-name">${escapeHtml(customer.name)}</span>
+          <span class="cari-customer-vkn">VKN: ${escapeHtml(customer.taxNo)}</span>
           <span class="cari-customer-meta">${customer.invoiceCount} fatura · ${customer.tahsilatCount} tahsilat · ${fmtCur(tahsilatTotal, 'TRY')}</span>
         </div>
         <div class="cari-customer-amounts">
@@ -587,7 +587,7 @@ function renderCustomerList(page) {
   // Click events
   listEl.querySelectorAll('.cari-customer-item').forEach(item => {
     item.addEventListener('click', () => {
-      const key = item.dataset.key;
+      const key = item.getAttribute('data-key');
       selectedCustomer = key;
       // Mark active
       listEl.querySelectorAll('.cari-customer-item').forEach(i => i.classList.remove('active'));
@@ -629,119 +629,124 @@ function renderDetailPanel(page, customer, key) {
   const bakiye = customer.totalBorc - customer.totalAlacak;
   const bakiyeClass = bakiye > 0 ? 'cari-bakiye-positive' : bakiye < 0 ? 'cari-bakiye-negative' : 'cari-bakiye-zero';
 
-  // Liste en yeni -> en eski sıralı olduğu için ilk satır güncel toplam bakiyeyi göstermelidir.
-  let runningBakiye = bakiye;
-  const movementViews = customer.movements.map((mv) => {
-    const isCollection = !!mv._isCollection;
-    const date = mv.date;
+  const invoiceMoves = customer.movements.filter((mv) => !mv._isCollection);
+  const tahsilatMoves = customer.movements.filter((mv) => mv._isCollection);
+
+  const invoiceRows = invoiceMoves.map((mv) => {
     const borc = Number(mv.borc || 0);
     const alacak = Number(mv.alacak || 0);
-    const bakiyeAtRow = runningBakiye;
-    const bakiyeRowClass = bakiyeAtRow > 0 ? 'cari-bakiye-positive' : bakiyeAtRow < 0 ? 'cari-bakiye-negative' : '';
-    const badgeClass = isCollection ? 'badge-success' : (currentSource === 'giden' ? 'badge-info' : 'badge-warning');
-    const turText = mv.type || (isCollection ? 'Tahsilat' : (currentSource === 'giden' ? 'Satış Faturası' : 'Alım Faturası'));
-    const aciklama = mv.description || (customer.name || 'Bilinmeyen Cari');
-    const collectionActions = isCollection && mv.raw?.id
-      ? `<div class="cari-movement-actions">
-          <button class="btn btn-sm btn-secondary" data-action="edit-collection" data-collection-id="${mv.raw.id}">Duzenle</button>
-          <button class="btn btn-sm btn-danger" data-action="delete-collection" data-collection-id="${mv.raw.id}">Sil</button>
-        </div>`
-      : '';
-
-    const view = {
-      date,
-      borc,
-      alacak,
-      runningBakiye: bakiyeAtRow,
-      turText,
-      aciklama,
-      badgeClass,
-      bakiyeRowClass,
-      collectionActions,
-    };
-
-    // Bir sonraki (daha eski) satıra geçerken mevcut hareket etkisini geri al.
-    runningBakiye -= (borc - alacak);
-
-    return view;
-  });
-
-    const rows = movementViews.map((mv) => `<tr>
+    const badgeClass = mv.type?.includes('Alım') || currentSource === 'gelen' ? 'badge-warning' : 'badge-info';
+    const turText = escapeHtml(mv.type || 'Satış Faturası');
+    const aciklama = escapeHtml(mv.description || customer.name || 'Bilinmeyen Cari');
+    return `<tr>
       <td data-label="Tarih">${fmtDate(mv.date)}</td>
-      <td data-label="Tür"><span class="badge ${mv.badgeClass}">${mv.turText}</span></td>
-      <td data-label="Fatura No / Aç.">${mv.aciklama}${mv.collectionActions}</td>
-      <td data-label="Borç (Satış)" class="cari-col-borc">${mv.borc > 0 ? fmtCur(mv.borc, 'TRY') : ''}</td>
-      <td data-label="Alacak (Tahs.)" class="cari-col-alacak">${mv.alacak > 0 ? fmtCur(mv.alacak, 'TRY') : ''}</td>
-      <td data-label="Bakiye" class="${mv.bakiyeRowClass}" style="font-weight:600">${fmtCur(Math.abs(mv.runningBakiye), 'TRY')}</td>
-    </tr>`).join('');
+      <td data-label="Tür"><span class="badge ${badgeClass}">${turText}</span></td>
+      <td data-label="Fatura No">${aciklama}</td>
+      <td data-label="Borç" class="cari-num cari-col-borc">${borc > 0 ? fmtCur(borc, 'TRY') : ''}</td>
+      <td data-label="Alacak" class="cari-num cari-col-alacak">${alacak > 0 ? fmtCur(alacak, 'TRY') : ''}</td>
+    </tr>`;
+  }).join('');
 
-  const mobileCards = movementViews.map((mv) => `
-    <article class="cari-movement-card">
+  const tahsilatRows = tahsilatMoves.map((mv) => {
+    const alacak = Number(mv.alacak || 0);
+    const aciklama = escapeHtml(mv.description || 'Tahsilat');
+    const id = mv.raw?.id ? escapeHtml(String(mv.raw.id)) : '';
+    const actions = id
+      ? `<div class="cari-row-actions">
+          <button type="button" class="btn btn-sm btn-secondary" data-action="edit-collection" data-collection-id="${id}">Düzenle</button>
+          <button type="button" class="btn btn-sm btn-danger" data-action="delete-collection" data-collection-id="${id}">Sil</button>
+        </div>`
+      : '<span class="cari-row-actions-empty">—</span>';
+    return `<tr>
+      <td data-label="Tarih">${fmtDate(mv.date)}</td>
+      <td data-label="Tür"><span class="badge badge-success">${escapeHtml(mv.type || 'Tahsilat')}</span></td>
+      <td data-label="Açıklama">${aciklama}</td>
+      <td data-label="Tutar" class="cari-num cari-col-alacak">${alacak > 0 ? fmtCur(alacak, 'TRY') : ''}</td>
+      <td data-label="İşlem" class="cari-col-actions">${actions}</td>
+    </tr>`;
+  }).join('');
+
+  const invoiceCards = invoiceMoves.map((mv) => {
+    const borc = Number(mv.borc || 0);
+    const alacak = Number(mv.alacak || 0);
+    return `<article class="cari-movement-card">
       <div class="cari-movement-top">
         <span class="cari-movement-date">${fmtDate(mv.date)}</span>
-        <span class="badge ${mv.badgeClass}">${mv.turText}</span>
+        <span class="badge badge-info">${escapeHtml(mv.type || 'Fatura')}</span>
       </div>
-      <div class="cari-movement-desc">${mv.aciklama}</div>
+      <div class="cari-movement-desc">${escapeHtml(mv.description || '')}</div>
       <div class="cari-movement-amounts">
-        <div class="cari-movement-pill">
-          <span class="cari-movement-pill-label">Borç</span>
-          <span class="cari-movement-pill-value cari-col-borc">${mv.borc > 0 ? fmtCur(mv.borc, 'TRY') : '—'}</span>
-        </div>
-        <div class="cari-movement-pill">
-          <span class="cari-movement-pill-label">Alacak</span>
-          <span class="cari-movement-pill-value cari-col-alacak">${mv.alacak > 0 ? fmtCur(mv.alacak, 'TRY') : '—'}</span>
-        </div>
-        <div class="cari-movement-pill">
-          <span class="cari-movement-pill-label">Bakiye</span>
-          <span class="cari-movement-pill-value ${mv.bakiyeRowClass}">${fmtCur(Math.abs(mv.runningBakiye), 'TRY')}</span>
-        </div>
+        <div class="cari-movement-pill"><span class="cari-movement-pill-label">Borç</span><span class="cari-movement-pill-value">${borc > 0 ? fmtCur(borc, 'TRY') : '—'}</span></div>
+        <div class="cari-movement-pill"><span class="cari-movement-pill-label">Alacak</span><span class="cari-movement-pill-value">${alacak > 0 ? fmtCur(alacak, 'TRY') : '—'}</span></div>
       </div>
-      ${mv.collectionActions}
-    </article>
-  `).join('');
+    </article>`;
+  }).join('');
+
+  const tahsilatCards = tahsilatMoves.map((mv) => {
+    const alacak = Number(mv.alacak || 0);
+    const id = mv.raw?.id ? escapeHtml(String(mv.raw.id)) : '';
+    const actions = id
+      ? `<div class="cari-row-actions">
+          <button type="button" class="btn btn-sm btn-secondary" data-action="edit-collection" data-collection-id="${id}">Düzenle</button>
+          <button type="button" class="btn btn-sm btn-danger" data-action="delete-collection" data-collection-id="${id}">Sil</button>
+        </div>`
+      : '';
+    return `<article class="cari-movement-card">
+      <div class="cari-movement-top">
+        <span class="cari-movement-date">${fmtDate(mv.date)}</span>
+        <span class="badge badge-success">${escapeHtml(mv.type || 'Tahsilat')}</span>
+      </div>
+      <div class="cari-movement-desc">${escapeHtml(mv.description || '')}</div>
+      <div class="cari-movement-amounts">
+        <div class="cari-movement-pill"><span class="cari-movement-pill-label">Tutar</span><span class="cari-movement-pill-value">${alacak > 0 ? fmtCur(alacak, 'TRY') : '—'}</span></div>
+      </div>
+      ${actions}
+    </article>`;
+  }).join('');
 
   panel.innerHTML = `
     <div class="cari-detail-header">
       <div class="cari-detail-title">
-        <h3>${customer.name}</h3>
-        <span class="cari-detail-vkn">VKN: ${customer.taxNo}</span>
+        <h3>${escapeHtml(customer.name)}</h3>
+        <span class="cari-detail-vkn">VKN: ${escapeHtml(customer.taxNo)}</span>
       </div>
       <div class="cari-detail-actions">
-        <button class="btn btn-sm btn-warning" id="toggleTahsilatFormBtn">
-          + Tahsilat Ekle
-        </button>
-        <button class="btn btn-sm btn-success" id="exportCariBtn">
-          ${ic.download} Excel'e Aktar
-        </button>
+        <button class="btn btn-sm btn-warning" id="toggleTahsilatFormBtn">+ Tahsilat Ekle</button>
+        <button class="btn btn-sm btn-success" id="exportCariBtn">${ic.download} Excel'e Aktar</button>
       </div>
     </div>
 
-    <div id="tahsilatFormWrap" class="cari-tahsilat-form" style="display:none;">
+    <div id="tahsilatFormWrap" class="cari-tahsilat-form" hidden>
+      <div class="cari-tahsilat-form-head">
+        <div>
+          <h4>Yeni Tahsilat</h4>
+          <p>Bu cariye TRY tahsilat kaydı ekleyin.</p>
+        </div>
+      </div>
       <div class="cari-tahsilat-grid">
         <div>
-          <label class="cari-tahsilat-label">Tarih</label>
+          <label class="cari-tahsilat-label" for="tahsilatDate">Tarih</label>
           <input type="date" id="tahsilatDate" class="form-input" value="${istanbulDate()}" />
         </div>
         <div>
-          <label class="cari-tahsilat-label">Tür</label>
+          <label class="cari-tahsilat-label" for="tahsilatType">Tür</label>
           <input type="text" id="tahsilatType" class="form-input" value="Tahsilat" />
         </div>
         <div>
-          <label class="cari-tahsilat-label">Tutar (TRY)</label>
-          <input type="text" inputmode="decimal" id="tahsilatAmount" class="form-input cari-amount-input" placeholder="0" />
+          <label class="cari-tahsilat-label" for="tahsilatAmount">Tutar (TRY)</label>
+          <input type="text" inputmode="decimal" id="tahsilatAmount" class="form-input cari-amount-input" placeholder="0,00" />
         </div>
         <div class="cari-tahsilat-full">
-          <label class="cari-tahsilat-label">Açıklama</label>
-          <input type="text" id="tahsilatDesc" class="form-input" placeholder="Orn: Nakit tahsilat" />
+          <label class="cari-tahsilat-label" for="tahsilatDesc">Açıklama</label>
+          <input type="text" id="tahsilatDesc" class="form-input" placeholder="Örn: Nakit tahsilat / Havale" />
         </div>
       </div>
       <div class="cari-tahsilat-actions">
-        <button class="btn btn-sm btn-secondary" id="cancelTahsilatBtn">Vazgec</button>
-        <button class="btn btn-sm btn-primary" id="saveTahsilatBtn">Kaydet</button>
+        <button type="button" class="btn btn-sm btn-secondary" id="cancelTahsilatBtn">Vazgeç</button>
+        <button type="button" class="btn btn-sm btn-primary" id="saveTahsilatBtn">Kaydet</button>
       </div>
     </div>
 
-    <!-- Customer Summary -->
     <div class="cari-detail-summary">
       <div class="cari-detail-stat">
         <span class="cari-detail-stat-label">Fatura Sayısı</span>
@@ -753,7 +758,7 @@ function renderDetailPanel(page, customer, key) {
       </div>
       <div class="cari-detail-stat">
         <span class="cari-detail-stat-label">Toplam Borç (Satış)</span>
-        <span class="cari-detail-stat-value" style="color:var(--info)">${fmtCur(customer.totalBorc, 'TRY')}</span>
+        <span class="cari-detail-stat-value" style="color:var(--warning)">${fmtCur(customer.totalBorc, 'TRY')}</span>
       </div>
       <div class="cari-detail-stat">
         <span class="cari-detail-stat-label">Toplam Alacak (Alım + Tahsilat)</span>
@@ -765,27 +770,51 @@ function renderDetailPanel(page, customer, key) {
       </div>
     </div>
 
-    <!-- Hareket Tablosu -->
-    <div class="cari-mobile-movements">
-      ${mobileCards || '<div class="cari-loading-state"><p>Hareket bulunamadi</p></div>'}
+    <div class="cari-tabs" role="tablist" aria-label="Hareket türü">
+      <button type="button" class="cari-tab active" role="tab" aria-selected="true" data-cari-tab="faturalar">
+        Faturalar <span class="cari-tab-count">${invoiceMoves.length}</span>
+      </button>
+      <button type="button" class="cari-tab" role="tab" aria-selected="false" data-cari-tab="tahsilatlar">
+        Tahsilatlar <span class="cari-tab-count">${tahsilatMoves.length}</span>
+      </button>
     </div>
 
-    <div class="cari-detail-table-wrap">
-      <table class="cari-detail-table">
-        <thead>
-          <tr>
-            <th>Tarih</th>
-            <th>Tür</th>
-            <th>Fatura No / Açıklama</th>
-            <th>Borç (Satış)</th>
-            <th>Alacak (Alım + Tahsilat)</th>
-            <th>Bakiye</th>
-          </tr>
-        </thead>
-        <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text-muted)">Hareket bulunamadı</td></tr>'}</tbody>
-      </table>
-    </div>
+    <section class="cari-tab-panel active" data-cari-panel="faturalar" role="tabpanel" aria-label="Faturalar">
+      <div class="cari-mobile-movements">${invoiceCards || '<div class="cari-section-empty">Bu dönemde fatura yok</div>'}</div>
+      <div class="cari-detail-table-wrap">
+        <table class="cari-detail-table">
+          <thead><tr><th>Tarih</th><th>Tür</th><th>Fatura No</th><th class="cari-num">Borç</th><th class="cari-num">Alacak</th></tr></thead>
+          <tbody>${invoiceRows || '<tr><td colspan="5" class="cari-section-empty">Bu dönemde fatura yok</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="cari-tab-panel" data-cari-panel="tahsilatlar" role="tabpanel" aria-label="Tahsilatlar" hidden>
+      <div class="cari-mobile-movements">${tahsilatCards || '<div class="cari-section-empty">Bu dönemde tahsilat yok</div>'}</div>
+      <div class="cari-detail-table-wrap">
+        <table class="cari-detail-table">
+          <thead><tr><th>Tarih</th><th>Tür</th><th>Açıklama</th><th class="cari-num">Tutar</th><th class="cari-col-actions">İşlem</th></tr></thead>
+          <tbody>${tahsilatRows || '<tr><td colspan="5" class="cari-section-empty">Bu dönemde tahsilat yok</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
   `;
+
+  panel.querySelectorAll('[data-cari-tab]').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const name = tab.getAttribute('data-cari-tab');
+      panel.querySelectorAll('[data-cari-tab]').forEach((t) => {
+        const on = t === tab;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      panel.querySelectorAll('[data-cari-panel]').forEach((p) => {
+        const on = p.getAttribute('data-cari-panel') === name;
+        p.classList.toggle('active', on);
+        p.hidden = !on;
+      });
+    });
+  });
 
   let editingCollectionId = null;
   const tahsilatDateInput = panel.querySelector('#tahsilatDate');
@@ -813,9 +842,28 @@ function renderDetailPanel(page, customer, key) {
   let savingCollection = false;
   let editingVersion = null;
 
+  const switchCariTab = (name) => {
+    panel.querySelectorAll('[data-cari-tab]').forEach((t) => {
+      const on = t.getAttribute('data-cari-tab') === name;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    panel.querySelectorAll('[data-cari-panel]').forEach((p) => {
+      const on = p.getAttribute('data-cari-panel') === name;
+      p.classList.toggle('active', on);
+      p.hidden = !on;
+    });
+  };
+
+  const setTahsilatFormOpen = (open) => {
+    if (!tahsilatWrap) return;
+    tahsilatWrap.hidden = !open;
+    if (open) switchCariTab('tahsilatlar');
+  };
+
   const resetTahsilatForm = () => {
     editingCollectionId = null;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = istanbulDate();
     if (tahsilatDateInput?._flatpickr) {
       tahsilatDateInput._flatpickr.setDate(today, true, 'Y-m-d');
     } else if (tahsilatDateInput) {
@@ -840,8 +888,8 @@ function renderDetailPanel(page, customer, key) {
     if (panel.querySelector('#tahsilatType')) panel.querySelector('#tahsilatType').value = movement.type || 'Tahsilat';
     if (panel.querySelector('#tahsilatAmount')) panel.querySelector('#tahsilatAmount').value = formatAmountInput(movement.alacak || movement.amount || 0);
     if (panel.querySelector('#tahsilatDesc')) panel.querySelector('#tahsilatDesc').value = movement.description || '';
-    if (saveBtn) saveBtn.textContent = 'Guncelle';
-    if (tahsilatWrap) tahsilatWrap.style.display = 'block';
+    if (saveBtn) saveBtn.textContent = 'Güncelle';
+    setTahsilatFormOpen(true);
   };
 
   const confirmDeleteModal = () => new Promise((resolve) => {
@@ -886,11 +934,12 @@ function renderDetailPanel(page, customer, key) {
 
   panel.querySelector('#toggleTahsilatFormBtn')?.addEventListener('click', () => {
     if (!tahsilatWrap) return;
-    tahsilatWrap.style.display = tahsilatWrap.style.display === 'none' ? 'block' : 'none';
-    if (tahsilatWrap.style.display === 'none') resetTahsilatForm();
+    const nextOpen = tahsilatWrap.hidden;
+    setTahsilatFormOpen(nextOpen);
+    if (!nextOpen) resetTahsilatForm();
   });
   panel.querySelector('#cancelTahsilatBtn')?.addEventListener('click', () => {
-    if (tahsilatWrap) tahsilatWrap.style.display = 'none';
+    setTahsilatFormOpen(false);
     resetTahsilatForm();
   });
 

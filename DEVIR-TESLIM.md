@@ -1,10 +1,132 @@
 # Sonvera — devir teslim ve yapılacaklar
 
-Son güncelleme: **12 Ekim 2026 (canlı geçiş turu)**. Bu dosya başka IDE/AI ajanına geçiş için ana başlangıç noktasıdır. HER OTURUM / YANIT BİTİŞİNDE bu dosyayı güncellemek zorunludur; bu kural sonraki IDE ve ajanlar için de geçerlidir. Yapılanları, kalanları, doğrulanmayanları ve sıradaki somut adımı yazın. Tamamlanan işlerin üzerine yazmayın; mevcut kullanıcı değişikliklerini koruyun.
+Son güncelleme: **12 Ekim 2026 (Sonvera marka/logo + GitHub main push + ALLOWED_ORIGINS)**. Bu dosya başka IDE/AI ajanına geçiş için ana başlangıç noktasıdır. HER OTURUM / YANIT BİTİŞİNDE bu dosyayı güncellemek zorunludur; bu kural sonraki IDE ve ajanlar için de geçerlidir. Yapılanları, kalanları, doğrulanmayanları ve sıradaki somut adımı yazın. Tamamlanan işlerin üzerine yazmayın; mevcut kullanıcı değişikliklerini koruyun.
 
 ## Yeni IDE'ye verilecek mesaj
 
-> DEVIR-TESLIM.md, docs/IMPLEMENTATION-STATUS.md, docs/ROLLOUT.md ve DESIGN.md dosyalarını oku. Mevcut değişiklikleri koruyarak Sonvera geliştirmesine devam et. Planın tamamını uygulanmış sayma. Önce `git status --short` ve aşağıdaki **12 Ekim canlı geçiş** bölümünü kontrol et. Canlıda 001–015 migration uygulandı; Edge `nilvera` + `job-runner` deploy edildi. Edge secrets ve Cloudflare istemci yayını hâlâ açık. Gizli anahtarları terminale, dokümana veya sohbete yazma. HER BİTİŞTE bu dosyayı güncelle.
+> DEVIR-TESLIM.md, docs/IMPLEMENTATION-STATUS.md, docs/ROLLOUT.md ve DESIGN.md dosyalarını oku. Mevcut değişiklikleri koruyarak Sonvera geliştirmesine devam et. Planın tamamını uygulanmış sayma. Önce `git status --short` ve aşağıdaki **12 Ekim ana sayfa / küçük detaylar**, **12 Ekim UI/Excel turu** ile **12 Ekim canlı geçiş** bölümlerini kontrol et. Canlıda 001–015 + `20261011230708_fix_archive_range_istanbul_date` + `20261012082420_safe_decimal_search_path` + `20261012101500_close_reconcile_on_finish` + `20261012103000_scheduler_secret_check` + `20261012104500_archive_skip_unchanged` migration uygulandı; pg_cron zamanlayıcısı (`sonvera-jobs`, 5 dk) kuruldu; Edge `nilvera` + `job-runner` (v4) deploy edildi ve Edge secrets yazıldı. Yayın Vercel'den (GitHub `main`, domain `sonvera.com.tr`); yeni istemci `main`'e pushlandı, `ALLOWED_ORIGINS`'e domainler eklendi. DB parola yenileme, Auth kayıt kapatma, günlük yedek görevi ve gerçek telefon testi hâlâ açık. Gizli anahtarları terminale, dokümana veya sohbete yazma. HER BİTİŞTE bu dosyayı güncelle.
+
+## 12 Ekim Sonvera marka/logo + yayın (en yeni)
+
+### Yapılanlar
+- "Sonvera 2.0" → "Sonvera" (başlık, kenar menü, alt bilgi, manifest, Excel özeti).
+- Yeni logo: `public/logo.svg` (mavi kare + beyaz S + açık mavi nokta). Menü ve giriş ekranı aynı çizimi `src/components/logo.js` → `logoMark(boyut)` ile satır içi SVG olarak kullanır.
+- Favicon: `logo.svg` + `favicon-32.png`; iOS: `apple-touch-icon.png`; PWA: `icon-192/512.png` + `icon-maskable-192/512.png` (kenarsız). PNG'ler `node scripts/render-brand-icons.mjs` ile (Playwright) logo.svg'den üretilir; logo değişirse bu komutu tekrar çalıştırın.
+- `sw.js` önbelleğine `/logo.svg` eklendi (önbellek adı her build'de değiştiği için yeni ikonlar güncellemeyle gelir; telefona kurulu PWA ikonu işletim sistemine göre geç yenilenebilir, gerekirse kaldırıp tekrar ekleyin).
+- Edge secret `ALLOWED_ORIGINS` = localhost:5173 + 127.0.0.1:5173 + `https://sonvera.com.tr` + `https://www.sonvera.com.tr` (Supabase CLI ile). Doğrulandı: iki domain kabul, yabancı origin `null`.
+- Doğrulama: typecheck temiz, 62/62 unit, lint 0 hata, build OK, e2e 11 geçti / 2 atlandı; tarayıcıda menü logosu + favicon linkleri + başlık kontrol edildi.
+- Commit + `main`'e push (fast-forward, Vercel otomatik yayınlar). SAFE/, dist/, backups/, DEKONTÖRNEKLERİ/ gitignore'da, commitlenmedi; commit öncesi gizli anahtar taraması temiz.
+
+### Kalan
+- Yayın sonrası sonvera.com.tr'de giriş + Nilvera çağrısı + PWA ikonunun gerçek telefonda kontrolü.
+- Supabase Auth → yeni kayıtları kapat; DB parola yenileme (kullanıcı kararı); `configure-backup.ps1` günlük yedek; `SAFE/restore.dump` silinmesi.
+- Ölü `.dash-widget*` / `.dash-currency*` CSS'i temizlenebilir (zararsız).
+
+## 12 Ekim Disk G/Ç uyarısı + Vercel hazırlığı
+
+### Disk G/Ç
+- Supabase "Disk I/O budget tükenmek üzere" uyarısı. Ölçüm: Temmuz'dan beri WAL 102 MB, disk okuma 22 MB, cache hit %99,99, bağlantılar normal (PostgREST 5 boşta). Postgres sorgu yükü düşük; bütçe büyük ihtimalle bugünkü yoğun tek seferlik işler (yedek/dump, migration'lar, deploy, ilk tarama) + Nano compute'un küçük belleğinden. Kendiliğinden dolar; tekrarlarsa Dashboard → Reports → Database'de Memory/Swap ve Disk IO grafiğine bakın.
+- Gerçek israf bulundu ve düzeltildi: `replace_invoice_archive` (tarayıcı) ve `stage_archive_page` (zamanlayıcı) her çağrıda aralıktaki TÜM satırları değişmese de yeniden yazıyordu; her satır `archive_revision` tetikleyicisiyle `ledger_revisions`'ı da güncelliyordu (cari önbelleğini de boşa geçersiz kılıyordu). `20261012104500_archive_skip_unchanged.sql` (canlı): `on conflict ... do update ... where payload/issue_date is distinct from`. Geri alınan kuru test: 269 aynı satır gönderildi, 0 yeniden yazıldı. Yetkiler aynı.
+- Not: `invoice_archive`'taki ~19 bin silme eski istemci kodundan; mevcut fonksiyon silmiyor.
+
+### Vercel
+- Yayın Vercel'den (GitHub `Semihkrks/sonvero`, `main` → production). Cloudflare kullanılmayacak; `wrangler.jsonc` / `public/_headers` artık gereksiz.
+- `vercel.json`'a `_headers` eşdeğeri güvenlik + önbellek başlıkları eklendi (assets 1 yıl immutable, `sw.js` ve `index.html` no-cache).
+- Ortam değişkeni gerekmez (public Supabase URL/anon anahtarı kodda varsayılan).
+- ~~**Zorunlu:** Vercel production domain(ler)i Edge secret `ALLOWED_ORIGINS`'e eklenmeli.~~ Yapıldı (yukarıdaki marka/yayın bölümüne bakın). Yeni domain eklenirse: `npx supabase secrets set "ALLOWED_ORIGINS=...virgülle tüm liste..." --project-ref ciaffmgszfvyrdoweirw` (mevcut değerleri koruyun).
+- Uyarı: `origin/main` = `32ff362` (canlı backend geçişinden önceki eski istemci). Şu anki Vercel sitesi muhtemelen Nilvera tarafında çalışmıyor; yeni istemci `cursor/live-rollout-backup-edge` dalında + commitlenmemiş değişikliklerde.
+
+## 12 Ekim zamanlayıcı kurulumu
+
+### Yapılanlar (canlı)
+- `pg_cron` + `pg_net` açıldı. Cron işi `sonvera-jobs` her 5 dk `job-runner`'ı çağırır (aktif, job id 1).
+- Vault: `sonvera_project_url` + `sonvera_scheduler_secret`. Secret veritabanında `gen_random_bytes(32)` ile üretildi; hiçbir yere yazdırılmadı/kopyalanmadı. Okumayın, yazdırmayın.
+- Edge `SCHEDULER_SECRET` ile eşleştirme gerekmesin diye `public.scheduler_secret_matches(text)` (yalnız service_role; SHA-256 karşılaştırma, ≥32 karakter) → migration `20261012103000_scheduler_secret_check.sql`. `job-runner` v4: env secret eşleşmezse Vault kontrolü, sonra oturum kontrolü.
+- `supabase/setup-scheduler.sql` güncellendi: scheduler secret'ı kendisi üretir; yalnız `sonvera_project_url` önceden gerekli.
+- Test tetiklemesi: HTTP 200 `{"processed":2,"claimed":2}`. İlk çalışmada 30 tarama işi oluştu (6 hesap × 4 belge türü bu ay + hesap başı 1 geçmiş ay); 5 dk'da 2 iş → kuyruk ~70 dk'da erir. Ayarlar'daki "Bekleyen işler" sayısı bu sürede yüksek görünür, normaldir. DB 19 MB / 500 MB.
+- Yanlış/kısa secret reddedildi; anon/authenticated fonksiyonu çağıramaz. `deno check` geçti.
+
+### Kalan
+- Parola/token yenileme kullanıcı kararıyla ertelendi (risk açıklandı).
+- Auth yeni kayıt kapatma, Cloudflare yayın + `ALLOWED_ORIGINS`, yedek görevi, `SAFE/restore.dump` silme, gerçek telefon testi, commit.
+
+## 12 Ekim sadeleştirme + takılı iş düzeltmesi
+
+### Yapılanlar
+- **Ana sayfa:** Kontör / WhatsApp / Sms kutuları (sabit sahte değerlerdi: 1.000/725/275) ve döviz tablosu kaldırıldı; `loadCurrencyRates` silindi. `main.css`/`mobile.css`'te `.dash-widget*` / `.dash-currency*` stilleri ölü kod olarak duruyor (zararsız).
+- **Hızlı erişim (mobil "Diğer"):** Excel Çıktısı / Hesaplar / Ayarlar çıkarıldı; yalnız Cari (Tüm/Seçili) + Faturalar (Gelen/Giden/Oluştur/e-Arşiv) + "Tüm menü". Tam yükseklik yan panel yerine "Diğer" butonunun üstünde açılan kompakt kart (sağ alt, 300 px, içerik kadar yükseklik).
+- **"Bekleyen ve kontrol gereken işler" → "Belge durumu kontrolü / Bekliyor / Sırası bekleniyor":** Her Nilvera yazma işleminde (`begin_nilvera_operation`) 2 dk sonrası için `reconcile` işi açılıyordu; işlem 1 sn'de başarılı bitse de iş kapanmıyordu. Ayrıca canlıda **zamanlayıcı yok** (pg_cron/pg_net kurulu değil, `sonvera_*` Vault secret'ları yok) → iş sonsuza dek "Bekliyor". Canlıdaki 2 iş bugünkü iki e-Arşiv e-posta gönderiminden (`/earchive/Invoices/Email/Send`, ikisi de `succeeded`). Düzeltme: `supabase/migrations/20261012101500_close_reconcile_on_finish.sql` (canlıya uygulandı) — `finish_nilvera_operation` sonuç `succeeded`/`failed` olunca bağlı reconcile işini `done` yapar; mevcut takılı işler kapatıldı. Yetki değişmedi (yalnız service_role). Ayarlar'da metinler: "Gönderim sonucu teyidi" / "Nilvera arşiv taraması", açıklama paragrafı.
+
+### Doğrulama
+typecheck · 62 test · lint 0 error · build · E2E 11 geçti / 2 atlandı. Canlı DB: background_jobs = 2 done, 0 pending. Tarayıcı (390 px): kompakt hızlı erişim kartı, ana sayfa alt kutular yok, Ayarlar "Bekleyen iş bulunmuyor".
+
+### Yayın öncesi kalanlar (öncelik sırası)
+1. Sohbete/terminale düşen DB parolası + Supabase erişim token'ları yenile (Dashboard → Database → Reset password; Account → Access Tokens).
+2. Auth → yeni kullanıcı kaydını kapat.
+3. Zamanlayıcı: Vault'a `sonvera_project_url` + `sonvera_scheduler_secret` (Edge `SCHEDULER_SECRET` ile aynı) ekle, sonra `supabase/setup-scheduler.sql` çalıştır. Yoksa arka plan arşiv taraması ve belirsiz gönderim teyidi yalnız "Nilvera'dan yenile" ile çalışır.
+4. Cloudflare `wrangler deploy`; yayın adresini Edge `ALLOWED_ORIGINS`'e ekle (yoksa yayındaki site Nilvera'ya 401/CORS alır).
+5. Günlük yedek görevi (`configure-backup.ps1`); `SAFE/restore.dump` (şifresiz canlı döküm) silinmeli.
+6. Gerçek telefonda (iPhone Safari / Android Chrome) giriş + PWA kurulum/güncelleme duman testi.
+7. Commit yapılmadı (kullanıcı isteyince).
+
+## 12 Ekim hız + bildirim + mobil "Diğer" paneli
+
+### Yapılanlar
+- **Girişteki gecikme:** Başlangıçta hem `getSession()` hem `INITIAL_SESSION` olayı `bootAuthedApp`'i çalıştırıyordu → uygulama iki kez açılıp iki kez veri çekiyordu. `src/app.js`'te aynı kullanıcı için tek boot (`bootPromise`/`bootUserId`). Giriş butonu başarıda "Giriş Yap"a dönmüyor, "Hesaplar yükleniyor..." + spinner kalıyor (takılmış gibi görünmüyor); hatada eski hale döner.
+- **Ana sayfa 3–4 sn:** Tek boot ile istek sayısı yarıya indi; bildirim kontrolü açılışta 4 sn ertelendi (`startInvoiceNotificationMonitor({ delayMs: 4000 })`), ana sayfa istekleriyle yarışmıyor. Ana sayfa verisi hesap bazında hafızada (`dashboardCache`, 30 sn taze): geri dönüşte anında çizilir, eskiyse arka planda yenilenir. `invoice-archive.js` `getUserId()` ağ isteği yapan `getUser()` yerine yerel `getSession()` kullanır (sayfa başına ~3 `/auth/v1/user` isteği kalktı; RLS JWT'yi yine doğrular). Ölçüm (mobil, yeniden yükleme): accounts 1 istek ~0,3 sn; iki Nilvera listesi 0,5 sn'de başlayıp ~1,9 sn'de bitiyor. Her Nilvera çağrısı Supabase Edge (eu-north-1) üzerinden ~1 sn; bundan aşağısı sunucu tarafı iş.
+- **Döviz tablosu:** `api.exchangerate.host` artık anahtar istiyordu, tablo hep "—" idi. Anahtarsız `api.frankfurter.dev` (Avrupa Merkez Bankası referans kuru) + 30 dk önbellek. Uydurma "satış = alış × 1,004" ve yanlış "TCMB'den alınmaktadır" yazısı kaldırıldı; tek "Kur (₺)" sütunu + kaynak/tarih. TCMB tarayıcıdan CORS nedeniyle çekilemez.
+- **Bildirimler geç geliyordu:** Kontrol aralığı 2 dk → 1 dk; sekmeye dönüş ve `online` olayında anında kontrol (15 sn alt sınır, tek uçuş). Önceden her açılışta liste sessizce "görüldü" yapılıyordu → uygulama kapalıyken gelen faturalar hiç bildirilmiyordu; artık yalnız ilk kez görülen hesapta sessiz tohumlama. Sayfa açıkken sistem bildirimi yerine uygulama içi bildirim ("Görüntüle" → Gelen Kutusu). Uygulama tamamen kapalıyken anlık bildirim için sunucu tarafı Web Push gerekir (yapılmadı).
+- **Bildirim tasarımı:** `src/components/toast.js` yeniden yazıldı: emoji yok, SVG ikon, başlık + mesaj, kapat, isteğe bağlı aksiyon butonu, süre çubuğu, üzerine gelince duraklar, en fazla 4 adet, hatalar en az 6 sn. Mesajlar `textContent` ile (XSS güvenli). İmza geriye uyumlu: `showToast(msg, type, durationOrOptions)`.
+- **Mobil "Diğer":** Artık sol menüyü değil, sağdan açılan "Hızlı erişim" panelini açar (`bottom-nav.js` + `mobile.css` `.quick-sheet*`). Kısayollar tek elle erişim için altta: Tüm/Seçili Hesaplar Cari, Gelen/Giden, Fatura Oluştur, e-Arşiv, Excel Çıktısı, Hesaplar, Ayarlar, "Tüm menü" (klasik sol menüyü açar). Dışarı dokunma / Esc / rota değişince kapanır, odak butona döner. Kısayol sayfalarında "Diğer" aktif görünür.
+- **Seçili Hesaplar Yön segmenti:** Satış/Alış/Her ikisi yazıları ortalandı (mobilde segment 44 px; global 44 px buton kuralı taşırıyordu).
+
+### Doğrulama
+typecheck geçti · 62 test geçti · lint 0 error · build geçti · E2E 11 geçti / 2 atlandı. Tarayıcıda (390 px mobil): Diğer paneli aç/gezin/Esc/"Tüm menü", bildirim tasarımı açık + koyu, döviz tablosu dolu, ana sayfaya geri dönüşte 0 Nilvera isteği. Gerçek giriş akışı parola gerektirdiği için tarayıcıda denenmedi (kod incelemesi + boot ölçümü yapıldı).
+
+### Açık
+- Gerçek arka plan bildirimi için Web Push (VAPID + abonelik tablosu + Edge cron) ürün kararı bekliyor.
+- Nilvera çağrısı başına ~1 sn Edge gecikmesi; toplu uç nokta veya sunucu tarafı önbellek ile azaltılabilir.
+
+## 12 Ekim ana sayfa Gelen/Giden + küçük detaylar
+
+### Yapılanlar
+- **Ana sayfa Gelen/Giden Kutusu:** halka kartı ile "Son Faturalar" listesi tek değişkeni (`currentRecentTab`) paylaşıyordu; soldaki "Giden Kutusu" yalnız başlığı değiştiriyor, sayı gelen sayısında kalıyordu. Artık `currentBoxTab` ayrı. Her sekme/dönem tıklaması Nilvera'dan yeniden çekiyordu; veri bir kez çekilir (`loadDashboard`), sekme/dönem `renderDashboardData` ile yerelde yeniden çizilir (tıklamada 0 istek). Çekim aralığı ayın 1'ini her zaman kapsar, PageSize 100, yarış koruması (`_loadToken`). Liste çekilemezse "fatura yok" yerine hata mesajı. Halkada seçili kutu dilimi öne çıkar, alt lejantta seçili kutu vurgulu, sekmelerde renk noktası. Mobilde halka kartının sekmeleri gizliydi → görünür. "Cevap Bekleyen" yalnız ticari faturaları sayar. Grafik gün anahtarı UTC yerine yerel tarih; "Bu Ay" grafiği artık 1'inden başlar (önceden bir gün fazla). Kullanılmayan `getMonthRange`/`formatDateISO` kaldırıldı.
+- **PDF önizleme her yerde:** `openPdfViewer` artık `title`, `filePrefix`, `meta.badge`, `actions` (ek butonlar, ör. Mail Gönder) ve `{ success, html }` (sandbox HTML önizleme) destekler; `pdfMetaAttrs`/`readPdfMeta` yardımcıları. Gelen, Giden, E-Arşiv, Taslaklar, e-İrsaliye gelen/giden sayfalarındaki eski iframe `showPdfPreviewModal` kopyaları bu bileşene taşındı (Mail Gönder korundu; taslakta PDF yoksa HTML önizlemeye düşer).
+- **Güvenlik/hata:** Bu listelerde karşı taraf adı, fatura no, VKN HTML-escape edilmeden basılıyordu → escape. `drafts.js`'te tanımsız `draftAlias` (alias'sız taslakta tablo çökerdi) → `extractDraftAlias(d)`; `case` blok bildirimleri düzeltildi.
+- **Mobil alt menü:** "Belgeler" kaldırıldı, yerine "Toplu Tahsilat" (`/toplu-tahsilat`) geldi: Ana Sayfa · Toplu Tahsilat · Cari · Diğer. "Cari" artık tahsilat sayfasında aktif görünmez (`src/components/bottom-nav.js`). Belgeler'e menüden/`#/belgeler` ile hâlâ ulaşılır.
+- **Supabase:** `public.safe_decimal(text)` için `search_path = ''` (canlı + `supabase/migrations/20261012082420_safe_decimal_search_path.sql`). Advisor uyarısı kalktı; fonksiyon doğrulandı.
+
+### Doğrulama
+typecheck geçti · 62 test geçti · lint 0 error · build geçti · E2E 11 geçti / 2 atlandı. Tarayıcıda: dashboard sekmeleri (masaüstü + mobil, açık/koyu), Gelen/Giden/E-Arşiv/Taslak PDF önizleme (~2 sn). e-İrsaliye önizlemesi bu hesapta kayıt olmadığı için canlı denenmedi.
+
+### Notlar / açık
+- `npm run lint` yalnız `src/lib src/react tests` tarar; `src/pages` ve `src/services` taranmaz. `npx eslint src --quiet` şu an 6 stil hatası verir (gereksiz escape/atama), gerçek tanımsız değişken yok.
+- Ana sayfa E-Fatura / E-Arşiv / E-İrsaliye modül sekmeleri yalnız görsel; tıklanınca veri değişmez (ürün kararı gerekir).
+- Aşağıdaki "Açık kalanlar" 1–4 ve 6 geçerli; 5'teki `safe_decimal` maddesi kapandı.
+
+## 12 Ekim UI / Excel / performans turu
+
+### Yapılanlar
+- **Arşiv P0001 "Geçersiz arşiv aralığı":** UI bitiş tarihi ay sonu, DB UTC `current_date` ile karşılaştırıyordu. Canlıya `20261011230708_fix_archive_range_istanbul_date` (İstanbul tarihi) uygulandı; `invoice-archive.js` aralığı bugüne kırpar ve bu hatayı yutar. Yerel dosya adı canlı sürümle eşitlendi (önceki `202610120001_*` adı `db push`'u bozardı).
+- **Excel "Dosya hazırlanamadı":** kök neden iki Vite dev sunucusunun aynı `node_modules/.vite` önbelleğini ezmesi → exceljs `504 Outdated Optimize Dep` → worker yüklenemiyordu. `vite.config.js` `optimizeDeps.include` (exceljs, file-saver, decimal.js); worker yüklenemezse ana iş parçacığında export (`cari-export-worker-client.js`); worker'da eksik `exportLedgerRows` eklendi. Tek dev sunucusu çalıştırın (`npm run dev -- --port 5173 --strictPort`).
+- **Excel adı:** Seçili Hesaplar'da tek firma seçiliyse dosya firma adıyla (`FİRMA 1-10. AY.xlsx`), çoklu seçimde `Seçili N Firma`.
+- **PDF önizleme:** yeni `src/components/pdf-viewer.js` (pdf.js canvas render, zoom, yazdır, yeni sekme, indir, iskelet/hata/tekrar dene, blob temizliği). Şu an yalnız dashboard son faturalarında; diğer listelerdeki `showPdfPreviewModal` kopyaları henüz bu bileşene taşınmadı.
+- **Cari ekranları:** Faturalar/Tahsilatlar sekmeleri, tahsilat rengi `--tahsilat` (teal), Düzenle/Sil ayrı sütun, modern tahsilat formu, filtre butonları hizası, müşteri listesi sabit 360px + 2×2 tutar ızgarası, detay paneli kaydırma, koyu modda beyaz export barı ve boş özet hücresi düzeltildi, Tüm Hesaplar'da HTML escape.
+- **Katmanlar:** modal z-index 1400 (header 1300 üstünde); mobil alt menü 9999 → 1250 (modalların altını kapatıyordu).
+- **Mobil:** cari tabloları kendi kutusunda yatay kayar; Excel Export / İrsaliye Oluştur / Hesaplar inline 2–3 kolon gridleri ≤640px tek kolon. 22 rota 390px genişlikte taşma için tarandı.
+- **Hız:** Tüm/Seçili Hesaplar taraması hesap başına sıralıydı; `src/lib/concurrency.js` ile 3 paralel (10,2 sn → 3,5 sn; 11,6 sn → 5,1 sn, sonuç sayıları aynı).
+- `.gitignore`: `SAFE/`, `*.dump`, `DEKONTÖRNEKLERİ/` eklendi. `SAFE/restore.dump` şifresiz canlı veri dökümüdür; iş bitince silinmesi önerilir.
+
+### Doğrulama (bu turda)
+`npm run typecheck` geçti · `npm run test` 16 dosya / 62 test geçti · `npm run lint` 0 error · `npm run build` geçti · `npm run test:e2e` 11 geçti / 2 ölçek atlandı. E2E tahsilat testleri artık `#/cari-react` (React defter) üzerinde koşar; `#/cari` kullanıcı isteğiyle klasik `cari.js` ekranına döndü ve bu klasik ekran için E2E testi YOK. Tarayıcıda gerçek veriyle: Canlı Cari Excel, Seçili Hesaplar tek firma Excel adı, dashboard PDF (masaüstü + mobil), 390px mobil tarama.
+
+### Açık kalanlar (kullanıcı/erişim gerektirir)
+1. Sohbet/terminal geçmişine düşen DB parolası ve erişim token'ları yenilenmeli (Supabase Dashboard → Database → Reset password; Account → Access Tokens).
+2. Auth → yeni kayıtları kapat; Leaked password protection (plan izin veriyorsa) aç.
+3. Cloudflare `wrangler deploy` + yayın URL'sini `ALLOWED_ORIGINS`'e ekleme.
+4. Günlük yedek görevi (`configure-backup.ps1`) kurulmadı.
+5. Supabase advisor: `public.safe_decimal` search_path sabit değil (küçük migration ile düzeltilebilir); SECURITY DEFINER RPC uyarıları bilinçli (içeride sahiplik kontrolü), anonim politika uyarıları yalnız anonim giriş açılırsa risk.
+6. Commit yapılmadı.
 
 
 ## 12 Ekim canlı geçiş turu
@@ -14,17 +136,22 @@ Son güncelleme: **12 Ekim 2026 (canlı geçiş turu)**. Bu dosya başka IDE/AI 
 - İzole local restore (port `55432`, DB `sonvera_restore_test`): accounts 6, collections 150, archive 1671 (canlı arşiv anlık ~1681; vault uzantısı localde yok). Finansal `.manifest.svb` yok → `backup:verify` formal eşleşme üretemedi.
 - Canlı **001–015** migration uygulandı (`supabase db push`); Vault’ta 6 secret.
 - Edge Functions MCP ile deploy: `nilvera` v2 ACTIVE, `job-runner` v1 ACTIVE (`verify_jwt=false`).
-- OWNER için hazır dosya: `%LOCALAPPDATA%\Sonvera\edge-secrets.env` (OWNER_USER_ID=`f13633cc-6170-4a51-8b63-1fcb1c388a03`, ALLOWED_ORIGINS localhost). Secrets henüz Supabase’e yazılmadı — `npx supabase login` sonra `.\scripts\set-edge-secrets.ps1`.
+- OWNER için hazır dosya: `%LOCALAPPDATA%\Sonvera\edge-secrets.env` (OWNER_USER_ID=`f13633cc-6170-4a51-8b63-1fcb1c388a03`, ALLOWED_ORIGINS localhost).
+- **Edge secrets yazıldı** (OWNER_USER_ID, ALLOWED_ORIGINS, SCHEDULER_SECRET) — Management API / login script ile doğrulandı.
 - Supabase plugin bağlandı; proje `semihmuhasebe` / `ciaffmgszfvyrdoweirw` / bölge **eu-north-1** (Stockholm).
 
 ### Bölge / İstanbul
 Supabase’te İstanbul/Türkiye bölgesi yok. TR için en düşük gecikme genelde **eu-central-1 (Frankfurt)**. Taşımak = yeni proje + veri kesimi; canlı migration sonrası şimdi yapılmamalı. İleride ayrı cutover.
 
+### UI notu (aynı gece)
+- Ana sayfa React “genel bakış / toplam cari” ekranından çıkarıldı; klasik `dashboard.js` (E-Fatura / E-Arşiv / E-İrsaliye menüsü) geri bağlandı.
+- Opus ile koyu tema token’ları, dashboard ve cari liste stilleri modernleştirildi (`system.css` / `main.css` / `mobile.css`).
+
 ### Sıradaki (hemen)
-1. `npx supabase login` → `.\scripts\set-edge-secrets.ps1`
-2. Auth’ta yeni kayıt kapat; DB/yedek parolalarını (sohbete düşenleri) yenile.
-3. Yerel `npm run dev` ile yeni istemciyi doğrula; sonra Cloudflare `wrangler deploy`.
-4. Günlük yedek: `configure-backup.ps1` ile Host=`aws-1-eu-north-1.pooler.supabase.com`, User=`postgres.ciaffmgszfvyrdoweirw`, OwnerId yukarıdaki UUID.
+1. Auth’ta yeni kayıt kapat; sohbete düşen DB/access token’ları yenile/iptal.
+2. Yerel istemciyi (özellikle ana sayfa + koyu tema + cari) doğrula; sonra isteğe bağlı Cloudflare `wrangler deploy`.
+3. Günlük yedek: `configure-backup.ps1` ile Host=`aws-1-eu-north-1.pooler.supabase.com`, User=`postgres.ciaffmgszfvyrdoweirw`, OwnerId yukarıdaki UUID.
+4. Production origin’i `ALLOWED_ORIGINS`’e ekle (yayın URL’si netleşince).
 
 ### Risk
 Eski istemci doğrudan `api_key` / serbest tahsilat yazamaz. Edge secrets yoksa Nilvera proxy 401 verir. İstemciyi secrets ile birlikte güncelle.

@@ -4,7 +4,7 @@ import {confirmDocument} from '../components/document-confirmation.js';
 import { listenScoped } from '../lib/page-events.js';
 import { EInvoice, EArchive, EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
 import { showToast } from '../components/toast.js';
-import { showModal } from '../components/modal.js';
+import { openPdfViewer, pdfMetaAttrs, readPdfMeta } from '../components/pdf-viewer.js';
 import { navigate, registerCacheReset } from '../router.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 
@@ -72,10 +72,11 @@ export async function renderDrafts() {
           <option value="earchive">E-Arşiv</option>
         </select>
       </div>
-      <div class="filter-actions" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:-4px;">
-        <button class="btn btn-sm" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--accent); color:white; border:none">${ic.search} ARA</button>
+      <div class="filter-actions"><span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span><div class="filter-actions-row">
+        <button class="btn btn-sm btn-primary" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
         <button class="btn btn-sm" id="btnRefresh" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--bg-secondary); border:1px solid var(--border); color:var(--text-secondary)">${ic.refresh} YENİLE</button>
-        <button class="btn btn-sm" id="btnSendBulk" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--success); border:none; color:white">${ic.send} ONAYLA VE GÖNDER</button>
+        <button class="btn btn-sm btn-success" id="btnSendBulk" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.send} ONAYLA VE GÖNDER</button>
+      </div>
       </div>
     </div>
 
@@ -254,7 +255,7 @@ function renderRows(page, drafts) {
     const createdDate = fmtDateTime(info.CreatedDate || info.IssueDate);
     const receiverName = customer.ReceiverName || customer.CustomerName || customer.Name || customer.name || '—';
     const receiverTax = customer.ReceiverTaxNumber || customer.TaxNumber || '—';
-    const alias = customer.ReceiverAlias || customer.Alias || draftAlias || 'Belirtilmemiş';
+    const alias = customer.ReceiverAlias || customer.Alias || extractDraftAlias(d) || 'Belirtilmemiş';
     const profile = formatProfile(info.InvoiceProfile || 'Ticari Fatura');
     const typeStr = formatType(info.InvoiceType || 'SATIS');
 
@@ -262,10 +263,10 @@ function renderRows(page, drafts) {
       <tr>
         <td><input type="checkbox" class="row-check" value="${uuid}" data-alias="${escapeHtmlAttr(alias)}" /></td>
         <td>
-          <button class="action-menu-btn" data-action="preview" data-uuid="${uuid}" data-source="${selectedSource}" title="PDF Önizleme">${ic.query}</button>
+          <button class="action-menu-btn" data-action="preview" data-uuid="${escapeHtmlAttr(uuid)}" data-source="${selectedSource}" ${pdfMetaAttrs({ party: receiverName, number: no === '—' ? '' : no, date: issueDate, amount: fmtCur(amount, curr) })} title="PDF Önizleme">${ic.query}</button>
         </td>
         <td>
-          <div style="font-size:12px;font-weight:600">Seri/No : ${no}</div>
+          <div style="font-size:12px;font-weight:600">Seri/No : ${escapeHtmlAttr(no)}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span style="border:1px solid #22c55e;color:#15803d;border-radius:999px;padding:1px 8px;background:#f0fdf4;font-weight:600">${typeStr}</span>
             <span>${fmtCur(amount, curr)}</span>
@@ -276,10 +277,10 @@ function renderRows(page, drafts) {
           <div style="font-size:11px;color:var(--text-muted)"><strong>Kayıt:</strong> ${createdDate}</div>
         </td>
         <td>
-          <div style="font-size:12px;font-weight:600">${receiverName}</div>
-          <div style="font-size:11px;color:var(--text-muted)">Vergi No : ${receiverTax}</div>
+          <div style="font-size:12px;font-weight:600">${escapeHtmlAttr(receiverName)}</div>
+          <div style="font-size:11px;color:var(--text-muted)">Vergi No : ${escapeHtmlAttr(receiverTax)}</div>
         </td>
-        <td><span style="font-size:11px;color:var(--text-secondary)">${alias}</span></td>
+        <td><span style="font-size:11px;color:var(--text-secondary)">${escapeHtmlAttr(alias)}</span></td>
         <td><span class="badge badge-info">${profile}</span></td>
         <td><span style="font-size:11px;color:var(--text-muted)">—</span></td>
         <td>
@@ -292,7 +293,7 @@ function renderRows(page, drafts) {
   tbody.querySelectorAll('[data-action="preview"]').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      showPdfPreviewModal(btn.dataset.uuid, btn.dataset.source);
+      showPdfPreviewModal(btn.dataset.uuid, btn.dataset.source, readPdfMeta(btn));
     });
   });
 
@@ -345,12 +346,12 @@ async function handleAction(page, action, uuid, source, aliasHint = '') {
       await openDraftInInvoiceCreate(uuid, source);
       return;
     case 'pdf':
-      await showPdfPreviewModal(uuid, source);
+      showPdfPreviewModal(uuid, source, readPdfMeta(page.querySelector(`[data-action="preview"][data-uuid="${CSS.escape(uuid)}"]`)));
       return;
     case 'xml':
       await downloadXml(uuid, source);
       return;
-    case 'send':
+    case 'send': {
       if (!confirm('Bu taslağı onaylayıp göndermek istediğinize emin misiniz?')) return;
       const sendRes = source === 'earchive'
         ? await EArchive.confirmAndSend([uuid])
@@ -360,7 +361,8 @@ async function handleAction(page, action, uuid, source, aliasHint = '') {
         await loadDrafts(page);
       }
       return;
-    case 'delete':
+    }
+    case 'delete': {
       if (!confirm('Bu taslağı silmek istediğinize emin misiniz?')) return;
       const del = source === 'earchive'
         ? await EArchive.deleteDrafts([uuid])
@@ -370,6 +372,7 @@ async function handleAction(page, action, uuid, source, aliasHint = '') {
         await loadDrafts(page);
       }
       return;
+    }
     default:
       showToast('Bu özellik yakında aktif olacak', 'info');
       return;
@@ -413,71 +416,36 @@ async function openDraftInInvoiceCreate(uuid, source) {
   }
 }
 
-async function showPdfPreviewModal(uuid, source) {
+function showPdfPreviewModal(uuid, source, meta = {}) {
   if (!uuid) {
     showToast('Taslak UUID bulunamadı', 'error');
     return;
   }
 
-  const bodyEl = document.createElement('div');
-  bodyEl.style.height = '80vh';
-  bodyEl.style.minHeight = '600px';
-  bodyEl.style.display = 'flex';
-  bodyEl.style.alignItems = 'center';
-  bodyEl.style.justifyContent = 'center';
-  bodyEl.innerHTML = `<div style="animation:pulse 1.5s infinite">${ic.refresh} Yükleniyor...</div>`;
+  openPdfViewer({
+    title: 'Taslak Önizleme',
+    filePrefix: 'Taslak',
+    meta: { ...meta, direction: 'outgoing', badge: 'Taslak', fallbackTitle: 'Taslak Fatura' },
+    load: async () => {
+      const pdfContent = await getDraftPdfContent(uuid, source);
+      const pdfUrl = buildPdfUrl(pdfContent);
+      if (/^(https?:|blob:)/.test(pdfUrl)) {
+        const response = await fetch(pdfUrl);
+        if (!response.ok) throw new Error('Taslak PDF indirilemedi');
+        return { success: true, data: new Uint8Array(await response.arrayBuffer()) };
+      }
+      if (pdfUrl) return { success: true, data: pdfContent };
 
-  const footerEl = document.createElement('div');
-  footerEl.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
-  footerEl.innerHTML = `
-    <button class="btn btn-secondary" id="closePdfModal">Kapat</button>
-    <button class="btn btn-success" id="downloadPdfBtn" style="display:none">${ic.pdf} İndir</button>
-    <button class="btn btn-primary" id="openNewTabBtn" style="display:none">Yeni Sekmede Aç</button>
-  `;
-
-  const modal = showModal({ title: 'Taslak PDF Önizleme', body: bodyEl, footer: footerEl, size: 'xlarge' });
-  footerEl.querySelector('#closePdfModal')?.addEventListener('click', () => modal?.close());
-
-  try {
-    const dlBtn = footerEl.querySelector('#downloadPdfBtn');
-    const openBtn = footerEl.querySelector('#openNewTabBtn');
-
-    const pdfContent = await getDraftPdfContent(uuid, source);
-    const pdfUrl = buildPdfUrl(pdfContent);
-
-    if (pdfUrl) {
-      bodyEl.innerHTML = `<iframe src="${pdfUrl}" width="100%" height="100%" style="border:none;border-radius:4px;"></iframe>`;
-      dlBtn.style.display = 'flex';
-      openBtn.style.display = 'flex';
-
-      dlBtn.addEventListener('click', () => {
-        const link = document.createElement('a');
-        link.href = pdfUrl;
-        link.download = `Taslak_${uuid}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      });
-      openBtn.addEventListener('click', () => window.open(pdfUrl, '_blank', 'noopener,noreferrer'));
-      return;
-    }
-
-    const htmlRes = source === 'earchive' ? await EArchive.getDraftHtml(uuid) : await EInvoice.getDraftHtml(uuid);
-    const htmlContent = extractFileContent(htmlRes?.data);
-    if (htmlRes?.success && htmlContent) {
-      bodyEl.innerHTML = `<iframe sandbox="" referrerpolicy="no-referrer" srcdoc="${escapeHtmlAttr(htmlContent)}" width="100%" height="100%" style="border:none;border-radius:4px;background:white"></iframe>`;
-      openBtn.style.display = 'none';
-      return;
-    }
-
-    throw new Error(htmlRes?.error || 'Önizleme alınamadı');
-  } catch (err) {
-    bodyEl.innerHTML = `<div class="empty-state">${ic.noData}<h3>Önizleme yüklenemedi</h3><p>${err.message}</p></div>`;
-  }
+      const htmlRes = source === 'earchive' ? await EArchive.getDraftHtml(uuid) : await EInvoice.getDraftHtml(uuid);
+      const html = extractFileContent(htmlRes?.data);
+      if (htmlRes?.success && html) return { success: true, html };
+      return { success: false, error: htmlRes?.error || 'Önizleme alınamadı' };
+    },
+  });
 }
 
 async function getDraftPdfContent(uuid, source) {
-  let content = '';
+  let content;
 
   // 0) Doğrudan taslak PDF endpointi
   const draftPdfRes = source === 'earchive'

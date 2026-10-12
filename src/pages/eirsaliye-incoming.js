@@ -6,6 +6,7 @@ import { EDespatch, EDespatchWithAccount } from '../api/nilvera.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
+import { openPdfViewer } from '../components/pdf-viewer.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
@@ -269,78 +270,24 @@ async function downloadFile(uuid, type) {
   document.body.removeChild(a);
 }
 
-async function showPdfPreviewModal(uuid) {
-  if (!uuid) {
+function showPdfPreviewModal(row) {
+  if (!row?.uuid) {
     showToast('UUID bulunamadı', 'warning');
     return;
   }
-
-  const body = document.createElement('div');
-  body.style.height = '80vh';
-  body.style.minHeight = '600px';
-  body.style.width = '100%';
-  body.style.background = '#ffffff';
-  body.style.display = 'flex';
-  body.style.alignItems = 'center';
-  body.style.justifyContent = 'center';
-  body.innerHTML = `<div>${ic.refresh} PDF yükleniyor...</div>`;
-
-  const footer = document.createElement('div');
-  footer.style.cssText = 'display:flex;gap:10px;justify-content:flex-end;width:100%';
-  footer.innerHTML = `
-    <button class="btn btn-secondary" id="closePdfModal">Kapat</button>
-    <button class="btn btn-success" id="downloadPdfBtn" style="display:none">${ic.pdf} İndir</button>
-    <button class="btn btn-primary" id="printPdfBtn" style="display:none">Yazdır</button>
-  `;
-
-  const modal = showModal({ title: 'e-İrsaliye PDF Önizleme', body, footer, size: 'xlarge' });
-  const modalBody = modal?.overlay?.querySelector('.modal-body');
-  if (modalBody) {
-    modalBody.style.padding = '0';
-    modalBody.style.background = '#f3f4f6';
-  }
-
-  footer.querySelector('#closePdfModal')?.addEventListener('click', () => modal?.close());
-
-  const res = await EDespatch.getPurchasePdf(uuid);
-  if (!res.success) {
-    body.innerHTML = `<div class="empty-state">${ic.noData}<h3>PDF alınamadı</h3><p>${res.error}</p></div>`;
-    return modal;
-  }
-
-  const content = extractFileContent(res.data);
-  const pdfUrl = buildFileUrl(content, 'application/pdf');
-  if (!pdfUrl) {
-    body.innerHTML = `<div class="empty-state">${ic.noData}<h3>PDF içeriği bulunamadı</h3></div>`;
-    return modal;
-  }
-
-  const finalPdfUrl = pdfUrl.includes('#') ? pdfUrl : `${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
-  body.innerHTML = `<iframe src="${finalPdfUrl}" width="100%" height="100%" style="border:none;border-radius:0;"></iframe>`;
-
-  const dlBtn = footer.querySelector('#downloadPdfBtn');
-  const printBtn = footer.querySelector('#printPdfBtn');
-  dlBtn.style.display = 'flex';
-  printBtn.style.display = 'flex';
-
-  dlBtn.addEventListener('click', () => {
-    const link = document.createElement('a');
-    link.href = finalPdfUrl;
-    link.download = `eirsaliye_gelen_${uuid}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  return openPdfViewer({
+    title: 'e-İrsaliye Önizleme',
+    filePrefix: 'Irsaliye',
+    load: () => EDespatch.getPurchasePdf(row.uuid),
+    meta: {
+      direction: 'incoming',
+      fallbackTitle: 'e-İrsaliye',
+      party: row.senderName === '—' ? '' : row.senderName,
+      number: row.no === '—' ? '' : row.no,
+      date: row.issueDate ? new Date(row.issueDate).toLocaleDateString('tr-TR') : '',
+      amount: row.amount > 0 ? fmtCur(row.amount, row.currency) : '',
+    },
   });
-
-  printBtn.addEventListener('click', () => {
-    const iframe = body.querySelector('iframe');
-    if (iframe?.contentWindow) {
-      iframe.contentWindow.focus();
-      iframe.contentWindow.print();
-    }
-  });
-
-  return modal;
 }
 
 function downloadTextFile(fileName, text, mime = 'text/plain') {
@@ -437,23 +384,23 @@ async function createAnswer(row, page) {
     <style>
       .ans-wrap { display:flex; flex-direction:column; gap:14px; }
       .ans-grid { display:grid; grid-template-columns:repeat(4,minmax(180px,1fr)); gap:12px; }
-      .ans-label { font-size:12px; font-weight:700; color:#64748b; letter-spacing:.2px; display:flex; flex-direction:column; gap:6px; }
+      .ans-label { font-size:12px; font-weight:700; color:var(--text-muted); letter-spacing:.2px; display:flex; flex-direction:column; gap:6px; }
       .ans-input {
-        height:38px; border:1px solid #cbd5e1; border-radius:10px; background:#fff;
-        padding:0 12px; font-size:13px; color:#0f172a; outline:none; transition:all .15s ease;
+        height:38px; border:1px solid var(--border); border-radius:10px; background:var(--bg-input);
+        padding:0 12px; font-size:13px; color:var(--text-primary); outline:none; transition:all .15s ease;
       }
-      .ans-input:focus { border-color:#3b82f6; box-shadow:0 0 0 3px rgba(59,130,246,.12); }
-      .ans-card { border:1px solid #e2e8f0; border-radius:12px; overflow:auto; background:#fff; max-height:44vh; }
+      .ans-input:focus { border-color:var(--border-focus); box-shadow:0 0 0 3px rgba(59,130,246,.12); }
+      .ans-card { border:1px solid var(--border); border-radius:12px; overflow:auto; background:var(--bg-card); max-height:44vh; }
       .ans-table { width:100%; border-collapse:separate; border-spacing:0; font-size:13px; }
       .ans-table thead th {
-        position:sticky; top:0; z-index:1; background:#f8fafc; color:#64748b; font-size:12px;
-        text-transform:uppercase; letter-spacing:.3px; text-align:left; padding:11px 10px; border-bottom:1px solid #e2e8f0;
+        position:sticky; top:0; z-index:1; background:var(--surface-2); color:var(--text-muted); font-size:12px;
+        text-transform:uppercase; letter-spacing:.3px; text-align:left; padding:11px 10px; border-bottom:1px solid var(--border);
       }
-      .ans-table tbody td { padding:10px; border-bottom:1px solid #eef2f7; color:#334155; }
-      .ans-table tbody tr:hover { background:#f8fbff; }
+      .ans-table tbody td { padding:10px; border-bottom:1px solid var(--border); color:var(--text-primary); }
+      .ans-table tbody tr:hover { background:var(--bg-card-hover); }
       .ans-note { min-height:86px; padding:10px 12px; resize:vertical; }
-      .ans-help { display:flex; gap:8px; align-items:center; font-size:12px; color:#64748b; }
-      .ans-pill { display:inline-flex; align-items:center; border:1px solid #bfdbfe; background:#eff6ff; color:#1d4ed8; border-radius:999px; padding:4px 10px; font-weight:600; }
+      .ans-help { display:flex; gap:8px; align-items:center; font-size:12px; color:var(--text-muted); }
+      .ans-pill { display:inline-flex; align-items:center; border:1px solid var(--accent); background:var(--accent-bg); color:var(--accent); border-radius:999px; padding:4px 10px; font-weight:600; }
       @media (max-width: 1100px) { .ans-grid { grid-template-columns:repeat(2,minmax(180px,1fr)); } }
       @media (max-width: 720px) { .ans-grid { grid-template-columns:1fr; } }
     </style>
@@ -879,7 +826,7 @@ function renderRows(page, rows) {
   tbody.querySelectorAll('[data-act="preview"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const row = rows[Number(btn.dataset.idx)];
-      await showPdfPreviewModal(row.uuid);
+      showPdfPreviewModal(row);
     });
   });
 
@@ -1045,14 +992,15 @@ export async function renderEDespatchIncoming(options = {}) {
         <label class="filter-label">Bitiş Tarihi</label>
         <input type="date" class="filter-input" id="endDate" value="${end}" />
       </div>
-      <div class="filter-actions" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:-4px;">
-        <button class="btn btn-sm" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--accent); color:white; border:none">${ic.search} ARA</button>
+      <div class="filter-actions"><span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span><div class="filter-actions-row">
+        <button class="btn btn-sm btn-primary" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
         <button class="btn btn-sm" id="btnRefresh" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--bg-secondary); border:1px solid var(--border); color:var(--text-secondary)">${ic.refresh} YENİLE</button>
         <div style="position:relative">
-          <button class="btn btn-sm" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--info); border:none; color:white">
+          <button class="btn btn-sm btn-primary" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.gear} İŞLEMLER ${ic.chevronDown}
           </button>
         </div>
+      </div>
       </div>
     </div>
 

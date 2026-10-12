@@ -6,7 +6,10 @@ import { listAccounts } from '../services/account-manager.js';
 import { listCollections } from '../services/tahsilat-manager.js';
 import { showToast } from '../components/toast.js';
 import { attachDatePicker } from '../lib/date-picker.js';
+import { defaultFilterRange } from '../lib/money.js';
 import { exportMultiAccountCari } from '../services/cari-export-worker-client.js';
+import { escapeHtml, safeColor } from '../lib/html.js';
+import { forEachLimited } from '../lib/concurrency.js';
 
 const ic = {
   search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
@@ -41,7 +44,7 @@ function isRejected(inv) {
 }
 function fmtCur(a) { try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(a); } catch { return `${a} TRY`; } }
 function fmtDate(d) { try { return new Date(d).toLocaleDateString('tr-TR'); } catch { return d; } }
-function getDefaultRange() { const now = new Date(); return { start: `${now.getFullYear()}-01-01`, end: now.toISOString().slice(0,10) }; }
+function getDefaultRange() { return defaultFilterRange(); }
 
 let customerMap = {};
 let selectedCustomerKey = null;
@@ -63,8 +66,11 @@ export async function renderMultiAccountCari() {
       <div class="filter-group"><label class="filter-label">Başlangıç Tarihi</label><input type="date" class="filter-input" id="macDateStart" value="${start}" /></div>
       <div class="filter-group"><label class="filter-label">Bitiş Tarihi</label><input type="date" class="filter-input" id="macDateEnd" value="${end}" /></div>
       <div class="filter-group filter-search"><label class="filter-label">Müşteri Ara</label><input type="text" class="filter-input" id="macSearchInput" placeholder="Ad veya VKN ile ara..." style="width:100%" /></div>
-      <div class="filter-actions" style="display:flex; align-items:flex-end;">
-        <button class="btn btn-sm btn-primary" id="macApplyBtn" style="height:34px; padding:0 20px; font-weight:600; display:flex; gap:6px;">${ic.search} TÜM HESAPLARI TARA</button>
+      <div class="filter-actions">
+        <span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span>
+        <div class="filter-actions-row">
+          <button type="button" class="btn btn-sm btn-primary" id="macApplyBtn">${ic.search} <span>Tüm Hesapları Tara</span></button>
+        </div>
       </div>
     </div>
     <div class="cari-main-content" id="macMainContent">
@@ -85,7 +91,6 @@ export async function renderMultiAccountCari() {
   page.querySelector('#macApplyBtn')?.addEventListener('click', () => loadMultiAccountData(page));
   page.querySelector('#macSearchInput')?.addEventListener('input', () => renderCustomerList(page));
 
-  const notice=document.createElement('div');notice.className='sv-notice';notice.textContent='Bu görünüm yüklenen dönem kayıtlarını içerir. Dövizli, para birimi belirsiz ve iptal edilen belgeler TL bakiyesine katılmaz. Eksik hesap sonuçları tam bakiye değildir.';page.prepend(notice);
   return page;
 }
 
@@ -124,7 +129,7 @@ async function loadMultiAccountData(page) {
   const failedTahsilat = [];
   let completeScan=true;
 
-  for (const acc of allAccounts) {
+  await forEachLimited(allAccounts, 3, async (acc) => {
     try {
       // Akıllı fetch: 6 ay limiti chunking ile aşılır, kesin aylar arşivden gelir.
       const [efRes, eaRes, thRes] = await Promise.allSettled([
@@ -144,7 +149,7 @@ async function loadMultiAccountData(page) {
       completeScan=false;
       console.error(`Error scanning account ${acc.name}:`, e);
     }
-  }
+  });
 
   rememberExportPeriod(page,{start:startDate,end:endDate,complete:completeScan});
   if(!completeScan)showToast('Bazı kaynaklar yüklenemedi. Görünen bakiye eksiktir; dışa aktarmadan önce taramayı yenileyin.','warning');
@@ -258,11 +263,11 @@ function renderCustomerList(page) {
     const invoiceCount = c.invoices.filter(x => x._type !== 'tahsilat').length;
     const tahsilatCount = c.invoices.length - invoiceCount;
     return `
-      <div class="cari-customer-item ${selectedCustomerKey === key ? 'active' : ''}" data-key="${key}">
-        <div class="cari-customer-avatar">${initials}</div>
+      <div class="cari-customer-item ${selectedCustomerKey === key ? 'active' : ''}" data-key="${escapeHtml(key)}">
+        <div class="cari-customer-avatar">${escapeHtml(initials)}</div>
         <div class="cari-customer-info">
-          <span class="cari-customer-name">${c.name}</span>
-          <span class="cari-customer-vkn">VKN: ${c.taxNo}</span>
+          <span class="cari-customer-name" title="${escapeHtml(c.name)}">${escapeHtml(c.name)}</span>
+          <span class="cari-customer-vkn">VKN: ${escapeHtml(c.taxNo)}</span>
           <span class="cari-customer-meta">${invoiceCount} fatura · ${tahsilatCount} tahsilat · ${Object.keys(c.accountBreakdown).length} hesap</span>
         </div>
         <div class="cari-customer-amounts" style="display:flex; gap:12px; margin-top:8px;">
@@ -271,7 +276,7 @@ function renderCustomerList(page) {
             <div class="cari-customer-bakiye-label" style="font-size:10px">Satış</div>
           </div>
           <div style="text-align:right">
-            <div class="cari-customer-bakiye" style="color:var(--info);font-size:13px">${fmtCur(c.totalTahsilat || 0)}</div>
+            <div class="cari-customer-bakiye" style="color:var(--tahsilat);font-size:13px">${fmtCur(c.totalTahsilat || 0)}</div>
             <div class="cari-customer-bakiye-label" style="font-size:10px">Tahsilat</div>
           </div>
           <div style="text-align:right">
@@ -297,31 +302,39 @@ function renderDetailPanel(page, customer) {
   if (!panel) return;
 
   const breakdownHtml = Object.values(customer.accountBreakdown).sort((a,b) => b.totalAmount - a.totalAmount).map(acc => `
-    <div class="cari-detail-stat" style="border-left: 4px solid ${acc.color || '#ccc'}; flex: 1; min-width: 140px;">
-      <span class="cari-detail-stat-label">${acc.name}</span>
+    <div class="cari-detail-stat" style="border-left: 4px solid ${safeColor(acc.color)}; flex: 1; min-width: 140px;">
+      <span class="cari-detail-stat-label">${escapeHtml(acc.name)}</span>
       <span class="cari-detail-stat-value" style="font-size:12px">${acc.invoiceCount} fatura</span>
       <div style="display:flex;flex-direction:column;gap:2px;margin-top:4px;">
         <span class="cari-detail-stat-value" style="color:var(--success);font-size:13px">S: ${fmtCur(acc.totalAmount)}</span>
-        <span class="cari-detail-stat-value" style="color:var(--info);font-size:13px">T: ${fmtCur(acc.totalTahsilat || 0)}</span>
+        <span class="cari-detail-stat-value" style="color:var(--tahsilat);font-size:13px">T: ${fmtCur(acc.totalTahsilat || 0)}</span>
       </div>
     </div>
   `).join('');
 
-  const rows = customer.invoices.map(inv => {
-    const isTahsilat = inv._type === 'tahsilat';
-    return `
+  const invoices = (customer.invoices || []).filter((inv) => inv._type !== 'tahsilat');
+  const tahsilats = (customer.invoices || []).filter((inv) => inv._type === 'tahsilat');
+
+  const invoiceRows = invoices.map((inv) => `
     <tr>
-      <td>${fmtDate(isTahsilat ? inv.date : getInvoiceDate(inv))}</td>
-      <td><span class="badge" style="background:${inv._accountColor || '#666'};color:#fff">${inv._accountName}</span></td>
-      <td>${isTahsilat ? '<span style="color:var(--info);font-weight:600">Tahsilat</span>' : getInvoiceNumber(inv)}</td>
-      <td style="text-align:right; font-weight:600; color:${isTahsilat ? 'var(--info)' : 'var(--success)'}">${isTahsilat ? '-' : ''}${fmtCur(isTahsilat ? inv.amount : getAmount(inv))}</td>
-    </tr>
-  `}).join('');
+      <td>${fmtDate(getInvoiceDate(inv))}</td>
+      <td><span class="badge" style="background:${safeColor(inv._accountColor)};color:#fff">${escapeHtml(inv._accountName || '')}</span></td>
+      <td>${escapeHtml(getInvoiceNumber(inv) || '—')}</td>
+      <td style="text-align:right; font-weight:600; color:var(--success)">${fmtCur(getAmount(inv))}</td>
+    </tr>`).join('');
+
+  const tahsilatRows = tahsilats.map((inv) => `
+    <tr>
+      <td>${fmtDate(inv.date)}</td>
+      <td><span class="badge" style="background:${safeColor(inv._accountColor)};color:#fff">${escapeHtml(inv._accountName || '')}</span></td>
+      <td><span style="color:var(--tahsilat);font-weight:600">${escapeHtml(inv.description || 'Tahsilat')}</span></td>
+      <td style="text-align:right; font-weight:600; color:var(--tahsilat)">-${fmtCur(inv.amount)}</td>
+    </tr>`).join('');
 
   panel.innerHTML = `
     <div class="cari-detail-header">
       <div class="cari-detail-title">
-        <h3>${customer.name}</h3><span class="cari-detail-vkn">VKN: ${customer.taxNo}</span>
+        <h3>${escapeHtml(customer.name)}</h3><span class="cari-detail-vkn">VKN: ${escapeHtml(customer.taxNo)}</span>
       </div>
       <div class="cari-detail-actions">
         <button class="btn btn-sm btn-success" id="macExportBtn">${ic.download} Excel'e Aktar</button>
@@ -333,21 +346,63 @@ function renderDetailPanel(page, customer) {
       <div class="cari-detail-summary">${breakdownHtml}</div>
     </div>
 
-    <div class="cari-detail-table-wrap">
-      <table class="cari-detail-table">
-        <thead><tr><th>Tarih</th><th>Hesap</th><th>Fatura No</th><th style="text-align:right">Tutar (Satış)</th></tr></thead>
-        <tbody>${rows || '<tr><td colspan="4">Kayıt yok</td></tr>'}</tbody>
-      </table>
+    <div class="cari-tabs" role="tablist" aria-label="Hareket türü">
+      <button type="button" class="cari-tab active" role="tab" aria-selected="true" data-cari-tab="faturalar">
+        Faturalar <span class="cari-tab-count">${invoices.length}</span>
+      </button>
+      <button type="button" class="cari-tab" role="tab" aria-selected="false" data-cari-tab="tahsilatlar">
+        Tahsilatlar <span class="cari-tab-count">${tahsilats.length}</span>
+      </button>
     </div>
+
+    <section class="cari-tab-panel active" data-cari-panel="faturalar" role="tabpanel">
+      <div class="cari-detail-table-wrap">
+        <table class="cari-detail-table">
+          <thead><tr><th>Tarih</th><th>Hesap</th><th>Fatura No</th><th style="text-align:right">Tutar</th></tr></thead>
+          <tbody>${invoiceRows || '<tr><td colspan="4" class="cari-section-empty">Bu dönemde fatura yok</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="cari-tab-panel" data-cari-panel="tahsilatlar" role="tabpanel" hidden>
+      <div class="cari-detail-table-wrap">
+        <table class="cari-detail-table">
+          <thead><tr><th>Tarih</th><th>Hesap</th><th>Açıklama</th><th style="text-align:right">Tutar</th></tr></thead>
+          <tbody>${tahsilatRows || '<tr><td colspan="4" class="cari-section-empty">Bu dönemde tahsilat yok</td></tr>'}</tbody>
+        </table>
+      </div>
+    </section>
   `;
+
+  panel.querySelectorAll('[data-cari-tab]').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const name = tab.getAttribute('data-cari-tab');
+      panel.querySelectorAll('[data-cari-tab]').forEach((t) => {
+        const on = t === tab;
+        t.classList.toggle('active', on);
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      panel.querySelectorAll('[data-cari-panel]').forEach((p) => {
+        const on = p.getAttribute('data-cari-panel') === name;
+        p.classList.toggle('active', on);
+        p.hidden = !on;
+      });
+    });
+  });
 
   panel.querySelector('#macExportBtn')?.addEventListener('click', async () => {
     try {
       showToast('Excel hazırlanıyor...', 'info');
-      await exportMultiAccountCari(customer.invoices, customer.name, customer.accountBreakdown, {dateRange:exportPeriod(page,'#macDateStart','#macDateEnd')});
-      showToast('Excel başarıyla indirildi.', 'success');
+      const result = await exportMultiAccountCari(
+        customer.invoices,
+        customer.name,
+        customer.accountBreakdown,
+        { dateRange: exportPeriod(page, '#macDateStart', '#macDateEnd') },
+      );
+      if (result?.success) showToast('Excel başarıyla indirildi.', 'success');
+      else showToast(result?.error || 'Excel indirilemedi.', 'error');
     } catch (e) {
-      showToast('Hata: ' + e.message, 'error');
+      showToast('Hata: ' + (e.message || e), 'error');
     }
   });
 }

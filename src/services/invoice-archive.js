@@ -1,6 +1,7 @@
 // Arşiv güncellemeleri atomiktir; eksik API listesi mevcut belgeleri silmez.
 // Eski aylar süreli önbellekten okunur ve yeniden taranabilir.
 import { getSupabase } from '../lib/supabase.js';
+import { istanbulDate } from '../lib/money.js';
 import { fetchAllPagesChunked, getInvoiceUuid, fmtDateParam } from './nilvera-fetcher.js';
 
 // Daha seyrek yenilenecek geçmiş dönemlerin yaş eşiği.
@@ -9,8 +10,9 @@ const READ_BATCH = 1000;
 
 // ── Tarih yardımcıları ──
 function today0() {
-  const n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  // Supabase current_date UTC olabilir; arşiv sınırı İstanbul takvimine göre.
+  const [y, m, d] = istanbulDate().split('-').map(Number);
+  return new Date(y, m - 1, d);
 }
 function monthStartOf(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
 function monthEndOf(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
@@ -39,8 +41,9 @@ function isMonthFinal(mStart) {
 async function getUserId() {
   try {
     const sb = getSupabase();
-    const { data } = await sb.auth.getUser();
-    return data?.user?.id || null;
+    // Local session read; RLS still verifies the JWT on every archive query.
+    const { data } = await sb.auth.getSession();
+    return data?.session?.user?.id || null;
   } catch {
     return null;
   }
@@ -75,11 +78,34 @@ async function readArchive(userId, accountId, docType, startStr, endStr) {
 // Sil+yaz stratejisi Nilvera'da silinen/iptal edilen faturaların
 // arşivden de düşmesini garanti eder.
 async function writeArchive(userId, accountId, docType, startStr, endStr, invoices, months = []) {
+  // UI bitiş tarihi ay sonu olabilir; arşiv DB'si bugünden ileri tarih kabul etmez.
+  const todayTr = istanbulDate();
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  const todayCap = todayTr < todayUtc ? todayTr : todayUtc;
+  const safeEnd = endStr > todayCap ? todayCap : endStr;
+  const safeStart = startStr > safeEnd ? safeEnd : startStr;
   const rows = invoices.map(inv => ({ invoice_uuid: getInvoiceUuid(inv), issue_date: getIssueDateStr(inv), payload: inv }));
   if (rows.some(row => !row.invoice_uuid || !row.issue_date)) throw new Error('Eksik belge kimliği veya tarihi: arşiv değiştirilmedi.');
-  const inRange = rows.filter(row => row.issue_date >= startStr && row.issue_date <= endStr);
-  const { error } = await getSupabase().rpc('replace_invoice_archive', { p_account_id: accountId, p_doc_type: docType, p_start: startStr, p_end: endStr, p_invoices: inRange, p_months: months.map(fmtDateParam) });
-  if (error) throw error;
+  const inRange = rows.filter(row => row.issue_date >= safeStart && row.issue_date <= safeEnd);
+  const monthStrs = months
+    .map((m) => (m instanceof Date ? fmtDateParam(m) : String(m).slice(0, 10)))
+    .filter((m) => /^\d{4}-\d{2}-\d{2}$/.test(m) && m >= safeStart && m <= safeEnd);
+  const { error } = await getSupabase().rpc('replace_invoice_archive', {
+    p_account_id: accountId,
+    p_doc_type: docType,
+    p_start: safeStart,
+    p_end: safeEnd,
+    p_invoices: inRange,
+    p_months: monthStrs,
+  });
+  if (error) {
+    // Aralık hatası görüntüyü bozmasın; sadece logla.
+    if (String(error.message || '').includes('Geçersiz arşiv aralığı')) {
+      console.warn('[invoice-archive] aralık atlandı:', safeStart, safeEnd, error.message);
+      return;
+    }
+    throw error;
+  }
 }
 
 // ── Senkron kayıtları ──

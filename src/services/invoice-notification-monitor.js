@@ -3,14 +3,17 @@ import { getActiveAccount } from './account-manager.js';
 import { showToast } from '../components/toast.js';
 
 const LS_SEEN_KEY = 'nilfatura_seen_incoming_v1';
-const CHECK_INTERVAL_MS = 120000;
+const CHECK_INTERVAL_MS = 60000;
+const MIN_GAP_MS = 15000;
 const LOOKBACK_DAYS = 3;
 const MAX_TRACKED_UUIDS = 300;
 
 let monitorTimer = null;
-let initializedForAccount = '';
 let visibilityHandler = null;
+let onlineHandler = null;
 let generation = 0;
+let lastCheckAt = 0;
+let checking = null;
 
 function loadSeenMap() {
   try {
@@ -83,10 +86,19 @@ async function requestNotificationPermissionIfNeeded() {
 
 async function showIncomingNotification(payload) {
   const hasPerm = await requestNotificationPermissionIfNeeded();
-  if (!hasPerm) { showToast(payload.body || 'Yeni e-Fatura alındı.', 'info'); return; }
+  if (!hasPerm || document.visibilityState === 'visible') {
+    showToast(payload.body || 'Yeni e-Fatura alındı.', 'info', {
+      title: payload.title,
+      icon: 'invoice',
+      duration: 9000,
+      actionLabel: 'Görüntüle',
+      onAction: () => { window.location.hash = '#/incoming'; },
+    });
+    return;
+  }
 
   const title = payload.title || 'Sonvera';
-  const body = payload.body || 'Yeni e-Fatura alindi.';
+  const body = payload.body || 'Yeni e-Fatura alındı.';
   const data = { url: '/index.html#/incoming' };
 
   try {
@@ -120,72 +132,70 @@ async function showIncomingNotification(payload) {
   }
 }
 
-async function runCheck({ silentSeed = false } = {}) {
-  const account = getActiveAccount();
-  if (!account?.id) return;
+async function runCheck({ force = false } = {}) {
+  if (checking) return checking;
+  if (!force && Date.now() - lastCheckAt < MIN_GAP_MS) return;
+  checking = (async () => {
+    const account = getActiveAccount();
+    if (!account?.id) return;
+    lastCheckAt = Date.now();
 
-  const snapshot = await fetchIncomingSnapshot(account);
-  if (getActiveAccount()?.id !== account.id) return;
-  const uuids = snapshot.map((x) => getUuid(x)).filter(Boolean);
+    const snapshot = await fetchIncomingSnapshot(account);
+    if (getActiveAccount()?.id !== account.id || !snapshot.length) return;
+    const uuids = snapshot.map((x) => getUuid(x)).filter(Boolean);
 
-  const seenMap = loadSeenMap();
-  const known = new Set(seenMap[account.id] || []);
+    const seenMap = loadSeenMap();
+    const previous = seenMap[account.id];
+    const known = new Set(previous || []);
+    // Only the very first run for an account seeds silently; later app starts report what arrived while closed.
+    const fresh = previous ? snapshot.filter((x) => !known.has(getUuid(x))) : [];
 
-  if (silentSeed || initializedForAccount !== account.id) {
-    seenMap[account.id] = uuids.slice(0, MAX_TRACKED_UUIDS);
+    // Merge so invoices that dropped out of the lookback window are not reported again.
+    seenMap[account.id] = [...new Set([...uuids, ...(previous || [])])].slice(0, MAX_TRACKED_UUIDS);
     saveSeenMap(seenMap);
-    initializedForAccount = account.id;
-    return;
-  }
 
-  const fresh = snapshot.filter((x) => !known.has(getUuid(x)));
-  if (fresh.length > 0) {
-    const newest = fresh[0];
-    const sender = getSender(newest);
-    const body = fresh.length === 1
-      ? `${sender} gondericisinden yeni e-Fatura geldi.`
-      : `${fresh.length} yeni e-Fatura geldi. Son gelen: ${sender}`;
-
-    await showIncomingNotification({
-      title: 'Yeni Gelen e-Fatura',
-      body
-    });
-  }
-
-  seenMap[account.id] = uuids.slice(0, MAX_TRACKED_UUIDS);
-  saveSeenMap(seenMap);
+    if (fresh.length > 0) {
+      const sender = getSender(fresh[0]);
+      await showIncomingNotification({
+        title: fresh.length === 1 ? 'Yeni gelen e-Fatura' : `${fresh.length} yeni e-Fatura`,
+        body: fresh.length === 1 ? `${sender} gönderdi.` : `Son gelen: ${sender}`,
+      });
+    }
+  })().finally(() => { checking = null; });
+  return checking;
 }
 
-export async function startInvoiceNotificationMonitor() {
+export async function startInvoiceNotificationMonitor({ delayMs = 0 } = {}) {
   const seq = ++generation;
-  await runCheck({ silentSeed: true });
-  if (seq !== generation) return;
-
-  if (monitorTimer) {
-    clearInterval(monitorTimer);
-  }
+  stopListeners();
 
   monitorTimer = setInterval(() => {
     if (document.visibilityState === 'hidden') return;
     runCheck().catch(() => {});
   }, CHECK_INTERVAL_MS);
 
-  const nextVisibilityHandler = () => {
-    if (document.visibilityState === 'visible') {
-      runCheck().catch(() => {});
-    }
+  visibilityHandler = () => {
+    if (document.visibilityState === 'visible') runCheck().catch(() => {});
   };
-
-  if (visibilityHandler) {
-    document.removeEventListener('visibilitychange', visibilityHandler);
-  }
-  visibilityHandler = nextVisibilityHandler;
+  onlineHandler = () => runCheck({ force: true }).catch(() => {});
   document.addEventListener('visibilitychange', visibilityHandler);
+  window.addEventListener('online', onlineHandler);
+
+  // Let the first page's own requests go out before the background check competes with them.
+  if (delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
+  if (seq !== generation) return;
+  await runCheck({ force: true });
+}
+
+function stopListeners() {
+  clearInterval(monitorTimer); monitorTimer = null;
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
+  if (onlineHandler) window.removeEventListener('online', onlineHandler);
+  visibilityHandler = null; onlineHandler = null;
 }
 
 export function stopInvoiceNotificationMonitor() {
   generation++;
-  clearInterval(monitorTimer); monitorTimer = null;
-  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler);
-  visibilityHandler = null; initializedForAccount = '';
+  stopListeners();
+  lastCheckAt = 0;
 }

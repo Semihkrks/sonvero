@@ -1,9 +1,10 @@
 // ══════════════════════════════════════════
 // Dashboard Page — Nilvera-Style
 // ══════════════════════════════════════════
-import { getActiveAccount } from '../services/account-manager.js';
-import { EInvoice, EArchive } from '../api/nilvera.js';
-import { navigate } from '../router.js';
+import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
+import { EInvoice } from '../api/nilvera.js';
+import { escapeHtml } from '../lib/html.js';
+import { openPdfViewer } from '../components/pdf-viewer.js';
 
 // ── SVG Icons ──
 const svgIcons = {
@@ -28,14 +29,6 @@ const svgIcons = {
   noData: `<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.3"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
 };
 
-// ── Date Helpers ──
-function getMonthRange() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-  return { start, end };
-}
-
 function extractItems(data) {
   if (!data) return [];
   if (Array.isArray(data)) return data;
@@ -50,8 +43,8 @@ function extractItems(data) {
   return [];
 }
 
-function formatDateISO(d) {
-  return d.toISOString().split('T')[0];
+function localDayKey(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 function formatDateTR(dateStr) {
@@ -61,10 +54,25 @@ function formatDateTR(dateStr) {
 
 function getInvoiceDate(inv) { return inv.IssueDate || inv.issueDate || inv.CreateDate || inv.CreatedDate || (inv.InvoiceInfo || inv.invoiceInfo || {}).IssueDate || ''; }
 function getInvoiceNumber(inv) { return inv.InvoiceNumber || inv.invoiceNumber || inv.InvoiceSerieOrNumber || (inv.InvoiceInfo || inv.invoiceInfo || {}).InvoiceSerieOrNumber || ''; }
+function getInvoiceUuid(inv) { return inv.UUID || inv.uuid || inv.Id || inv.id || (inv.InvoiceInfo || inv.invoiceInfo || {}).UUID || ''; }
 function getSenderName(inv) { return inv.SenderName || inv.senderName || inv.SupplierName || (inv.SenderInfo || {}).Name || ''; }
 function getReceiverName(inv) { return inv.ReceiverName || inv.receiverName || inv.CustomerName || (inv.ReceiverInfo || inv.CustomerInfo || {}).Name || ''; }
 function getAmount(inv) { return inv.PayableAmount || inv.payableAmount || inv.TotalAmount || (inv.InvoiceInfo || {}).PayableAmount || 0; }
 function getCurrency(inv) { return inv.CurrencyCode || inv.currencyCode || 'TRY'; }
+function invoiceSortKey(inv) {
+  const raw = String(getInvoiceDate(inv) || '');
+  const day = raw.slice(0, 10);
+  const time = Date.parse(raw);
+  return { day: /^\d{4}-\d{2}-\d{2}$/.test(day) ? day : '', time: Number.isFinite(time) ? time : 0, no: String(getInvoiceNumber(inv) || '') };
+}
+function sortNewestFirst(items) {
+  return [...items].sort((a, b) => {
+    const A = invoiceSortKey(a), B = invoiceSortKey(b);
+    if (A.day !== B.day) return B.day.localeCompare(A.day);
+    if (A.time !== B.time) return B.time - A.time;
+    return B.no.localeCompare(A.no, 'tr');
+  });
+}
 
 function formatCurrency(amount, currency = 'TRY') {
   if (!amount && amount !== 0) return '—';
@@ -77,6 +85,7 @@ let currentPeriod = 'month'; // 'today', 'yesterday', 'week', 'month', 'custom'
 let customStartDate = '';
 let customEndDate = '';
 let currentRecentTab = 'gelen'; // 'gelen' or 'giden'
+let currentBoxTab = 'gelen'; // donut card, independent of the recent list
 
 function getPeriodDates() {
   if (currentPeriod === 'custom') return { start: customStartDate, end: customEndDate };
@@ -102,8 +111,6 @@ export async function renderDashboard() {
   page.className = 'dashboard-nilvera';
   const account = await getActiveAccount();
 
-  const { start, end } = getMonthRange();
-
   page.innerHTML = `
     <!-- Module Tabs -->
     <div class="dash-module-tabs">
@@ -124,7 +131,7 @@ export async function renderDashboard() {
     <!-- Main Dashboard Grid -->
     <div class="dash-grid">
       <!-- Left Column: Donut Chart Area -->
-      <div class="dash-chart-section card">
+      <div class="dash-chart-section card" data-box="${currentBoxTab}">
         <div class="dash-chart-header">
           <div class="dash-box-tabs">
             <button class="dash-box-tab active" data-box="gelen">Gelen Kutusu</button>
@@ -158,7 +165,7 @@ export async function renderDashboard() {
             </div>
             <div class="dash-legend-row">
               <span class="dash-legend-icon" style="color:var(--warning)">${svgIcons.clock}</span>
-              <span class="dash-legend-text">Cevap Bekleyen Ticari Fatura</span>
+              <span class="dash-legend-text" title="Cevap Bekleyen Ticari Fatura">Cevap Bekleyen Ticari Fatura</span>
               <span class="dash-legend-count" id="legBekleyen">0</span>
             </div>
             <div class="dash-legend-row">
@@ -189,15 +196,15 @@ export async function renderDashboard() {
           </div>
         </div>
         <div class="dash-chart-footer">
-          <span class="dash-chart-dot" style="background:var(--info)"></span> Gelen Kutusu
-          <span class="dash-chart-dot" style="background:var(--success); margin-left:16px"></span> Giden Kutusu
+          <span class="dash-chart-key" data-key="gelen"><span class="dash-chart-dot"></span>Gelen Kutusu</span>
+          <span class="dash-chart-key" data-key="giden"><span class="dash-chart-dot is-out"></span>Giden Kutusu</span>
         </div>
       </div>
 
       <!-- Right Column: Recent Invoices -->
       <div class="dash-recent card">
         <div class="dash-recent-header">
-          <h3>${svgIcons.fileText} Son Gelen Faturalar</h3>
+          <h3>${svgIcons.fileText} <span id="recentTitle">Son Gelen Faturalar</span></h3>
           <div class="dash-box-tabs">
             <button class="dash-box-tab active" data-recent="gelen">Gelen Kutusu</button>
             <button class="dash-box-tab" data-recent="giden">Giden Kutusu</button>
@@ -217,94 +224,32 @@ export async function renderDashboard() {
       <div class="dash-stats-header">
         <h3>${svgIcons.chart} E-Fatura İstatistikleri</h3>
         <div class="dash-stats-dates" style="display:flex; gap:10px; align-items:center">
-          <button class="btn btn-sm btn-ghost" id="refreshStats">${svgIcons.refresh}</button>
+          <button class="btn btn-sm btn-ghost" id="refreshStats" title="Yenile" aria-label="İstatistikleri yenile">${svgIcons.refresh}</button>
         </div>
       </div>
       <div class="dash-stats-chart">
-        <canvas id="statsChart" width="100%" height="200"></canvas>
+        <canvas id="statsChart" height="200"></canvas>
       </div>
       <div class="dash-stats-grid">
-        <div class="dash-stat-box">
+        <div class="dash-stat-box" data-dir="in">
           <span class="dash-stat-label">Gelen Fatura Tutarı</span>
-          <span class="dash-stat-value text-success" id="statGelenTutar">0,00 ₺</span>
+          <span class="dash-stat-value" id="statGelenTutar">0,00 ₺</span>
         </div>
-        <div class="dash-stat-box">
+        <div class="dash-stat-box" data-dir="in">
           <span class="dash-stat-label">Gelen Fatura Sayısı</span>
-          <span class="dash-stat-value text-info" id="statGelenAdet">0 Adet</span>
+          <span class="dash-stat-value" id="statGelenAdet">0 Adet</span>
         </div>
-        <div class="dash-stat-box">
+        <div class="dash-stat-box" data-dir="out">
           <span class="dash-stat-label">Giden Fatura Tutarı</span>
-          <span class="dash-stat-value text-success" id="statGidenTutar">0,00 ₺</span>
+          <span class="dash-stat-value" id="statGidenTutar">0,00 ₺</span>
         </div>
-        <div class="dash-stat-box">
+        <div class="dash-stat-box" data-dir="out">
           <span class="dash-stat-label">Giden Fatura Sayısı</span>
-          <span class="dash-stat-value text-info" id="statGidenAdet">0 Adet</span>
+          <span class="dash-stat-value" id="statGidenAdet">0 Adet</span>
         </div>
       </div>
     </div>
 
-    <!-- Bottom Widgets -->
-    <div class="dash-widgets-grid">
-      <div class="dash-widget card">
-        <div class="dash-widget-icon" style="color:var(--info)">${svgIcons.eFatura}</div>
-        <div class="dash-widget-title">Kontör</div>
-        <div class="dash-widget-value">1.000</div>
-        <div class="dash-widget-footer">
-          <div><span class="dash-widget-sub-label">Kalan</span><span class="dash-widget-sub-value">725</span></div>
-          <div><span class="dash-widget-sub-label">Kullanılan</span><span class="dash-widget-sub-value">275</span></div>
-        </div>
-      </div>
-      <div class="dash-widget card">
-        <div class="dash-widget-icon" style="color:var(--success)">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-        </div>
-        <div class="dash-widget-title">WhatsApp</div>
-        <div class="dash-widget-value">0</div>
-        <div class="dash-widget-footer">
-          <div><span class="dash-widget-sub-label">Kalan</span><span class="dash-widget-sub-value">0</span></div>
-          <div><span class="dash-widget-sub-label">Kullanılan</span><span class="dash-widget-sub-value">0</span></div>
-        </div>
-      </div>
-      <div class="dash-widget card">
-        <div class="dash-widget-icon" style="color:var(--warning)">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-        </div>
-        <div class="dash-widget-title">Sms</div>
-        <div class="dash-widget-value">0</div>
-        <div class="dash-widget-footer">
-          <div><span class="dash-widget-sub-label">Kalan</span><span class="dash-widget-sub-value">0</span></div>
-          <div><span class="dash-widget-sub-label">Kullanılan</span><span class="dash-widget-sub-value">0</span></div>
-        </div>
-      </div>
-      <div class="dash-widget dash-widget-currency card">
-        <table class="dash-currency-table">
-          <thead>
-            <tr><th></th><th></th><th>Alış</th><th>Satış</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td><span class="dash-currency-badge" style="background:#27ae60;color:#fff">$</span></td>
-              <td>Dolar</td>
-              <td id="usdBuy">—</td>
-              <td id="usdSell">—</td>
-            </tr>
-            <tr>
-              <td><span class="dash-currency-badge" style="background:#2980b9;color:#fff">€</span></td>
-              <td>Euro</td>
-              <td id="eurBuy">—</td>
-              <td id="eurSell">—</td>
-            </tr>
-            <tr>
-              <td><span class="dash-currency-badge" style="background:#8e44ad;color:#fff">£</span></td>
-              <td>Sterlin</td>
-              <td id="gbpBuy">—</td>
-              <td id="gbpSell">—</td>
-            </tr>
-          </tbody>
-        </table>
-        <div class="dash-currency-source">Veriler T.C.M.B'den Alınmaktadır.</div>
-      </div>
-    </div>
   `;
 
   // ── Event Bindings ──
@@ -326,7 +271,7 @@ export async function renderDashboard() {
         page.querySelectorAll('.dash-period-tab').forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         currentPeriod = tab.dataset.period;
-        loadDashboard(page);
+        renderDashboardData(page);
       });
     });
 
@@ -335,53 +280,88 @@ export async function renderDashboard() {
 
     // Box tabs
     page.querySelectorAll('.dash-box-tab').forEach(tab => {
+      const state = tab.dataset.box ? currentBoxTab : currentRecentTab;
+      tab.classList.toggle('active', (tab.dataset.box || tab.dataset.recent) === state);
+      tab.setAttribute('aria-pressed', String(tab.classList.contains('active')));
       tab.addEventListener('click', () => {
         const group = tab.closest('.dash-box-tabs') || tab.parentElement;
-        group.querySelectorAll('.dash-box-tab').forEach(t => t.classList.remove('active'));
+        group.querySelectorAll('.dash-box-tab').forEach(t => { t.classList.remove('active'); t.setAttribute('aria-pressed', 'false'); });
         tab.classList.add('active');
-        if (tab.dataset.box) {
-          page.querySelector('#donutLabel').textContent = tab.dataset.box === 'gelen' ? 'Gelen Kutusu' : 'Giden Kutusu';
-          loadDashboard(page); // refresh view
-        }
-        if (tab.dataset.recent) {
-          currentRecentTab = tab.dataset.recent;
-          loadDashboard(page); // refresh view
-        }
+        tab.setAttribute('aria-pressed', 'true');
+        if (tab.dataset.box) currentBoxTab = tab.dataset.box;
+        if (tab.dataset.recent) currentRecentTab = tab.dataset.recent;
+        renderDashboardData(page);
       });
     });
 
     // Draw initial donut
-    drawDonut(page.querySelector('#donutChart'), 0, 0);
+    drawDonut(page.querySelector('#donutChart'), 0, 0, currentBoxTab);
 
-    // Load data
+    // Canvas colors come from theme tokens; repaint cached data when the theme flips
+    const themeObserver = new MutationObserver(() => {
+      if (!page.isConnected) { themeObserver.disconnect(); return; }
+      const last = page._chartData;
+      drawDonut(page.querySelector('#donutChart'), last?.incoming || 0, last?.outgoing || 0, last?.box);
+      if (last) drawStatsChart(page.querySelector('#statsChart'), last.purchaseItems, last.saleItems, last.start, last.end);
+    });
+    themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+    // Load data: paint the last snapshot for this account at once, then revalidate.
     if (account) {
-      loadDashboard(page);
+      const cached = dashboardCache.get(account.id);
+      if (cached) {
+        page._raw = cached.raw;
+        renderDashboardData(page);
+      }
+      if (!cached || Date.now() - cached.at > DASHBOARD_FRESH_MS) loadDashboard(page);
     }
-
-    // Load currency rates
-    loadCurrencyRates(page);
   }, 0);
 
   return page;
 }
 
+const DASHBOARD_FRESH_MS = 30 * 1000;
+const dashboardCache = new Map();
+
 async function loadDashboard(page) {
+  const token = (page._loadToken || 0) + 1;
+  page._loadToken = token;
+  const accountId = getActiveAccountId();
   try {
-    // ALWAYS FETCH LAST 30 DAYS FOR RECENT LIST AND CHART
+    // Last 30 days, extended back to the 1st so "Bu Ay" is always fully covered.
     const apiEnd = new Date();
-    const apiStart = new Date();
-    apiStart.setDate(apiStart.getDate() - 30); // 30 days fixed
+    let apiStart = new Date();
+    apiStart.setDate(apiStart.getDate() - 30);
+    const monthStart = new Date(apiEnd.getFullYear(), apiEnd.getMonth(), 1);
+    if (monthStart < apiStart) apiStart = monthStart;
 
     const [salesRes, purchaseRes] = await Promise.allSettled([
-      EInvoice.listSales({ PageSize: 50, StartDate: apiStart.toISOString(), EndDate: apiEnd.toISOString() }),
-      EInvoice.listPurchases({ PageSize: 50, StartDate: apiStart.toISOString(), EndDate: apiEnd.toISOString() })
+      EInvoice.listSales({ PageSize: 100, StartDate: apiStart.toISOString(), EndDate: apiEnd.toISOString() }),
+      EInvoice.listPurchases({ PageSize: 100, StartDate: apiStart.toISOString(), EndDate: apiEnd.toISOString() })
     ]);
+    if (token !== page._loadToken || !page.isConnected) return;
 
     const sales = salesRes.status === 'fulfilled' && salesRes.value.success ? salesRes.value.data : null;
     const purchases = purchaseRes.status === 'fulfilled' && purchaseRes.value.success ? purchaseRes.value.data : null;
 
-    const saleItems = extractItems(sales);
-    const purchaseItems = extractItems(purchases);
+    page._raw = {
+      saleItems: extractItems(sales),
+      purchaseItems: extractItems(purchases),
+      salesFailed: !sales,
+      purchasesFailed: !purchases,
+    };
+    if (accountId && (sales || purchases)) dashboardCache.set(accountId, { at: Date.now(), raw: page._raw });
+    renderDashboardData(page);
+  } catch (e) {
+    console.error('Dashboard data error:', e);
+  }
+}
+
+function renderDashboardData(page) {
+  const raw = page._raw;
+  if (!raw || !page.isConnected) return;
+  try {
+    const { saleItems, purchaseItems, salesFailed, purchasesFailed } = raw;
 
     // TOP STATS FILTERING (Bugün, Dün, Bu Ay vs)
     const { start: fStartStr, end: fEndStr } = getPeriodDates();
@@ -398,19 +378,21 @@ async function loadDashboard(page) {
       return d >= fStart && d <= fEnd;
     });
 
-    // Update donut with filtered items
-    drawDonut(page.querySelector('#donutChart'), statsPurchaseItems.length, statsSaleItems.length);
+    const boxGelen = currentBoxTab === 'gelen';
+    const boxFailed = boxGelen ? purchasesFailed : salesFailed;
+    drawDonut(page.querySelector('#donutChart'), statsPurchaseItems.length, statsSaleItems.length, currentBoxTab);
+    const donutLabel = page.querySelector('#donutLabel');
+    if (donutLabel) donutLabel.textContent = boxGelen ? 'Gelen Kutusu' : 'Giden Kutusu';
     const donutVal = page.querySelector('#donutValue');
-    if (donutVal) donutVal.textContent = currentRecentTab === 'gelen' ? statsPurchaseItems.length : statsSaleItems.length;
+    if (donutVal) donutVal.textContent = boxFailed ? '—' : (boxGelen ? statsPurchaseItems.length : statsSaleItems.length);
+    page.querySelector('.dash-chart-section')?.setAttribute('data-box', currentBoxTab);
 
-    // Calculate detailed legend stats for active Box
     const isGelen = currentRecentTab === 'gelen';
-    const activeStatsItems = isGelen ? statsPurchaseItems : statsSaleItems;
+    const activeStatsItems = boxGelen ? statsPurchaseItems : statsSaleItems;
     let temel = 0, ticari = 0, bekleyen = 0, kabul = 0, red = 0, basarili = 0, hatali = 0, islem = 0;
 
     activeStatsItems.forEach(inv => {
       const info = inv.InvoiceInfo || inv.invoiceInfo || {};
-      const t = inv.Target || inv.target || {};
       const status = inv.Status || inv.status || {};
       
       const p = (inv.InvoiceProfile || inv.invoiceProfile || inv.ProfileId || inv.profileId || info.ProfileId || info.profileId || '').toUpperCase();
@@ -418,7 +400,10 @@ async function loadDashboard(page) {
       
       if (p === 'TEMELFATURA') temel++;
       if (p === 'TICARIFATURA') ticari++;
-      if (s === 'BEKLEYEN' || s === 'WAITING' || s === '0' || s === 'ALICIYA ILETILDI') { bekleyen++; islem++; }
+      if (s === 'BEKLEYEN' || s === 'WAITING' || s === '0' || s === 'ALICIYA ILETILDI') {
+        islem++;
+        if (p === 'TICARIFATURA') bekleyen++;
+      }
       if (s === 'KABUL_EDILDI' || s === 'APPROVED' || s === 'KABUL' || s === '2004' || s === 'SUCCEED') kabul++;
       if (s === 'REDDEDILDI' || s === 'REJECTED' || s === 'RED' || s === '2005') red++;
       if (s === 'BASARILI' || s === 'SUCCESS' || s === '2' || s === '2000' || s === '1300') basarili++;
@@ -445,40 +430,58 @@ async function loadDashboard(page) {
     if (el('statGidenTutar')) el('statGidenTutar').textContent = formatCurrency(gidenTotal);
     if (el('statGidenAdet')) el('statGidenAdet').textContent = `${statsSaleItems.length} Adet`;
 
-    // Recent invoices list
+    // Recent invoices: newest first, open e-fatura on click
     const recentList = page.querySelector('#recentInvoicesList');
-    // Display ALL items based on tab!
-    const recentItems = isGelen ? purchaseItems : saleItems;
-    
+    const recentItems = sortNewestFirst(isGelen ? purchaseItems : saleItems).slice(0, 10);
+    const recentTitle = page.querySelector('#recentTitle');
+    if (recentTitle) recentTitle.textContent = isGelen ? 'Son Gelen Faturalar' : 'Son Giden Faturalar';
+    const accountId = getActiveAccountId();
+    const belgeKind = isGelen ? 'incoming' : 'outgoing';
+
     if (recentList) {
-      if (recentItems.length === 0) {
+      if (isGelen ? purchasesFailed : salesFailed) {
+        recentList.innerHTML = `<div class="dash-recent-empty">${svgIcons.noData}<p>${isGelen ? 'Gelen' : 'Giden'} faturalar alınamadı. Yenile butonuyla tekrar deneyin.</p></div>`;
+      } else if (recentItems.length === 0) {
         recentList.innerHTML = `<div class="dash-recent-empty">${svgIcons.noData}<p>Henüz fatura bulunamadı</p></div>`;
       } else {
         recentList.innerHTML = recentItems.map(inv => {
           const name = isGelen ? getSenderName(inv) : getReceiverName(inv);
-          const initials = name && name !== '—' ? name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase() : '??';
+          const initials = name && name !== '—' ? name.split(' ').filter(Boolean).map(w => w[0]).join('').substring(0, 2).toLocaleUpperCase('tr-TR') : '??';
           const invoiceNo = getInvoiceNumber(inv) || '—';
           const amount = formatCurrency(getAmount(inv), getCurrency(inv));
           const date = formatDateTR(getInvoiceDate(inv));
+          const uuid = getInvoiceUuid(inv);
+          const openable = !!(accountId && uuid);
           return `
-            <div class="dash-recent-item">
-              <div class="dash-recent-avatar">${initials}</div>
+            <button type="button" class="dash-recent-item${openable ? ' is-clickable' : ''}" ${openable ? `data-uuid="${escapeHtml(uuid)}" data-kind="${belgeKind}" data-party="${escapeHtml(name || '')}" data-number="${escapeHtml(invoiceNo)}" data-date="${escapeHtml(date)}" data-amount="${escapeHtml(amount)}"` : 'disabled'} title="${openable ? 'E-faturayı aç' : 'Belge kimliği yok'}">
+              <div class="dash-recent-avatar ${isGelen ? 'is-in' : 'is-out'}" aria-hidden="true">${escapeHtml(initials)}</div>
               <div class="dash-recent-info">
-                <span class="dash-recent-name" style="font-weight:600;font-size:13px;display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden">${name || 'Bilinmiyor'}</span>
-                <span class="dash-recent-id" style="color:var(--text-muted);font-size:11px">${invoiceNo}</span>
+                <span class="dash-recent-name" title="${escapeHtml(name || 'Bilinmiyor')}">${escapeHtml(name || 'Bilinmiyor')}</span>
+                <span class="dash-recent-id">${escapeHtml(invoiceNo)}</span>
               </div>
-              <div class="dash-recent-right" style="text-align:right">
-                <span class="dash-recent-date" style="color:var(--text-muted);font-size:11px;display:block">${date}</span>
-                <span class="dash-recent-amount" style="color:${isGelen ? 'var(--info)' : 'var(--success)'};font-weight:700;font-size:12px">${amount}</span>
+              <div class="dash-recent-right">
+                <span class="dash-recent-amount">${escapeHtml(amount)}</span>
+                <span class="dash-recent-date">${escapeHtml(date)}</span>
               </div>
-            </div>
+            </button>
           `;
         }).join('');
+        recentList.querySelectorAll('.dash-recent-item.is-clickable').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const { uuid, kind = belgeKind, party, number, date, amount } = btn.dataset;
+            if (!uuid) return;
+            openPdfViewer({
+              load: () => kind === 'incoming' ? EInvoice.getPurchasePdf(uuid) : EInvoice.getSalePdf(uuid),
+              meta: { party, number: number === '—' ? '' : number, date: date === '—' ? '' : date, amount, direction: kind },
+            });
+          });
+        });
       }
     }
 
     // Draw stats chart (active period)
     const { start: chartStartStr, end: chartEndStr } = getPeriodDates();
+    page._chartData = { incoming: statsPurchaseItems.length, outgoing: statsSaleItems.length, box: currentBoxTab, purchaseItems, saleItems, start: chartStartStr, end: chartEndStr };
     drawStatsChart(page.querySelector('#statsChart'), purchaseItems, saleItems, chartStartStr, chartEndStr);
 
   } catch (e) {
@@ -486,8 +489,22 @@ async function loadDashboard(page) {
   }
 }
 
-function drawDonut(canvas, incoming, outgoing) {
+function chartTheme() {
+  const css = getComputedStyle(document.documentElement);
+  const read = (name, fallback) => css.getPropertyValue(name).trim() || fallback;
+  return {
+    incoming: read('--chart-in', '#2563eb'),
+    outgoing: read('--chart-out', '#16a34a'),
+    track: read('--surface-2', '#f6f8fb'),
+    grid: read('--border', '#dce3ec'),
+    label: read('--text-muted', '#64748b'),
+    surface: read('--bg-card', '#ffffff'),
+  };
+}
+
+function drawDonut(canvas, incoming, outgoing, active = 'gelen') {
   if (!canvas) return;
+  const theme = chartTheme();
   const dpr = window.devicePixelRatio || 1;
   const size = 200;
   canvas.width = size * dpr;
@@ -496,104 +513,55 @@ function drawDonut(canvas, incoming, outgoing) {
   canvas.style.height = size + 'px';
 
   const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const cx = size / 2, cy = size / 2, r = 72, lw = 22;
-  const gap = 0.04; // small gap between segments
+  const cx = size / 2, cy = size / 2, r = 76, lw = 16;
+  const gap = 0.05;
 
   ctx.clearRect(0, 0, size, size);
 
-  const total = incoming + outgoing;
-  if (total === 0) {
-    // Empty — subtle track ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
-    ctx.lineWidth = lw;
-    ctx.stroke();
-
-    // Inner subtle ring
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-    ctx.strokeStyle = 'rgba(59,130,246,0.08)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    return;
-  }
-
-  // Background track
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.strokeStyle = theme.track;
   ctx.lineWidth = lw;
   ctx.stroke();
+
+  const total = incoming + outgoing;
+  if (total === 0) return;
 
   const inAngle = (incoming / total) * 2 * Math.PI;
   const outAngle = (outgoing / total) * 2 * Math.PI;
   const startAngle = -Math.PI / 2;
+  const both = incoming > 0 && outgoing > 0;
 
-  // Incoming segment (blue gradient)
-  if (incoming > 0) {
-    const grad1 = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
-    grad1.addColorStop(0, '#3b82f6');
-    grad1.addColorStop(1, '#06b6d4');
+  const segment = (from, to, color, dim) => {
     ctx.beginPath();
-    ctx.arc(cx, cy, r, startAngle + (outgoing > 0 ? gap / 2 : 0), startAngle + inAngle - (outgoing > 0 ? gap / 2 : 0));
-    ctx.strokeStyle = grad1;
+    ctx.arc(cx, cy, r, from, to);
+    ctx.strokeStyle = color;
     ctx.lineWidth = lw;
-    ctx.lineCap = 'round';
+    ctx.lineCap = both ? 'round' : 'butt';
+    ctx.globalAlpha = dim ? 0.3 : 1;
     ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
 
-    // Glow
-    ctx.save();
-    ctx.shadowColor = 'rgba(59,130,246,0.35)';
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startAngle, startAngle + inAngle);
-    ctx.strokeStyle = 'rgba(59,130,246,0.15)';
-    ctx.lineWidth = lw + 8;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Outgoing segment (green gradient)
-  if (outgoing > 0) {
-    const grad2 = ctx.createLinearGradient(cx + r, cy - r, cx - r, cy + r);
-    grad2.addColorStop(0, '#10b981');
-    grad2.addColorStop(1, '#34d399');
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startAngle + inAngle + (incoming > 0 ? gap / 2 : 0), startAngle + inAngle + outAngle - (incoming > 0 ? gap / 2 : 0));
-    ctx.strokeStyle = grad2;
-    ctx.lineWidth = lw;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-
-    // Glow
-    ctx.save();
-    ctx.shadowColor = 'rgba(16,185,129,0.3)';
-    ctx.shadowBlur = 12;
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, startAngle + inAngle, startAngle + inAngle + outAngle);
-    ctx.strokeStyle = 'rgba(16,185,129,0.12)';
-    ctx.lineWidth = lw + 8;
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // Inner decorative ring
-  ctx.beginPath();
-  ctx.arc(cx, cy, r - lw / 2 - 4, 0, 2 * Math.PI);
-  ctx.strokeStyle = 'rgba(255,255,255,0.03)';
-  ctx.lineWidth = 1;
-  ctx.stroke();
+  if (incoming > 0) segment(startAngle + (both ? gap : 0), startAngle + inAngle - (both ? gap : 0), theme.incoming, active === 'giden');
+  if (outgoing > 0) segment(startAngle + inAngle + (both ? gap : 0), startAngle + inAngle + outAngle - (both ? gap : 0), theme.outgoing, active === 'gelen');
 }
 
 function drawStatsChart(canvas, purchaseItems, saleItems, startDateStr, endDateStr) {
   if (!canvas) return;
+  const theme = chartTheme();
   const ctx = canvas.getContext('2d');
-  const w = canvas.width = canvas.parentElement.offsetWidth;
-  const h = canvas.height = 200;
-  const padding = { top: 20, right: 20, bottom: 30, left: 40 };
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(0, canvas.parentElement.clientWidth - 24);
+  const h = 200;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const padding = { top: 16, right: 16, bottom: 28, left: 16 };
 
   ctx.clearRect(0, 0, w, h);
 
@@ -603,7 +571,7 @@ function drawStatsChart(canvas, purchaseItems, saleItems, startDateStr, endDateS
   const msPerDay = 24 * 60 * 60 * 1000;
   
   // Cap at max 14 days visually for neatness
-  let numDays = Math.round(Math.abs((endD - startD) / msPerDay)) + 1;
+  let numDays = Math.ceil(Math.abs((endD - startD) / msPerDay));
   if (numDays > 31) numDays = 31;
   if (numDays < 2) numDays = 2; // at least 2 points to draw a line
 
@@ -614,53 +582,48 @@ function drawStatsChart(canvas, purchaseItems, saleItems, startDateStr, endDateS
     days.push(d);
   }
 
-  const gelenByDay = days.map(d => {
-    const ds = d.toISOString().split('T')[0];
-    return purchaseItems.filter(inv => {
-      const iDate = (getInvoiceDate(inv) || '').split('T')[0];
-      return iDate === ds;
-    }).length;
-  });
-
-  const gidenByDay = days.map(d => {
-    const ds = d.toISOString().split('T')[0];
-    return saleItems.filter(inv => {
-      const iDate = (getInvoiceDate(inv) || '').split('T')[0];
-      return iDate === ds;
-    }).length;
-  });
+  const countByDay = (items) => {
+    const counts = new Map();
+    items.forEach(inv => {
+      const key = String(getInvoiceDate(inv) || '').slice(0, 10);
+      counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return days.map(d => counts.get(localDayKey(d)) || 0);
+  };
+  const gelenByDay = countByDay(purchaseItems);
+  const gidenByDay = countByDay(saleItems);
 
   const maxVal = Math.max(1, ...gelenByDay, ...gidenByDay);
   const chartW = w - padding.left - padding.right;
   const chartH = h - padding.top - padding.bottom;
 
   // Grid lines
-  ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+  ctx.strokeStyle = theme.grid;
   ctx.lineWidth = 1;
   for (let i = 0; i <= 4; i++) {
-    const y = padding.top + (chartH / 4) * i;
+    const y = Math.round(padding.top + (chartH / 4) * i) + 0.5;
     ctx.beginPath();
     ctx.moveTo(padding.left, y);
     ctx.lineTo(w - padding.right, y);
     ctx.stroke();
   }
 
-  // Draw area + line for gelen (blue)
-  drawArea(ctx, gelenByDay, days, maxVal, chartW, chartH, padding, '#3b82f6', 'rgba(59,130,246,0.1)');
-  // Draw area + line for giden (green)
-  drawArea(ctx, gidenByDay, days, maxVal, chartW, chartH, padding, '#10b981', 'rgba(16,185,129,0.1)');
+  drawArea(ctx, gelenByDay, days, maxVal, chartW, chartH, padding, theme.incoming, theme.surface);
+  drawArea(ctx, gidenByDay, days, maxVal, chartW, chartH, padding, theme.outgoing, theme.surface);
 
   // X Labels
-  ctx.fillStyle = 'rgba(255,255,255,0.4)';
-  ctx.font = '10px Inter, sans-serif';
-  ctx.textAlign = 'center';
+  ctx.fillStyle = theme.label;
+  ctx.font = '500 11px Inter, sans-serif';
+  const labelStep = Math.max(1, Math.ceil(days.length / Math.max(2, Math.floor(chartW / 64))));
   days.forEach((d, i) => {
+    if (i % labelStep !== 0 && i !== days.length - 1) return;
     const x = padding.left + (chartW / (days.length - 1)) * i;
+    ctx.textAlign = i === 0 ? 'left' : i === days.length - 1 ? 'right' : 'center';
     ctx.fillText(`${d.getDate()} ${['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'][d.getMonth()]}`, x, h - 8);
   });
 }
 
-function drawArea(ctx, data, days, maxVal, chartW, chartH, padding, lineColor, fillColor) {
+function drawArea(ctx, data, days, maxVal, chartW, chartH, padding, lineColor, dotFill) {
   if (data.length < 2) return;
   const points = data.map((v, i) => ({
     x: padding.left + (chartW / (data.length - 1)) * i,
@@ -692,53 +655,32 @@ function drawArea(ctx, data, days, maxVal, chartW, chartH, padding, lineColor, f
   ctx.closePath();
   
   const grad = ctx.createLinearGradient(0, padding.top, 0, padding.top + chartH);
-  grad.addColorStop(0, fillColor);
-  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.save();
+  ctx.globalAlpha = 0.14;
+  grad.addColorStop(0, lineColor);
+  grad.addColorStop(1, 'transparent');
   ctx.fillStyle = grad;
   ctx.fill();
+  ctx.restore();
 
   // Line
   ctx.beginPath();
   drawLinePath(ctx);
   ctx.strokeStyle = lineColor;
-  ctx.lineWidth = 2.5;
+  ctx.lineWidth = 2;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
   ctx.stroke();
 
   // Dots
+  if (points.length > 16) return;
   points.forEach(p => {
-    if (p.y <= padding.top + chartH) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 4, 0, 2 * Math.PI);
-      ctx.fillStyle = '#1e293b'; // inner dark dot
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = lineColor;
-      ctx.stroke();
-    }
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3, 0, 2 * Math.PI);
+    ctx.fillStyle = dotFill;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = lineColor;
+    ctx.stroke();
   });
-}
-
-async function loadCurrencyRates(page) {
-  try {
-    const res = await fetch('https://api.exchangerate.host/latest?base=TRY&symbols=USD,EUR,GBP');
-    if (res.ok) {
-      const data = await res.json();
-      if (data.rates) {
-        const usdRate = 1 / data.rates.USD;
-        const eurRate = 1 / data.rates.EUR;
-        const gbpRate = 1 / data.rates.GBP;
-        const el = (id) => page.querySelector('#' + id);
-        if (el('usdBuy')) el('usdBuy').textContent = usdRate.toFixed(2);
-        if (el('usdSell')) el('usdSell').textContent = (usdRate * 1.004).toFixed(2);
-        if (el('eurBuy')) el('eurBuy').textContent = eurRate.toFixed(2);
-        if (el('eurSell')) el('eurSell').textContent = (eurRate * 1.004).toFixed(2);
-        if (el('gbpBuy')) el('gbpBuy').textContent = gbpRate.toFixed(2);
-        if (el('gbpSell')) el('gbpSell').textContent = (gbpRate * 1.004).toFixed(2);
-      }
-    }
-  } catch (e) {
-    console.log('Currency rates unavailable');
-  }
 }

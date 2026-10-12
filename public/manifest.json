@@ -1,5 +1,5 @@
 {
-  "name": "Sonvera 2.0 - E-Fatura Platformu",
+  "name": "Sonvera - E-Fatura Platformu",
   "short_name": "Sonvera",
   "description": "E-Fatura Yönetim Platformu",
   "id": "/",
@@ -34,16 +34,22 @@
       "purpose": "any"
     },
     {
-      "src": "icon-192.png",
+      "src": "icon-maskable-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "icon-512.png",
+      "src": "icon-maskable-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ],
   "shortcuts": [

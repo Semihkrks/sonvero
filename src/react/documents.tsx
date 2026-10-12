@@ -5,7 +5,7 @@ import {ChevronLeft,ChevronRight,FileText,RefreshCw,Search} from 'lucide-react';
 import {getActiveAccount,getActiveAccountId,getAllAccounts,setActiveAccount} from '../services/account-manager.js';
 import {callNilvera,retryRead} from '../lib/api-transport.js';
 import {extractItems} from '../services/nilvera-fetcher.js';
-import {istanbulDate} from '../lib/money.js';
+import {istanbulDate,istanbulMonthEnd} from '../lib/money.js';
 import {downloadDocument,supportsDocumentFile} from '../services/document-files.js';
 import {showToast} from '../components/toast.js';
 import {escapeHtml} from '../lib/html.js';
@@ -58,7 +58,7 @@ function Documents({initial}:{initial:string}){
  const account=getActiveAccount(),today=istanbulDate();
  const filterKey='sonvera:draft:document-filters:'+account?.id;
  const [saved]=useState(()=>{try{const value=JSON.parse(sessionStorage.getItem(filterKey)||'{}');return value&&typeof value==='object'?value:{};}catch{return {};}});
- const [kind,setKind]=useState<string>(Object.hasOwn(kinds,initial)?initial:Object.hasOwn(kinds,saved.kind||'')?saved.kind:'outgoing'),[start,setStart]=useState<string>(/^\d{4}-\d{2}-\d{2}$/.test(saved.start||'')?saved.start:today.slice(0,7)+'-01'),[end,setEnd]=useState<string>(/^\d{4}-\d{2}-\d{2}$/.test(saved.end||'')?saved.end:today),[page,setPage]=useState<number>(!initial&&Number.isInteger(saved.page)&&saved.page>0?saved.page:1),[search,setSearch]=useState('');
+ const [kind,setKind]=useState<string>(Object.hasOwn(kinds,initial)?initial:Object.hasOwn(kinds,saved.kind||'')?saved.kind:'outgoing'),[start,setStart]=useState<string>(/^\d{4}-\d{2}-\d{2}$/.test(saved.start||'')?saved.start:today.slice(0,7)+'-01'),[end,setEnd]=useState<string>(/^\d{4}-\d{2}-\d{2}$/.test(saved.end||'')?saved.end:istanbulMonthEnd()),[page,setPage]=useState<number>(!initial&&Number.isInteger(saved.page)&&saved.page>0?saved.page:1),[search,setSearch]=useState('');
  useEffect(()=>{try{sessionStorage.setItem(filterKey,JSON.stringify({kind,start,end,page}));}catch{}},[filterKey,kind,start,end,page]);
  const config=kinds[kind];
  const rangeDays=(Date.parse(end)-Date.parse(start))/86400000;

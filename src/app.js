@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════
-// Sonvera 2.0 — Main Application Entry Point
+// Sonvera — Main Application Entry Point
 // ══════════════════════════════════════════
 import './styles/main.css';
 import './styles/mobile.css';
@@ -18,6 +18,7 @@ import { registerRoute, startRouter } from './router.js';
 import { renderSidebar } from './components/sidebar.js';
 import { renderHeader } from './components/header.js';
 import { renderBottomNav } from './components/bottom-nav.js';
+import { logoMark } from './components/logo.js';
 import { startInvoiceNotificationMonitor, stopInvoiceNotificationMonitor } from './services/invoice-notification-monitor.js';
 import { startDatePickerAutoBind } from './lib/date-picker.js';
 import { getSession, signIn, signOut, getSupabase } from './lib/supabase.js';
@@ -46,6 +47,7 @@ const renderEFaturaArchiveOutgoing = (...args) => import('./pages/archive-boxes.
 const renderEFaturaArchiveIncoming = (...args) => import('./pages/archive-boxes.js').then(m => m.renderEFaturaArchiveIncoming(...args));
 const renderEirsaliyeArchiveOutgoing = (...args) => import('./pages/archive-boxes.js').then(m => m.renderEirsaliyeArchiveOutgoing(...args));
 const renderEirsaliyeArchiveIncoming = (...args) => import('./pages/archive-boxes.js').then(m => m.renderEirsaliyeArchiveIncoming(...args));
+const renderDashboard = (...args) => import('./pages/dashboard.js').then(m => m.renderDashboard(...args));
 
 // ── Apply saved theme ──
 const savedTheme = localStorage.getItem('nilfatura_theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
@@ -95,7 +97,10 @@ function recordLoginFail() {
 // Core pages (existing)
 registerRoute('/belge', async (route) => (await import('./react/documents.tsx')).mountSharedDocument(route));
 registerRoute('/belgeler', async (route) => (await import('./react/documents.tsx')).mountDocuments(route));
-registerRoute('/dashboard', async () => (await import('./react/workspace.tsx')).mountWorkspace('dashboard'));
+registerRoute('/dashboard', async () => ({
+  page: await renderDashboard(),
+  title: 'Ana Sayfa'
+}));
 
 registerRoute('/create', async () => ({
   page: await renderInvoiceCreate(),
@@ -134,9 +139,13 @@ registerRoute('/export', async () => ({
 
 registerRoute('/settings', async () => (await import('./react/workspace.tsx')).mountWorkspace('settings'));
 
-registerRoute('/cari', async () => (await import('./react/workspace.tsx')).mountWorkspace('ledger'));
+registerRoute('/cari', async () => ({
+  page: await renderCariPage(),
+  title: 'Cari ve Tahsilat'
+}));
 registerRoute('/cari-ozet', async () => (await import('./react/workspace.tsx')).mountWorkspace('customers'));
 registerRoute('/cari-musteriler', async () => ({page:await renderCariPage(),title:'Müşteri Cari Detayı'}));
+registerRoute('/cari-react', async () => (await import('./react/workspace.tsx')).mountWorkspace('ledger'));
 
 registerRoute('/tum-hesaplar-cari', async () => ({
   page: await renderMultiAccountCari(),
@@ -320,9 +329,7 @@ function renderLoginPage(info = '', infoType = 'error') {
       <div class="login-bg-glow"></div>
       <div class="login-card">
         <div class="login-logo">
-          <div class="login-logo-icon">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>
-          </div>
+          <div class="login-logo-icon">${logoMark(60)}</div>
           <h1>Sonvera</h1>
           <p>E-Fatura Yonetim Platformu</p>
         </div>
@@ -405,14 +412,15 @@ function renderLoginPage(info = '', infoType = 'error') {
       await signIn(email, password);
       loginFailCount = 0;
       loginLockUntil = 0;
+      // The auth listener replaces this page once accounts are loaded; keep the spinner until then.
+      if (btnText) btnText.textContent = 'Hesaplar yükleniyor...';
     } catch (err) {
       const cooldown = recordLoginFail();
       const lockMsg = cooldown > 0 ? ` ${cooldown} saniye beklemeniz gerekiyor.` : '';
-      renderLoginPage((err?.message || 'Giris sirasinda bir hata olustu.') + lockMsg);
-    } finally {
       submitBtn?.removeAttribute('disabled');
       if (btnText) btnText.textContent = 'Giris Yap';
       if (btnSpinner) btnSpinner.style.display = 'none';
+      renderLoginPage((err?.message || 'Giris sirasinda bir hata olustu.') + lockMsg);
     }
   });
 }
@@ -469,7 +477,18 @@ function handleManageAccounts() {
   window.location.hash = '#/accounts';
 }
 
-async function bootAuthedApp(user) {
+let bootPromise = null;
+let bootUserId = '';
+
+// Startup fires both getSession() and the INITIAL_SESSION auth event; without this the app booted and rendered twice.
+function bootAuthedApp(user) {
+  if (bootPromise && bootUserId === user.id) { currentAuthUser = user; return bootPromise; }
+  bootUserId = user.id;
+  bootPromise = runBootAuthedApp(user).finally(() => { bootPromise = null; });
+  return bootPromise;
+}
+
+async function runBootAuthedApp(user) {
   currentAuthUser = user;
 
   // Hesap listesini buluttan (Supabase) tazele: yeni cihazda bellek-içi state boş
@@ -484,7 +503,7 @@ async function bootAuthedApp(user) {
     stopRouter = startRouter(renderLayout);
     stopDatePickerAutoBind = startDatePickerAutoBind(document.body);
 
-    startInvoiceNotificationMonitor().catch((err) => {
+    startInvoiceNotificationMonitor({ delayMs: 4000 }).catch((err) => {
       console.warn('Bildirim izleyicisi baslatilamadi:', err?.message || err);
     });
   } else {

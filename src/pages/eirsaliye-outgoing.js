@@ -6,6 +6,7 @@ import { EDespatch, EDespatchWithAccount } from '../api/nilvera.js';
 import { fetchInvoicesSmart } from '../services/invoice-archive.js';
 import { showToast } from '../components/toast.js';
 import { showModal } from '../components/modal.js';
+import { openPdfViewer } from '../components/pdf-viewer.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 
@@ -261,45 +262,24 @@ function downloadTextFile(fileName, text, mime = 'text/plain') {
   URL.revokeObjectURL(url);
 }
 
-async function showPdfPreviewModal(uuid) {
-  if (!uuid) {
+function showPdfPreviewModal(row) {
+  if (!row?.uuid) {
     showToast('UUID bulunamadı', 'warning');
     return;
   }
-
-  const body = document.createElement('div');
-  body.style.height = '80vh';
-  body.style.minHeight = '600px';
-  body.style.width = '100%';
-  body.style.background = '#ffffff';
-  body.style.display = 'flex';
-  body.style.alignItems = 'center';
-  body.style.justifyContent = 'center';
-  body.innerHTML = `<div>${ic.refresh} PDF yükleniyor...</div>`;
-
-  const modal = showModal({ title: 'e-İrsaliye PDF Önizleme', body, size: 'xlarge' });
-  const modalBody = modal?.overlay?.querySelector('.modal-body');
-  if (modalBody) {
-    modalBody.style.padding = '0';
-    modalBody.style.background = '#f3f4f6';
-  }
-
-  const res = await EDespatch.getSalePdf(uuid);
-  if (!res.success) {
-    body.innerHTML = `<div class="empty-state">${ic.noData}<h3>PDF alınamadı</h3><p>${res.error}</p></div>`;
-    return modal;
-  }
-
-  const content = extractFileContent(res.data);
-  const pdfUrl = buildFileUrl(content, 'application/pdf');
-  if (!pdfUrl) {
-    body.innerHTML = `<div class="empty-state">${ic.noData}<h3>PDF içeriği bulunamadı</h3></div>`;
-    return modal;
-  }
-
-  const finalPdfUrl = pdfUrl.includes('#') ? pdfUrl : `${pdfUrl}#toolbar=0&navpanes=0&scrollbar=1&view=FitH`;
-  body.innerHTML = `<iframe src="${finalPdfUrl}" width="100%" height="100%" style="border:none;border-radius:0;"></iframe>`;
-  return modal;
+  return openPdfViewer({
+    title: 'e-İrsaliye Önizleme',
+    filePrefix: 'Irsaliye',
+    load: () => EDespatch.getSalePdf(row.uuid),
+    meta: {
+      direction: 'outgoing',
+      fallbackTitle: 'e-İrsaliye',
+      party: row.receiverName === '—' ? '' : row.receiverName,
+      number: row.no === '—' ? '' : row.no,
+      date: row.issueDate ? new Date(row.issueDate).toLocaleDateString('tr-TR') : '',
+      amount: row.amount > 0 ? fmtCur(row.amount, row.currency) : '',
+    },
+  });
 }
 
 async function sendMailing(row) {
@@ -623,7 +603,7 @@ function renderRows(page, rows) {
   tbody.querySelectorAll('[data-act="preview"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const row = rows[Number(btn.dataset.idx)];
-      await showPdfPreviewModal(row.uuid);
+      showPdfPreviewModal(row);
     });
   });
 
@@ -776,14 +756,15 @@ export async function renderEDespatchOutgoing(options = {}) {
         <label class="filter-label">Bitiş Tarihi</label>
         <input type="date" class="filter-input" id="endDate" value="${end}" />
       </div>
-      <div class="filter-actions" style="display:flex; gap:12px; align-items:flex-end; margin-bottom:-4px;">
-        <button class="btn btn-sm" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--accent); color:white; border:none">${ic.search} ARA</button>
+      <div class="filter-actions"><span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span><div class="filter-actions-row">
+        <button class="btn btn-sm btn-primary" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
         <button class="btn btn-sm" id="btnRefresh" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--bg-secondary); border:1px solid var(--border); color:var(--text-secondary)">${ic.refresh} YENİLE</button>
         <div style="position:relative">
-          <button class="btn btn-sm" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--info); border:none; color:white">
+          <button class="btn btn-sm btn-primary" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.gear} İŞLEMLER ${ic.chevronDown}
           </button>
         </div>
+      </div>
       </div>
     </div>
 
