@@ -1,7 +1,21 @@
 # Sonvera — devir teslim ve yapılacaklar
 
-Son güncelleme: **12 Ekim 2026 (mobil bildirim + PWA üst bulanıklık)**. Bu dosya başka IDE/AI ajanına geçiş için ana başlangıç noktasıdır. HER OTURUM / YANIT BİTİŞİNDE bu dosyayı güncellemek zorunludur; bu kural sonraki IDE ve ajanlar için de geçerlidir. Yapılanları, kalanları, doğrulanmayanları ve sıradaki somut adımı yazın. Tamamlanan işlerin üzerine yazmayın; mevcut kullanıcı değişikliklerini koruyun.
+Son güncelleme: **12 Ekim 2026 (toplu tahsilat mobil kaydırma)**. Bu dosya başka IDE/AI ajanına geçiş için ana başlangıç noktasıdır. HER OTURUM / YANIT BİTİŞİNDE bu dosyayı güncellemek zorunludur; bu kural sonraki IDE ve ajanlar için de geçerlidir. Yapılanları, kalanları, doğrulanmayanları ve sıradaki somut adımı yazın. Tamamlanan işlerin üzerine yazmayın; mevcut kullanıcı değişikliklerini koruyun.
 
+
+## 12 Ekim toplu tahsilat mobil kaydırma
+
+- Liste kayıyordu ama son satırlar yapışkan "kaydet" çubuğunun altında kalıyordu; kaydırma orada bitiyordu. Mobilde `.tt-page` altına 150px boşluk, kaydet çubuğu alt menünün hemen üstünde.
+- Dekont görüntüleyicisi: dekont kutusu 34dvh, form ayrı kaydırılıyor (`tt-vbody` min-height 0 + overflow auto). Müşteri listesi ekrana sabitlendi, kendi içinde kayar.
+- 390px ölçüm: son satır kaydet çubuğunun 13px üstünde; formun son alanı alt çubuğun 24px üstünde.
+
+## 12 Ekim Supabase unhealthy
+
+- Dashboard: Database, Auth, PostgREST, Storage kırmızı. Realtime ve Edge Functions yeşil. Not: "Recently restored".
+- Giriş `Failed to fetch`: `POST /auth/v1/token` 504 (yaklaşık 5 sn). `GET /auth/v1/health` 401 ile cevap veriyor, yani Auth süreci ayakta ama veritabanına ulaşamıyor. Management SQL de "connection timeout".
+- Son sağlıklı postgres kaydı 11:10 UTC: cron job 1 tamamlandı. Ondan hemen önce checkpoint ~49 MB ve ~33 MB yazdı. Nano disk I/O bütçesiyle aynı olay.
+- `content-script-start.js` / "Receiving end does not exist" tarayıcı eklentisi; uygulama hatası değil.
+- Kod push'u bunu düzeltmez. Yeşile dönünce girişi tekrar dene. Kırmızı kalırsa Dashboard → Restart project. Bütçe doluysa Nano'da tekrar düşer.
 
 ## 12 Ekim mobil bildirim + PWA üst şerit
 

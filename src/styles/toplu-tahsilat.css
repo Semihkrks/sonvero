@@ -788,7 +788,10 @@ body.tt-viewer-open { overflow: hidden; }
    Mobil
    ══════════════════════════════════════════ */
 @media (max-width: 768px) {
-  .tt-page { gap: 12px; padding: 4px 2px 0; }
+  .tt-page {
+    gap: 12px;
+    padding: 4px 2px calc(150px + var(--safe-bottom, 0px));
+  }
   .tt-head { align-items: flex-start; gap: 10px; }
   .tt-head-text h1 { font-size: 20px; }
   .tt-head-text p { font-size: 12px; }
@@ -848,8 +851,11 @@ body.tt-viewer-open { overflow: hidden; }
     line-height: 1.3;
   }
 
+  .tt-list,
+  .tt-row { touch-action: pan-y; }
+
   .tt-savebar {
-    bottom: calc(68px + var(--safe-bottom, 0px));
+    bottom: calc(72px + var(--safe-bottom, 0px));
     gap: 10px;
     padding: 10px 10px 10px 14px;
     border-radius: var(--radius-md);
@@ -875,20 +881,40 @@ body.tt-viewer-open { overflow: hidden; }
   .tt-vbody {
     display: flex;
     flex-direction: column;
+    min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y;
   }
   .tt-doc {
     flex: none;
-    height: 46vh;
-    height: 46dvh;
+    height: 34vh;
+    height: 34dvh;
+    max-height: 34dvh;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
   .tt-doc-tools { padding: 6px 8px; gap: 4px; }
   .tt-doc-open span { display: none; }
   .tt-doc-scroll { padding: 10px; gap: 10px; }
-  .tt-form { overflow: visible; padding: 14px 14px 20px; gap: 16px; min-height: 70dvh; }
+  .tt-form {
+    overflow: visible;
+    flex: none;
+    min-height: 0;
+    padding: 14px 14px calc(24px + var(--safe-bottom, 0px));
+    gap: 16px;
+  }
+  .tt-menu {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: calc(76px + var(--safe-bottom, 0px));
+    max-height: 42dvh;
+    z-index: 11000;
+  }
   .tt-field { scroll-margin-top: 10px; }
   .tt-field .form-input { height: 46px; font-size: 16px; }
   .tt-acc { min-height: 46px; }
