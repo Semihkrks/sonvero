@@ -14,11 +14,24 @@
     top: 0;
     left: 0;
     height: 100vh;
+    height: 100dvh;
     width: min(86vw, 320px);
-    z-index: 1001;
+    /* Üst çubuğun (1300) ve alt menünün (1250) üzerinde olmalı; yoksa menü
+       onların altına girer ve blur'lu şerit gibi görünür. */
+    z-index: 1400;
     transform: translateX(-110%);
     transition: transform 0.24s ease;
     box-shadow: 0 22px 46px rgba(0, 0, 0, 0.42);
+    /* Üstte saat/çentik, altta ana ekran çubuğu için boşluk bırak. */
+    padding-top: var(--safe-top, 0px);
+    padding-bottom: var(--safe-bottom, 0px);
+    /* Alt çubuğun köşesi menünün kenarından taşmasın: menü tam ekran boyunda. */
+    min-height: 100vh;
+    min-height: 100dvh;
+    box-sizing: border-box;
+    background: var(--bg-sidebar);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 
   .sidebar.sidebar-mobile-open {
@@ -142,9 +155,10 @@
     width: 100%;
     max-width: 100%;
     height: calc(60px + var(--safe-bottom, 10px));
-    background: var(--bg-card);
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    /* Düz renk: yarı saydam + blur, menünün altını bulanık gösteriyordu. */
+    background: var(--bg-secondary);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
     border-top: 1px solid var(--border);
     z-index: 1250;
     justify-content: space-around;
