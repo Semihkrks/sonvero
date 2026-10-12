@@ -8,6 +8,7 @@ Son güncelleme: **12 Ekim 2026 (toplu tahsilat mobil kaydırma)**. Bu dosya ba�
 - Liste kayıyordu ama son satırlar yapışkan "kaydet" çubuğunun altında kalıyordu; kaydırma orada bitiyordu. Mobilde `.tt-page` altına 150px boşluk, kaydet çubuğu alt menünün hemen üstünde.
 - Dekont görüntüleyicisi: dekont kutusu 34dvh, form ayrı kaydırılıyor (`tt-vbody` min-height 0 + overflow auto). Müşteri listesi ekrana sabitlendi, kendi içinde kayar.
 - 390px ölçüm: son satır kaydet çubuğunun 13px üstünde; formun son alanı alt çubuğun 24px üstünde.
+- Telefonda kısa listede yapışkan kaydet çubuğu satırların üstüne biniyordu (ekrandaki hali). Mobilde çubuk artık akışta, listenin altında; masaüstü yapışkan hali duruyor.
 
 ## 12 Ekim Supabase unhealthy
 

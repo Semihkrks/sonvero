@@ -790,7 +790,7 @@ body.tt-viewer-open { overflow: hidden; }
 @media (max-width: 768px) {
   .tt-page {
     gap: 12px;
-    padding: 4px 2px calc(150px + var(--safe-bottom, 0px));
+    padding: 4px 2px 12px;
   }
   .tt-head { align-items: flex-start; gap: 10px; }
   .tt-head-text h1 { font-size: 20px; }
@@ -855,7 +855,9 @@ body.tt-viewer-open { overflow: hidden; }
   .tt-row { touch-action: pan-y; }
 
   .tt-savebar {
-    bottom: calc(72px + var(--safe-bottom, 0px));
+    position: static;
+    bottom: auto;
+    margin-top: 4px;
     gap: 10px;
     padding: 10px 10px 10px 14px;
     border-radius: var(--radius-md);
