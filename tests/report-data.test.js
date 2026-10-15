@@ -21,13 +21,14 @@ it('does not merge tax-less ambiguous customers or people from different account
  expect(groupReportItems(items,accounts)).toHaveLength(4);
 });
 it('matches the selected screen balance without adding hidden historical opening',()=>{
- const group={name:'Burak Üretim',tax:'1900637732',rows:[{accountId:'a',kind:'satis',amount:'10.00'},{accountId:'b',kind:'alis',amount:'4.00'}]};
+ const group={name:'Burak Üretim',tax:'1900637732',rows:[{accountId:'a',kind:'satis',amount:'10.00'},{accountId:'a',kind:'tahsilat',amount:'3.00'},{accountId:'b',kind:'alis',amount:'4.00'}]};
  const colored=[{id:'a',name:'Mert Sarısoy',color:'#16a34a'},{id:'b',name:'Ayşe Karabut',color:'#0f766e'}];
- expect(reportCardModel(group,colored,{direction:'satis',withCollections:false},{value:null})).toMatchObject({balanceLabel:'Dönem neti',balance:'6.00'});
+ expect(reportCardModel(group,colored,{direction:'satis',withCollections:false},{value:null})).toMatchObject({balanceLabel:'Dönem neti',balance:'3.00'});
  const full=reportCardModel(group,colored,{direction:'both',withCollections:true},{value:'100.00'});
- expect(full).toMatchObject({balanceLabel:'Bakiye',balance:'6.00'});
+ expect(full).toMatchObject({balanceLabel:'Bakiye',balance:'3.00'});
  expect(full.columns.map(column=>column.color)).toEqual(['#16a34a','#0f766e']);
- expect(full.columns[0]).toMatchObject({name:'Mert Sarısoy',count:1,satis:'10.00'});
+ expect(full.columns[0]).toMatchObject({name:'Mert Sarısoy',activity:'1 Fatura  1 Tahsilat',satis:'10.00',tahsilat:'3.00',toplam:'7.00'});
+ expect(full.columns[1]).toMatchObject({activity:'1 Fatura',alis:'4.00',toplam:'-4.00'});
 });
 it('matches spoken spacing and VKN against actual customers',()=>{
  const groups=[{name:'HARMANDA TEKSTİL',tax:'1234567890'},{name:'Cihan',tax:'3333333333'}];

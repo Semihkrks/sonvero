@@ -1,6 +1,12 @@
 import {summarizeRows} from './report-data.js';
 const currency=value=>new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY'}).format(Number(value));
 const palette=['#16a34a','#0f766e','#2563eb','#dc2626'];
+function activityLabel(invoices,collections){
+ const parts=[];
+ if(invoices)parts.push(`${invoices} Fatura`);
+ if(collections)parts.push(`${collections} Tahsilat`);
+ return parts.join('  ')||'Hareket yok';
+}
 export function reportCardModel(group,accounts,options,opening){
  const visible=accounts.filter(a=>group.rows.some(r=>r.accountId===a.id));
  const total=summarizeRows(group.rows);
@@ -9,14 +15,15 @@ export function reportCardModel(group,accounts,options,opening){
  const balance=total.net;
  return {name:group.name,tax:group.tax||'Belirtilmemiş',balanceLabel:full?'Bakiye':'Dönem neti',balance,columns:visible.map((account,index)=>{
   const rows=group.rows.filter(r=>r.accountId===account.id),part=summarizeRows(rows);
-  return {name:account.name,color:account.color||palette[index%palette.length],count:rows.length,satis:part.satis,alis:part.alis,tahsilat:part.tahsilat};
+  const invoices=rows.filter(r=>r.kind!=='tahsilat').length,collections=rows.filter(r=>r.kind==='tahsilat').length;
+  return {name:account.name,color:account.color||palette[index%palette.length],invoices,collections,activity:activityLabel(invoices,collections),satis:part.satis,alis:part.alis,tahsilat:part.tahsilat,toplam:part.net};
  })};
 }
 export async function createReportImage(group,accounts,options,opening){
  await document.fonts.ready;
  const card=reportCardModel(group,accounts,options,opening);
  const perRow=Math.min(4,Math.max(card.columns.length,1)),rows=Math.max(1,Math.ceil(card.columns.length/4));
- const pad=36,colW=250,gap=20,width=Math.max(1040,pad*2+perRow*colW+(perRow-1)*gap),colH=188;
+ const pad=36,colW=250,gap=20,width=Math.max(1040,pad*2+perRow*colW+(perRow-1)*gap),colH=214;
  const measure=document.createElement('canvas').getContext('2d');
  const wrap=(value,max,size,bold)=>{measure.font=`${bold?600:400} ${size}px Inter, sans-serif`;const words=String(value||'').split(/\s+/),lines=[];let line='';for(const word of words){const next=line?line+' '+word:word;if(line&&measure.measureText(next).width>max){lines.push(line);line=word;}else line=next;}if(line)lines.push(line);return lines.length?lines:[''];};
  const nameLines=wrap(card.name,width-pad*2-250,22,true);
@@ -38,8 +45,11 @@ export async function createReportImage(group,accounts,options,opening){
   const title=wrap(column.name.toLocaleUpperCase('tr-TR'),colW-24,13,true).slice(0,2);
   title.forEach((line,lineIndex)=>paint(line,columnX+16,top+18+lineIndex*18,13,'#172033',true,colW-24));
   let lineY=top+18+title.length*18+6;
-  paint(`${column.count} hareket`,columnX+16,lineY,12,'#64748b',false,colW-24);lineY+=28;
+  paint(column.activity,columnX+16,lineY,12,'#64748b',false,colW-24);lineY+=28;
   for(const [label,key,color] of [['Satış','satis','#15803d'],['Alış','alis','#c2410c'],['Tahsilat','tahsilat','#15803d']]){paint(label+':',columnX+16,lineY,12,'#64748b',false,70);paint(currency(column[key]),columnX+78,lineY,13,color,true,colW-100);lineY+=24;}
+  c.strokeStyle='#e7edf4';c.beginPath();c.moveTo(columnX+16,lineY-10);c.lineTo(columnX+colW-12,lineY-10);c.stroke();
+  paint('Toplam:',columnX+16,lineY+8,12,'#64748b',true,70);
+  paint(currency(column.toplam),columnX+78,lineY+8,13,'#172033',true,colW-100);
  });
  paint(`${options.start} – ${options.end} · Seçili dönem`,pad,height-28,12,'#94a3b8');
  return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Rapor görseli oluşturulamadı.')),'image/png'));
