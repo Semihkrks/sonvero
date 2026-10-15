@@ -21,7 +21,13 @@ test('the same caption without a filename matches only an unused media message',
     {fromMe:true, id:'doc', timestamp:recent, body:'Özet', hasMedia:true, type:'document'},
   ], {fileName:'ozet.png', caption:'Özet', sinceMs:since, usedIds:[]});
   assert.equal(found.id, 'doc');
-  assert.equal(findSentMessage([{fromMe:true, id:'other', timestamp:recent, filename:'baska.png', body:'Özet', type:'document'}], {fileName:'ozet.png', caption:'Özet', sinceMs:since}), null);
+  assert.equal(findSentMessage([{fromMe:true, id:'other', timestamp:recent, filename:'baska.xlsx', body:'Özet', type:'document'}], {fileName:'rapor.xlsx', caption:'Özet', sinceMs:since}), null);
+});
+test('a photo without a filename matches an unused image message', () => {
+  const found = findSentMessage([
+    {fromMe:true, id:'img', timestamp:recent, type:'image', hasMedia:true, body:''},
+  ], {fileName:'ozet.png', caption:'', sinceMs:since, usedIds:[]});
+  assert.equal(found.id, 'img');
 });
 
 test('a missing file can be retried twice and an unreadable chat cannot', () => {

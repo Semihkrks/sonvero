@@ -9,6 +9,7 @@ export function findSentMessage(messages, { fileName, caption, sinceMs, usedIds 
   const used = new Set(usedIds.filter(Boolean));
   const captionText = String(caption || '').trim();
   const since = Number(sinceMs) - 20000;
+  const wantsImage = /\.png$/i.test(fileName || '');
   for (const message of messages || []) {
     if (!message?.fromMe) continue;
     const id = typeof message.id === 'string' ? message.id : message.id?._serialized;
@@ -21,6 +22,8 @@ export function findSentMessage(messages, { fileName, caption, sinceMs, usedIds 
     if ((name && name === fileName) || body === fileName) return { id };
     const media = message.hasMedia === true || ['document', 'image', 'video'].includes(message.type);
     if (!name && media && captionText && body === captionText) return { id };
+    // Photos are sent as image media; WhatsApp often drops the original filename.
+    if (wantsImage && (message.type === 'image' || (media && /\.png$/i.test(name)))) return { id };
   }
   return null;
 }

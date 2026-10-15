@@ -17,7 +17,7 @@ try{
  const unitPath=path.join(dir,'sonvera-assistant.service');
  fs.writeFileSync(unitPath,`[Unit]\nDescription=Sonvera WhatsApp and report assistant\nAfter=network-online.target\n[Service]\nRestart=always\nRestartSec=10\nTimeoutStartSec=180\nTimeoutStopSec=45\nExecStart=/usr/bin/podman run --rm --replace --name sonvera-assistant --userns=keep-id --memory=3g --shm-size=256m -p 127.0.0.1:8787:8787 --env-file /home/opc/sonvera/config/service.env --env-file /home/opc/sonvera/config/recipient.env -v /home/opc/sonvera/data:/data:Z localhost/sonvera-assistant:1\nExecStop=/usr/bin/podman stop -t 30 sonvera-assistant\n[Install]\nWantedBy=default.target\n`);
  ssh('mkdir -p /home/opc/.config/systemd/user /home/opc/sonvera/config');
- copy(['services/assistant/package.json','services/assistant/package-lock.json','services/assistant/Containerfile','services/assistant/server.mjs','services/assistant/validation.mjs','services/assistant/delivery.mjs'],'/home/opc/sonvera/');
+ copy(['services/assistant/package.json','services/assistant/package-lock.json','services/assistant/Containerfile','services/assistant/server.mjs','services/assistant/validation.mjs','services/assistant/delivery.mjs','services/assistant/wa-compat.mjs'],'/home/opc/sonvera/');
  copy([envPath],'/home/opc/sonvera/config/service.env');
  copy([unitPath],'/home/opc/.config/systemd/user/sonvera-assistant.service');
  ssh('chmod 600 /home/opc/sonvera/config/service.env && cd /home/opc/sonvera && podman build -t localhost/sonvera-assistant:1 . && systemctl --user daemon-reload && systemctl --user enable sonvera-assistant && systemctl --user restart sonvera-assistant');
