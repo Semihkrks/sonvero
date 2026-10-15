@@ -1,5 +1,5 @@
 import {rememberExportPeriod,exportPeriod} from '../lib/export-context.js';
-import { invoiceLedgerAmount, addAmount } from '../lib/ledger-finance.js';
+import { invoiceLedgerAmount, addAmount, isExcludedInvoice } from '../lib/ledger-finance.js';
 import { defaultFilterRange } from '../lib/money.js';
 import { escapeHtml, safeColor } from '../lib/html.js';
 import { EInvoiceWithAccount, EArchiveWithAccount } from '../api/nilvera.js';
@@ -10,7 +10,7 @@ import { showToast } from '../components/toast.js';
 import { exportAllTransactions } from '../services/cari-export-worker-client.js';
 import { forEachLimited } from '../lib/concurrency.js';
 import {groupReportItems} from '../services/report-data.js';
-import {previewReport} from '../components/report-send.js';
+import {previewReport,chooseExportLayout} from '../components/report-send.js';
 import {rememberSelectedContext} from '../services/assistant-context.js';
 
 const ic = {
@@ -28,20 +28,7 @@ function getReceiverTaxNo(inv) { return inv.ReceiverTaxNumber || inv.receiverTax
 function getSenderName(inv) { return inv.SenderName || inv.senderName || inv.SupplierName || (inv.SenderInfo || {}).Name || ''; }
 function getSenderTaxNo(inv) { return inv.SenderTaxNumber || inv.senderTaxNumber || inv.TaxNumber || inv.taxNumber || (inv.SenderInfo || {}).TaxNumber || ''; }
 function getAmount(inv) { return inv.PayableAmount || inv.payableAmount || inv.TotalAmount || inv.totalAmount || 0; }
-function getStatus(inv) {
-  const answerNote = String(inv?.Answer?.AnswerNote || inv?.answer?.answerNote || '').toUpperCase().trim();
-  const answerCode = String(inv?.Answer?.AnswerCode || inv?.answer?.answerCode || inv?.AnswerCode || inv?.answerCode || '').trim();
-  if (answerCode) return answerCode;
-  if (answerNote === 'RED') return 'rejected';
-  if (answerNote === 'KABUL') return 'accepted';
-  const invoiceStatusCode = inv?.InvoiceStatus?.Code || inv?.invoiceStatus?.code || '';
-  if (invoiceStatusCode) return invoiceStatusCode;
-  return inv.StatusCode || inv.statusCode || inv.Status || inv.status || '';
-}
-function isRejected(inv) {
-  const s = String(getStatus(inv) || '').toLowerCase();
-  return s === 'rejected' || s === 'red' || s === 'reddedildi' || s === '2005' || s === 'rejectall';
-}
+function isRejected(inv) { return isExcludedInvoice(inv); }
 function fmtCur(a) { try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(a); } catch { return `${a} TRY`; } }
 function fmtDate(d) { try { return new Date(d).toLocaleDateString('tr-TR'); } catch { return d; } }
 function getDefaultRange() { return defaultFilterRange(); }
@@ -121,7 +108,6 @@ export async function renderSelectedAccountCari() {
       <span class="sac-export-label" id="sacExportLabel">Tüm işlemleri Excel'e aktar:</span>
       <button type="button" class="btn btn-sm btn-success" id="sacExportTum">${ic.download} Tek Sayfa</button>
       <button type="button" class="btn btn-sm btn-success" id="sacExportAyri">${ic.download} Hesaplar Ayrı</button>
-      <select class="filter-input" id="sacWhatsAppLayout" aria-label="WhatsApp Excel düzeni"><option value="tum">Tek sayfa</option><option value="ayri">Hesaplar ayrı</option></select>
       <button type="button" class="btn btn-sm btn-primary" id="sacWhatsApp">WhatsApp’a gönder</button>
       <span class="sac-export-info" id="sacExportInfo"></span>
     </div>
@@ -188,7 +174,7 @@ export async function renderSelectedAccountCari() {
       if(!keys.length)throw new Error('WhatsApp gönderimi için müşteri seçin.');
       const items=keys.flatMap(k=>customerMap[k]?.items||[]);
       const groups=groupReportItems(items,selectedAccounts);
-      const layout=page.querySelector('#sacWhatsAppLayout').value;
+      const layout=await chooseExportLayout();if(!layout)return;
       await previewReport({groups,accounts:selectedAccounts,options:{...period,scope:'selected',direction,withCollections:withTahsilat,layout:layout==='ayri'?'separate':'single'},exportSpec:{name:'exportAllTransactions',args:[items,selectedAccounts,{layout,direction,withTahsilat,name:groups.length===1?groups[0].name:`Seçili ${groups.length} Firma`,dateRange:period}]}});
     }catch(error){showToast(error.message,'error');}finally{button.disabled=false;}
   });

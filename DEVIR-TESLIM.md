@@ -1,5 +1,24 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 15 Ekim — gerçek WhatsApp teslimi, sesli panel ve dönem bakiyesi
+
+- Bu bölüm aşağıdaki eski oturum notlarının son durumudur. Kullanıcı iki müşteri verisiz test dosyasının gönderilmesine açıkça izin verdi. `sonvera-baglanti-testi.xlsx` ve `.png` gerçek WhatsApp sohbetine gönderildi; ikisi için önce ack=2 (teslim), sonra ack=3 (okundu) doğrulandı. Tekrar göndermeyin. SAFE/test-whatsapp.mjs gerçek gönderim yapar, idempotent değildir.
+- Kök neden: yeni WhatsApp Web medya modeli iç kimlik alanlarını taşıyordu; whatsapp-web.js bunları mesaj modeline kopyalayınca kimlik hatası veriyordu. `wa-compat.mjs` yalnız medya verisini aktarır. Tam sohbet serializer'ı yerine ham teslim metadatası okunur; yeni mesaj kimliklerinde `_serialized` yoksa String(id) kullanılır. sendSeen=false. Üretim servisine dağıtıldı; yeniden başlatma sonrası bağlantı ready, uyumluluk yaması etkin, /health 200 ve kimliksiz /status 401 doğrulandı. Aynı gönderim işiyle tekrar kontrol etme/eksik dosyayı tamamlama korunur.
+- Görseldeki bakiye artık seçili dönem satış − alış − tahsilat toplamıdır. Ekranda gösterilmeyen arşiv açılışı eklenmez; dönem tarihleri görselde belirtilir. Kısmi filtreler “Dönem neti” olarak kalır. Açılış sorgusu kaldırıldığı için önizleme daha az istek yapar.
+- Navbar asistanı küçük animasyonlu ses panelidir. Başlık, yeni sohbet, bağlantı/ayarlar, rapor filtreleri ve yazılı gönderme alanı görünmez. Mikrofon panel açıkken tek stream kullanır; sessizlikten sonra komut işlenir ve yeni kayıt aynı stream ile başlar. Panel kapanınca mikrofon bırakılır. Varsayılan yıl 2026, tüm firmalar ve hesaplara ayrı Excel sayfalarıdır; açıkça başka yıl/hesap istenirse uygulanır. Ad/VKN eşleşmeleri yalnız gerçek tarama sonuçlarından yapılır. Önizleme sonrası “gönder” sesli onayı desteklenir.
+- Seçili Hesaplar'daki WhatsApp yanındaki dropdown kaldırıldı. Gönder düğmesi hesaplar ayrı (varsayılan)/tek sayfa seçimini modal içinde açar. Önizlemede müşteri, dönem, Excel bağlantısı ve görsel kalır; telefon ve teknik metinler gizlenir.
+- Doğrulama: npm run check (76 test + typecheck + build) başarılı; ardından eklenen sesli önizleme/onay testi dahil ilgili 3 sohbet testi başarılı (toplam 77). Backend 8 test başarılı. İki ardışık ses kaydının tek izin isteği kullanması, iptal/temizlik, sesli onayın yinelenmemesi, 2026 varsayılanı, ayrı sayfalar ve dönem bakiyesi testli. 390×844 gerçek tarayıcıda kompakt panel, koyu önizleme ve seçim modalı kontrol edildi; yatay taşma yok, sentetik görsel 1200 − 300 = 900 TL gösteriyor.
+- Sınırlar: fiziksel iPhone/Android PWA mikrofon testi bu ortamda yapılamadı. Site izninin oturumlar arasında kalması tarayıcı/işletim sistemi kontrolündedir; kod panel içinde tekrar izin istemez. Ses çözümleme Gemini ağı/kotasına bağlıdır. Canlı müşteri verisiyle gönderim yapılmadı; gerçek gönderim yalnız izin verilen iki test dosyasıyla doğrulandı. Asistanın yetkisi cari rapor hazırlama/gönderme ile sınırlıdır.
+- Frontend üretim dağıtımı başlatıldı: FCeaW3NyWsSrLEeFGJHJvu3NqzoD. Son yayın sonucu aşağıya eklenecek. Değişiklikler çalışma ağacında; bu tur commit/push yapılmadı.
+
+## 15 Ekim — Harmanda bakiye farkı
+
+- Asistan raporu Seçili Hesaplar’dan yüksek bakiye veriyordu (ör. 3.1M vs doğru 1.8M). Ayşe/Mert’te fazla satış vardı; tahsilatlar aynıydı. Kök neden: reddedilen/iptal faturalar (`InvoiceStatus.Code` vb.) cari ekranında eleniyor, asistan yolunda sayılıyordu. Ortak `isExcludedInvoice` ile hizalandı; asistan taraması dönem dışı kayıtları ve aynı UUID tekrarını da eliyor.
+
+## 15 Ekim — WhatsApp açıklama metni ve fotoğraf
+
+- WhatsApp gönderiminde dosyanın altındaki açıklama metni kaldırıldı. PNG özet artık belge değil resim olarak gidiyor; Excel belge olarak kalıyor. Asistan servisi yeniden kuruldu.
+
 ## 15 Ekim — asistan sadeleştirme ve gönderim doğrulaması
 
 - WhatsApp gönderimi artık zaman aşımında sohbete bakıyor. Dosya oradaysa tekrarlamıyor; yoksa yalnız o dosyayı en fazla iki kez yeniden deniyor. Sohbet okunamazsa kör tekrar yok. Aynı önizlemeden “Eksik dosyaları kontrol et ve gönder” önce sohbeti kontrol edip eksik dosyayı iletiyor. Servis yeniden başlarsa yarım iş `unknown` kalır; aynı kimlikle gelen dosyalar bu yolu kullanır.

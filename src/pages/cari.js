@@ -1,5 +1,5 @@
 import {rememberExportPeriod,exportPeriod} from '../lib/export-context.js';
-import { invoiceLedgerAmount, addAmount } from '../lib/ledger-finance.js';
+import { invoiceLedgerAmount, addAmount, isExcludedInvoice } from '../lib/ledger-finance.js';
 import { parseTurkishAmount, istanbulDate, defaultFilterRange, Decimal } from '../lib/money.js';
 import { escapeHtml } from '../lib/html.js';
 // ══════════════════════════════════════════
@@ -63,24 +63,7 @@ function getAmount(inv) {
 function getCurrency(inv) {
   return inv.CurrencyCode || inv.currencyCode || 'TRY';
 }
-function getStatus(inv) {
-  // Alıcı cevap kodu: liste yanıtında DÜZ (inv.AnswerCode), detay/GİB yanıtında
-  // NESTED (inv.Answer.AnswerCode) gelir. Her ikisini de destekle; cevap önceliklidir.
-  const answerNote = String(inv?.Answer?.AnswerNote || inv?.answer?.answerNote || '').toUpperCase().trim();
-  const answerCode = String(
-    inv?.Answer?.AnswerCode || inv?.answer?.answerCode || inv?.AnswerCode || inv?.answerCode || ''
-  ).trim();
-  if (answerCode) return answerCode;
-  if (answerNote === 'RED') return 'rejected';
-  if (answerNote === 'KABUL') return 'accepted';
-  const invoiceStatusCode = inv?.InvoiceStatus?.Code || inv?.invoiceStatus?.code || '';
-  if (invoiceStatusCode) return invoiceStatusCode;
-  return inv.StatusCode || inv.statusCode || inv.Status || inv.status || '';
-}
-function isRejected(inv) {
-  const s = String(getStatus(inv) || '').toLowerCase();
-  return s === 'rejected' || s === 'red' || s === 'reddedildi' || s === '2005' || s === 'rejectall';
-}
+function isRejected(inv) { return isExcludedInvoice(inv); }
 
 function fmtCur(a, c) {
   if (!a && a !== 0) return '—';

@@ -7,6 +7,10 @@ import {EInvoiceWithAccount,EArchiveWithAccount} from '../api/nilvera.js';
 import {forEachLimited} from '../lib/concurrency.js';
 
 export const fold=value=>String(value||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').trim();
+export function matchReportGroups(groups,query){
+ const key=fold(query).replace(/[^a-z0-9]/g,'');if(!key)return [];
+ return groups.filter(g=>fold(g.name).replace(/[^a-z0-9]/g,'').includes(key)||String(g.tax||'').includes(key));
+}
 export function normalizeReportItem(item,account){
  const raw=item.raw||item;
  const collection=item._isCollection===true||item._type==='tahsilat';
@@ -60,6 +64,8 @@ export async function archivedOpening(group,accounts,period){
   return matched?{value:opening.toFixed(2),note:'Devir arşivdeki tüm yön ve tahsilat kayıtlarına göredir; geçmişin tamlığı doğrulanmamıştır.'}:{value:null,note:'Bu müşteri için geçmiş bakiye doğrulanamadı.'};
  }catch{return {value:null,note:'Devir bilgisi alınamadı; dönem neti genel borç değildir.'};}
 }
+function invoiceUuid(row){return String(row?.UUID||row?.uuid||row?.InvoiceUUID||row?.invoiceUuid||row?.Id||row?.id||'').trim();}
+function issueDate(row){return String(row?.IssueDate||row?.issueDate||row?.CreateDate||row?.CreatedDate||'').slice(0,10);}
 export async function scanReport({accounts,start,end,direction,withCollections,onProgress}){
  if(!accounts.length)throw new Error('En az bir hesap seçin.');
  if(!/^\d{4}-\d{2}-\d{2}$/.test(start)||!/^\d{4}-\d{2}-\d{2}$/.test(end)||start>end)throw new Error('Geçerli tarih aralığı seçin.');
@@ -76,7 +82,15 @@ export async function scanReport({accounts,start,end,direction,withCollections,o
   if(withCollections)tasks.push(listCollections({accountId:account.id,startDate:start,endDate:end}).then(rows=>rows.map(r=>({...r,_type:'tahsilat'}))));
   const result=await Promise.allSettled(tasks);
   if(result.some(r=>r.status==='rejected'))throw new Error(`${account.name} verileri eksik. Gönderim için tüm kaynakların yüklenmesi gerekiyor.`);
-  for(const r of result)for(const row of r.value)items.push({...row,_accountId:account.id,_accountName:account.name,_accountColor:account.color});
+  const seen=new Set();
+  for(const r of result)for(const row of r.value){
+   if(row._type!=='tahsilat'){
+    const date=issueDate(row);if(date&&(date<start||date>end))continue;
+    if(invoiceLedgerAmount(row)===null)continue;
+    const uuid=invoiceUuid(row);if(uuid){const key=account.id+':'+uuid;if(seen.has(key))continue;seen.add(key);}
+   }
+   items.push({...row,_accountId:account.id,_accountName:account.name,_accountColor:account.color});
+  }
   }catch(error){failures.push(error.message||`${account.name} yüklenemedi.`);}
   onProgress?.(++done,accounts.length);
  });
