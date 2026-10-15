@@ -5,7 +5,7 @@
 - WhatsApp gönderimi artık zaman aşımında sohbete bakıyor. Dosya oradaysa tekrarlamıyor; yoksa yalnız o dosyayı en fazla iki kez yeniden deniyor. Sohbet okunamazsa kör tekrar yok. Aynı önizlemeden “Eksik dosyaları kontrol et ve gönder” önce sohbeti kontrol edip eksik dosyayı iletiyor. Servis yeniden başlarsa yarım iş `unknown` kalır; aynı kimlikle gelen dosyalar bu yolu kullanır.
 - QR, alıcı, Gemini anahtarı ve gönderim geçmişi asistan sohbetinden çıkarıldı; Ayarlar sayfasında “Asistan bağlantısı” bölümünde. Asistan yalnız sohbet. Konuşma metin kutusuna kelime kelime yazılır; sesli komut modele gider, anahtar yoksa yerel ayrıştırıcıya düşer. Asistan yanıtları kelime kelime açılır.
 - Rapor görseli firma adı, VKN, turuncu bakiye ve renkli hesap kırılımı kartı. Doğrulanmış dönem sonu “Bakiye”, değilse “Dönem neti”. Excel aynı.
-- Asistan servisi yeniden kuruldu; `/health` 200. Gerçek WhatsApp mesajı bu turda gönderilmedi. Arayüz `sonvera.com.tr` üzerinde değil; yayın için commit ve Vercel dağıtımı bekliyor. Yerelde 390px asistan taşmıyor. Oturumsuz tarayıcıda Ayarlar formu ve sohbet görüldü; girişli canlı uçtan uca gönderim yapılmadı.
+- Asistan servisi yeniden kuruldu; `/health` 200. Gerçek WhatsApp mesajı bu turda gönderilmedi. Arayüz `main` `f2bfcb7` ile yayınlandı: `dpl_2XDqhVMg996ix1WJqrm2kMccVDM6` READY, `sonvera.com.tr` paketinde yeni sohbet ve Ayarlar bağlantısı var. Yerelde 390px asistan taşmıyor. Girişli canlı uçtan uca gönderim yapılmadı.
 
 ## 15 Ekim — sohbet paneli, hız ve WhatsApp bağlantısı düzeltmesi
 
