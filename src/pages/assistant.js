@@ -33,18 +33,82 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
  const field=name=>form.elements.namedItem(name);
  page.classList.add('sv-voice-app');
  for(const selector of ['.sv-chat-heading','.sv-chat-status','.sv-chat-filters'])$(selector).hidden=true;
- const orbit=document.createElement('div');orbit.className='sv-voice-stage';orbit.innerHTML='<div class="sv-voice-caption">SONVERA</div><div class="sv-voice-orbit"></div><p class="sv-live-transcript" aria-live="polite"></p>';
- const mic=$('#assistantMic');mic.classList.add('sv-voice-orb');mic.innerHTML='<span class="sv-orb-core" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="sr-only sv-mic-label">Dinlemeye başla</span>';mic.setAttribute('aria-label','Dinlemeyi başlat veya duraklat');orbit.querySelector('.sv-voice-orbit').append(mic);orbit.append(reply);page.prepend(orbit);$('.sv-chat-composer').hidden=true;
- function voiceState(state){page.dataset.voice=state;mic.setAttribute('aria-pressed',String(state==='listening'));mic.querySelector('.sv-mic-label').textContent=state==='listening'?'Dinleniyor':'Dinlemeye başla';if(!busy)reply.textContent={listening:'Dinliyorum',thinking:'Anlıyorum…',idle:'Konuşmak için dokun',error:'Tekrar denemek için dokun'}[state]||'';}
- const voice=createVoiceSession({onAudio:async blob=>{try{await interpret({mime:blob.type,base64:await blobBase64(blob)},{voice:true});}catch(e){message(e.message,'assistant',{instant:true});}finally{if(!disposed&&voiceActive&&!busy)voice.resume();}},onState:voiceState,onError:text=>message(text,'assistant',{instant:true})});
+ const orbit=document.createElement('div');orbit.className='sv-voice-stage';orbit.innerHTML='<div class="sv-voice-caption">SONVERA</div><div class="sv-voice-orbit"><span class="sv-voice-aura" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span></div><p class="sv-live-transcript" aria-live="polite"></p>';
+ const mic=$('#assistantMic');mic.classList.add('sv-voice-orb');mic.innerHTML='<span class="sv-orb-glow" aria-hidden="true"></span><span class="sv-orb-core" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="sr-only sv-mic-label">Dinlemeye başla</span>';mic.setAttribute('aria-label','Dinlemeyi başlat veya duraklat');orbit.querySelector('.sv-voice-orbit').append(mic);orbit.append(reply);page.prepend(orbit);$('.sv-chat-composer').hidden=true;
+ const live=$('.sv-live-transcript');let liveHeard='',dictateTimer=null,speech=null,targetLevel=0,displayLevel=0,levelRaf=null;
+ const reduceMotion=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+ function appendLiveWord(part,{animate=true,interim=false}={}){
+  if(live.childNodes.length)live.append(document.createTextNode(' '));
+  const word=document.createElement('span');word.className=interim?'sv-live-word sv-live-interim':'sv-live-word';
+  if(!animate)word.style.animation='none';word.textContent=part;live.append(word);
+ }
+ function paintLive(text,{animate=true,stream=false,finalCount}={}){
+  const next=String(text||'').replace(/\s+/g,' ').trim();
+  clearTimeout(dictateTimer);
+  if(!next){liveHeard='';live.replaceChildren();live.classList.remove('sv-live-active');return;}
+  live.classList.add('sv-live-active');
+  if(!animate||reduceMotion()){liveHeard=next;live.textContent=next;return;}
+  const prevWords=liveHeard?liveHeard.split(/\s+/).filter(Boolean):[];
+  const nextWords=next.split(/\s+/).filter(Boolean);
+  let shared=0;while(shared<prevWords.length&&shared<nextWords.length&&prevWords[shared]===nextWords[shared])shared+=1;
+  liveHeard=next;
+  const settled=finalCount==null?nextWords.length:Math.min(finalCount,nextWords.length);
+  if(stream){
+   if(shared<prevWords.length||!live.childElementCount){
+    live.replaceChildren();
+    nextWords.forEach((part,index)=>appendLiveWord(part,{animate:index>=shared,interim:index>=settled}));
+    return;
+   }
+   for(let index=shared;index<nextWords.length;index+=1)appendLiveWord(nextWords[index],{interim:index>=settled});
+   [...live.querySelectorAll('.sv-live-word')].forEach((word,index)=>word.classList.toggle('sv-live-interim',index>=settled));
+   return;
+  }
+  live.replaceChildren();let index=0;
+  const tick=()=>{if(disposed||!live.isConnected){live.textContent=next;return;}
+   if(index>=nextWords.length)return;
+   appendLiveWord(nextWords[index]);index+=1;if(index<nextWords.length)dictateTimer=setTimeout(tick,42);
+  };tick();
+ }
+ function stopSpeech(){try{speech?.stop();}catch{}speech=null;}
+ function startSpeech(){
+  stopSpeech();const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SpeechRecognition)return;
+  const current=speech=new SpeechRecognition();current.lang='tr-TR';current.interimResults=true;current.continuous=true;let finalText='';
+  current.onresult=event=>{let interim='';for(let i=event.resultIndex;i<event.results.length;i++){const piece=event.results[i][0].transcript;if(event.results[i].isFinal)finalText+=piece+' ';else interim+=piece;}
+   const settled=finalText.replace(/\s+/g,' ').trim().split(/\s+/).filter(Boolean).length;
+   paintLive((finalText+interim).replace(/\s+/g,' ').trim(),{stream:true,finalCount:settled});};
+  current.onerror=()=>{};current.onend=()=>{if(speech===current)speech=null;};
+  try{current.start();}catch{speech=null;}
+ }
+ function pumpLevel(){
+  if(disposed){levelRaf=null;return;}
+  displayLevel+=(targetLevel-displayLevel)*(reduceMotion()?1:.18);
+  if(Math.abs(targetLevel-displayLevel)<0.004)displayLevel=targetLevel;
+  page.style.setProperty('--sv-voice-level',String(displayLevel));
+  if(targetLevel>0.002||displayLevel>0.002)levelRaf=requestAnimationFrame(pumpLevel);
+  else{page.style.setProperty('--sv-voice-level','0');levelRaf=null;}
+ }
+ function voiceState(state){
+  page.dataset.voice=state;mic.setAttribute('aria-pressed',String(state==='listening'));mic.querySelector('.sv-mic-label').textContent=state==='listening'?'Dinleniyor':'Dinlemeye başla';
+  if(state==='listening')startSpeech();else stopSpeech();
+  if(state==='listening')paintLive('');
+  if(state!=='listening'){targetLevel=0;if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);}
+  if(!busy)reply.textContent={listening:'Dinliyorum…',thinking:'Anlıyorum…',idle:'Konuşmak için dokun',error:'Tekrar denemek için dokun'}[state]||'';
+ }
+ const voice=createVoiceSession({
+  onAudio:async blob=>{const heard=liveHeard;try{await interpret({mime:blob.type,base64:await blobBase64(blob)},{voice:true,heard});}catch(e){message(e.message,'assistant',{instant:true});}finally{if(!disposed&&voiceActive&&!busy)voice.resume();}},
+  onState:voiceState,onError:text=>message(text,'assistant',{instant:true}),
+  onLevel:level=>{targetLevel=Math.min(1,Number(level)||0);if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);},
+ });
  function message(text,role='assistant',{instant=false}={}){
   const node=document.createElement('div');node.className='sv-chat-message sv-chat-'+role;$('#assistantMessages').append(node);conversation.push({role,text});if(conversation.length>16)conversation.shift();
   const done=()=>requestAnimationFrame(()=>{if(node.isConnected)node.scrollIntoView({block:'nearest',behavior:'smooth'});});
-  const reduce=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-  if(role!=='assistant'||instant||reduce){node.textContent=text;done();return node;}
-  const parts=text.split(/(\s+)/);let index=0;
-  const tick=()=>{if(disposed||!node.isConnected){node.textContent=text;return;}index+=1;node.textContent=parts.slice(0,index).join('');if(index<parts.length){const timerId=setTimeout(tick,28);typeTimers.add(timerId);}else done();};
-  tick();return node;
+  if(role!=='assistant'||instant||reduceMotion()){node.textContent=text;done();return node;}
+  const parts=text.split(/(\s+)/).filter((part,i,arr)=>part||(i&&arr[i-1]));let index=0;node.classList.add('sv-typing');
+  const tick=()=>{if(disposed||!node.isConnected){node.textContent=text;node.classList.remove('sv-typing');return;}
+   if(index>=parts.length){node.classList.remove('sv-typing');done();return;}
+   const word=document.createElement('span');word.className='sv-type-word';word.textContent=parts[index];node.append(word);
+   index+=1;const timerId=setTimeout(tick,parts[index-1]?.trim()?30:10);typeTimers.add(timerId);
+  };tick();return node;
  }
  function setBusy(value,label=''){busy=value;if(value){voice.pause();voiceState('thinking');}$('#assistantInterpret').disabled=value;$('#assistantScan').disabled=value;$('#assistantMic').disabled=value;form.querySelectorAll('input,select').forEach(n=>n.disabled=value);if(!value&&draft.scope==='all')form.querySelectorAll('[name=account]').forEach(n=>n.disabled=true);reply.textContent=label;}
  function invalidate(){scanVersion++;groups=[];snapshot=null;preview?.close();preview=null;$('#assistantResults').replaceChildren();}
@@ -64,17 +128,18 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
   message(question.text);let options=question.choices||[];
   if(question.key==='period'&&draft.month)options=[new Date().getFullYear(),new Date().getFullYear()-1].map(year=>[String(year),{year}]);
   if(question.key==='accounts'){
-   for(const a of accounts){const b=document.createElement('button');b.type='button';b.className='sv-choice';b.textContent=a.name;b.setAttribute('aria-pressed',String((draft.accountIds||[]).includes(a.id)));b.onclick=()=>{if(busy)return;const ids=new Set(draft.accountIds||[]);ids.has(a.id)?ids.delete(a.id):ids.add(a.id);draft.accountIds=[...ids];sync();b.setAttribute('aria-pressed',String(ids.has(a.id)));};choices.append(b);}
+   for(const [index,a] of accounts.entries()){const b=document.createElement('button');b.type='button';b.className='sv-choice';b.textContent=a.name;b.style.setProperty('--sv-choice-i',String(index));b.setAttribute('aria-pressed',String((draft.accountIds||[]).includes(a.id)));b.onclick=()=>{if(busy)return;const ids=new Set(draft.accountIds||[]);ids.has(a.id)?ids.delete(a.id):ids.add(a.id);draft.accountIds=[...ids];sync();b.setAttribute('aria-pressed',String(ids.has(a.id)));};choices.append(b);}
    options=[['Seçtiğim hesaplarla devam',{}],['Tüm hesapları seç',{accountIds:accounts.map(a=>a.id)}]];
   }
-  for(const [label,value] of options){const b=document.createElement('button');b.className='sv-choice';b.type='button';b.textContent=label;b.onclick=()=>{if(busy)return;message(label,'user',{instant:true});invalidate();merge(value);void advance();};choices.append(b);}
+  const base=choices.childElementCount;
+  options.forEach(([label,value],index)=>{const b=document.createElement('button');b.className='sv-choice';b.type='button';b.textContent=label;b.style.setProperty('--sv-choice-i',String(base+index));b.onclick=()=>{if(busy)return;message(label,'user',{instant:true});invalidate();merge(value);void advance();};choices.append(b);});
  }
  form.addEventListener('input',()=>{if(!busy)invalidate();});
  form.addEventListener('change',()=>{if(busy)return;draft={...draft,...Object.fromEntries(['scope','customer','start','end','direction','layout'].map(k=>[k,field(k).value])),withCollections:field('collections').value?field('collections').value==='yes':undefined,accountIds:[...form.querySelectorAll('[name=account]:checked')].map(n=>n.value)};sync();});
- async function interpret(audio,{voice:spokenInput=false}={}){
+ async function interpret(audio,{voice:spokenInput=false,heard=''}={}){
   if(audio instanceof Event)audio=undefined;if(busy)return;
-  voice.pause();const spoken=spokenInput;const text=$('#assistantCommand').value.trim();if(!text&&!audio)return;
-  const version=scanVersion,requestSeq=++commandSeq;setBusy(true,'Anlıyorum…');if(text)message(text,'user',{instant:true});$('#assistantCommand').value='';
+  voice.pause();stopSpeech();const spoken=spokenInput;const text=$('#assistantCommand').value.trim()||String(heard||'').trim();if(!text&&!audio)return;
+  const version=scanVersion,requestSeq=++commandSeq;setBusy(true,'Anlıyorum…');if(text&&!audio)message(text,'user',{instant:true});$('#assistantCommand').value='';
   try{
    const quick=parseQuickIntent(text,{awaiting,accounts,draft});let intent=quick.intent;
    if(spoken||!quick.handled||audio){
@@ -82,7 +147,7 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
      const result=await assistantRequest('/interpret',{text,context:{draft,awaiting,accounts:accounts.map(a=>({id:a.id,name:a.name})),customers:groups.slice(0,12).map(g=>({name:g.name,tax:g.tax})),route:context.route,conversation:conversation.slice(-8)},...(audio?{audio}:{})});
      if(disposed||version!==scanVersion)return;
      const transcript=result.transcript?.trim()||text;
-     if(transcript&&transcript!==text)message(transcript,'user',{instant:true});
+     if(transcript){paintLive(transcript,{animate:!liveHeard||fold(liveHeard)!==fold(transcript)});message(transcript,'user',{instant:true});}
      if(/^(yeni istek|yeni rapor|bastan basla|sifirla)$/.test(fold(transcript))){reset();return;}
      if(preview){const command=fold(transcript).replace(/[.!?]/g,'').trim();if(/^(gonder|gonder gelsin|evet gonder|onayliyorum|whatsapp.?a gonder)$/.test(command)){const send=$('#assistantResults .sv-confirm-send');if(send&&!send.disabled){send.click();message('Gönderimi takip ediyorum.','assistant',{instant:true});}return;}if(/^(iptal|vazgec|hayir)$/.test(command)){invalidate();message('Gönderim iptal edildi. Başka bir rapor söyleyebilirsin.');return;}}
 
@@ -102,10 +167,10 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
  }
  $('#assistantInterpret').onclick=interpret;
  $('#assistantCommand').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void interpret();}};
- function reset(){commandSeq++;invalidate();conversation.length=0;draft=defaults();sync();$('#assistantMessages').replaceChildren();$('#assistantChoices').replaceChildren();$('#assistantCommand').value='';awaiting=null;setBusy(false);message('Hangi müşterinin raporunu hazırlayayım?','assistant',{instant:true});}
- $('#assistantReset').onclick=()=>{voice.pause();reset();if(voiceActive)voice.resume();};
- $('#assistantMic').onclick=async()=>{if(busy)return;if(page.dataset.voice==='listening'){voiceActive=false;voice.pause();voiceState('idle');return;}voiceActive=true;await voice.start();};
- const visibility=()=>{if(document.hidden){voiceActive=false;voice.pause();voiceState('idle');}};document.addEventListener('visibilitychange',visibility);
+ function reset(){commandSeq++;invalidate();conversation.length=0;draft=defaults();sync();$('#assistantMessages').replaceChildren();$('#assistantChoices').replaceChildren();$('#assistantCommand').value='';paintLive('');awaiting=null;setBusy(false);message('Hangi müşterinin raporunu hazırlayayım?');}
+ $('#assistantReset').onclick=()=>{voice.pause();stopSpeech();reset();if(voiceActive)voice.resume();};
+ $('#assistantMic').onclick=async()=>{if(busy)return;if(page.dataset.voice==='listening'){voiceActive=false;voice.pause();stopSpeech();voiceState('idle');return;}voiceActive=true;await voice.start();};
+ const visibility=()=>{if(document.hidden){voiceActive=false;voice.pause();stopSpeech();voiceState('idle');}};document.addEventListener('visibilitychange',visibility);
  form.onsubmit=async event=>{
   event.preventDefault();if(busy)return;invalidate();const version=scanVersion;
   const selected=field('scope').value==='all'?accounts:accounts.filter(a=>[...form.querySelectorAll('[name=account]:checked')].some(cb=>cb.value===a.id));
@@ -135,5 +200,5 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
   }catch(error){if(!disposed){$('#assistantStatusBadge').textContent=error.message;page.dataset.connection='error';}}finally{refreshBusy=false;}
  }
  reset();voiceState('idle');void refresh();
- return {page,title:'Asistan',cleanup(){disposed=true;voice.close();document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
+ return {page,title:'Asistan',cleanup(){disposed=true;voiceActive=false;voice.close();stopSpeech();clearTimeout(dictateTimer);if(levelRaf)cancelAnimationFrame(levelRaf);document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
 }

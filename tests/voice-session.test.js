@@ -21,11 +21,11 @@ function harness(){
   createAnalyser(){return {fftSize:1024,getFloatTimeDomainData:array=>array.fill(sound)};}
   async resume(){} close(){close();}
  }
- const onAudio=vi.fn(),onError=vi.fn(),onState=vi.fn();
- const voice=createVoiceSession({mediaDevices,Recorder,Audio,onAudio,onError,onState});
+ const onAudio=vi.fn(),onError=vi.fn(),onState=vi.fn(),onLevel=vi.fn();
+ const voice=createVoiceSession({mediaDevices,Recorder,Audio,onAudio,onError,onState,onLevel});
  const tick=(ms,level)=>{now+=ms;sound=level;const run=nextFrame;nextFrame=null;run?.();};
  const utterance=()=>{for(let i=0;i<4;i++)tick(100,.1);tick(1500,0);};
- return {voice,track,mediaDevices,recorders,onAudio,onError,onState,utterance,close,disconnect};
+ return {voice,track,mediaDevices,recorders,onAudio,onError,onState,onLevel,utterance,close,disconnect};
 }
 afterEach(()=>vi.unstubAllGlobals());
 it('records two utterances with one permission request and releases the mic on close',async()=>{
@@ -40,4 +40,12 @@ it('discards an interrupted utterance and ignores recording after closing',async
  const h=harness();await h.voice.start();h.voice.pause();expect(h.onAudio).not.toHaveBeenCalled();
  await h.voice.start();expect(h.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
  h.voice.close();h.utterance();await h.voice.start();expect(h.onAudio).not.toHaveBeenCalled();expect(h.mediaDevices.getUserMedia).toHaveBeenCalledOnce();
+});
+it('reports voice level while listening and resets on pause',async()=>{
+ const h=harness();await h.voice.start();
+ h.utterance();
+ expect(h.onLevel.mock.calls.some(([level])=>level>0)).toBe(true);
+ expect(h.onLevel).toHaveBeenLastCalledWith(0);
+ h.voice.pause();
+ expect(h.onLevel).toHaveBeenLastCalledWith(0);
 });
