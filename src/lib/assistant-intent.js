@@ -20,7 +20,7 @@ export function parseQuickIntent(text,{awaiting,accounts=[],draft={}}={}){
  const month=numbered?Number(numbered[1]):spoken?spoken[1]:namedMonth;
  const year=Number(s.match(/\b20\d{2}\b/)?.[0])||null;
  if(month)intent.month=month;if(year)intent.year=year;
- if(month||(year&&draft.month))Object.assign(intent,monthRange(month||draft.month,year||draft.year));
+ if(month||(year&&draft.month))Object.assign(intent,monthRange(month||draft.month,year||draft.year||2026));
  const customer=s.match(/(?:^|\s)([\p{L}\d][\p{L}\d .&'-]*?)\s+(?:musterisinin|musterisi|excelini|ekstresini|carisini|raporunu|fotografini|gorselini)/u);
  if(customer){let name=customer[1].replace(/^.*(?:hesaplarda|hesaplarinda|hesabinda|hesabindaki|ayda|ayinda|ayi|ay|eylul|ekim|kasim|aralik|ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos)\s+/,'').replace(/\b20\d{2}\b/g,'').trim();if(name&&!/^(bana|onun|bu|o|secilen)$/.test(name))intent.customer=name;}
  if(awaiting==='customer'&&!Object.keys(intent).length)intent.customer=text.trim();
@@ -33,7 +33,7 @@ export function nextQuestion(draft){
  if(!draft.scope)return {key:'scope',text:'Hangi ekrandaki raporu hazırlayayım?',choices:[['Seçili Hesaplar',{scope:'selected'}],['Tüm Hesaplar',{scope:'all'}],['Cari',{scope:'cari'}]]};
  if(draft.scope!=='all'&&!draft.accountIds?.length)return {key:'accounts',text:'Hangi hesapları kullanayım? Aşağıdan seçebilir veya adlarını söyleyebilirsin.'};
  if(!draft.customer)return {key:'customer',text:'Hangi müşteri için hazırlayayım? Adını veya VKN’sini söyle.'};
- if(!draft.start||!draft.end)return {key:'period',text:draft.month?'Bu ay hangi yıla ait?':'Hangi ay ve yıl için hazırlayayım?'};
+ if(!draft.start||!draft.end)return {key:'period',text:'Hangi ay için hazırlayayım?'};
  if(!draft.direction)return {key:'direction',text:'Satışlar mı, alışlar mı, her ikisi mi?',choices:[['Satış',{direction:'satis'}],['Alış',{direction:'alis'}],['Her ikisi',{direction:'both'}]]};
  if(typeof draft.withCollections!=='boolean')return {key:'collections',text:'Tahsilatları da ekleyeyim mi?',choices:[['Dahil et',{withCollections:true}],['Hariç tut',{withCollections:false}]]};
  return null;

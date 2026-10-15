@@ -2,10 +2,20 @@ import {showModal} from './modal.js';
 import {escapeHtml} from '../lib/html.js';
 import {assistantRequest,blobBase64} from '../services/assistant-client.js';
 import {prepareCariFile} from '../services/cari-export-worker-client.js';
-import {archivedOpening,exportArguments} from '../services/report-data.js';
+import {exportArguments} from '../services/report-data.js';
 import {createReportImage} from '../services/report-image.js';
 import {getSupabase} from '../lib/supabase.js';
 import {stableJson,singleFlight} from '../lib/operations.js';
+
+export function chooseExportLayout(){
+ return new Promise(resolve=>{
+  const body=document.createElement('div');body.className='sv-export-choice';
+  body.innerHTML='<p>Excel nasıl hazırlansın?</p><label><input type="radio" name="export-layout" value="ayri" checked><span><strong>Hesaplar ayrı</strong><small>Her firma kendi sayfasında</small></span></label><label><input type="radio" name="export-layout" value="tum"><span><strong>Tek sayfa</strong><small>Tüm firmalar aynı sayfada</small></span></label><button class="btn btn-primary" type="button">Önizle</button>';
+  const modal=showModal({title:'WhatsApp’a gönder',body,onClose:()=>resolve(null)});
+  if(!modal){resolve(null);return;}
+  body.querySelector('button').onclick=()=>{resolve(body.querySelector('input:checked').value);modal.close();};
+ });
+}
 
 export async function previewReport({groups,accounts,options,exportSpec,target}){
  ({groups,accounts,options,exportSpec}=structuredClone({groups,accounts,options,exportSpec}));
@@ -25,19 +35,16 @@ export async function previewReport({groups,accounts,options,exportSpec,target})
   if(exportSpec){const file=await prepareCariFile(exportSpec.name,exportSpec.args);files.push({name:file.fileName,blob:file.blob});}
   for(const group of groups){
    if(!exportSpec){const spec=exportArguments(group,accounts,options);const file=await prepareCariFile(spec.name,spec.args);files.push({name:file.fileName,blob:file.blob});}
-   const opening=await archivedOpening(group,accounts,options);
-   const blob=await createReportImage(group,accounts,options,opening);
+   const blob=await createReportImage(group,accounts,options);
    files.push({name:`${group.name.replace(/[\\/:*?"<>|]/g,'_').slice(0,80)}_${options.start}_${options.end}.png`,blob});
   }
   if(before!==await revision())throw new Error('Rapor hazırlanırken kayıtlar değişti. Verileri yenileyip tekrar önizleyin.');
   if(closed)return;
   const id=crypto.randomUUID();
   const caption=`${groups.map(g=>g.name).join(', ')} | ${options.start} – ${options.end} | ${options.direction==='both'?'Satış + alış':options.direction==='satis'?'Satış':'Alış'} | Tahsilat ${options.withCollections?'dahil':'hariç'}`;
-  const template=exportSpec?.name||exportArguments(groups[0],accounts,options).name;
-  const templateLabel={exportCustomerCari:'Cari ekranı',exportAllTransactions:'Seçili Hesaplar',exportMultiAccountCari:'Tüm Hesaplar (satış)'}[template];
-  content.innerHTML=`<p><strong>Alıcı:</strong> +${escapeHtml(state.recipient||'Ayarlanmamış')}</p><p>${escapeHtml(caption)}</p><p><strong>Excel şablonu:</strong> ${escapeHtml(templateLabel)}</p><p class="sv-muted">Excel mevcut ekran şablonuyla hazırlanmıştır. Görseldeki devir yalnız arşiv kayıtlarına dayanır.</p><div class="sv-report-files"></div><p role="status" class="sv-send-status"></p><button type="button" class="btn btn-primary sv-confirm-send">Onayla ve WhatsApp’tan gönder</button>`;
+  content.innerHTML=`<p class="sv-report-customer">${escapeHtml(groups.map(g=>g.name).join(', '))}</p><p class="sv-muted">${escapeHtml(options.start)} – ${escapeHtml(options.end)}</p><div class="sv-report-files"></div><p role="status" class="sv-send-status"></p><button type="button" class="btn btn-primary sv-confirm-send">WhatsApp’a gönder</button>`;
   const fileList=content.querySelector('.sv-report-files');
-  for(const file of files){const url=URL.createObjectURL(file.blob);urls.push(url);const link=document.createElement('a');link.href=url;link.download=file.name;link.textContent=file.name;fileList.append(link);if(file.blob.type==='image/png'){const img=document.createElement('img');img.src=url;img.alt='Gönderilecek cari hesap özeti';fileList.append(img);}}
+  for(const file of files){const url=URL.createObjectURL(file.blob);urls.push(url);if(file.blob.type==='image/png'){const img=document.createElement('img');img.src=url;img.alt='Gönderilecek cari hesap özeti';fileList.append(img);}else{const link=document.createElement('a');link.href=url;link.download=file.name;link.textContent='Excel’i incele ↗';fileList.append(link);}}
   const button=content.querySelector('.sv-confirm-send'),status=content.querySelector('.sv-send-status');
   if(state.connection!=='ready'||!state.recipient){button.disabled=true;status.textContent='Gönderim için Ayarlar sayfasından WhatsApp hesabını bağlayın ve alıcıyı kaydedin.';}
   let payload;

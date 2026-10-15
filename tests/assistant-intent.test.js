@@ -1,12 +1,12 @@
 import {it,expect} from 'vitest';
 import {parseQuickIntent,nextQuestion,monthRange} from '../src/lib/assistant-intent.js';
 const accounts=[{id:'a',name:'Ayşe Karabut'},{id:'b',name:'Mert Sarısoy'}];
-it('understands the user command without a model and asks for the missing year',()=>{
+it('defaults to 2026 and respects an explicitly requested year',()=>{
  const {intent,handled}=parseQuickIntent('seçili hesaplarda 9.ayda harmanda excelini bana gönder',{accounts});
- expect(handled).toBe(true);expect(intent).toMatchObject({scope:'selected',month:9,customer:'harmanda'});expect(intent.start).toBeUndefined();
- expect(nextQuestion({...intent,accountIds:['a']})).toMatchObject({key:'period'});
- const year=parseQuickIntent('2026',{awaiting:'period',draft:intent}).intent;
- expect(year).toMatchObject({start:'2026-09-01',end:'2026-09-30'});
+ expect(handled).toBe(true);expect(intent).toMatchObject({scope:'selected',month:9,customer:'harmanda',start:'2026-09-01',end:'2026-09-30'});
+ expect(nextQuestion({...intent,accountIds:['a']})).toMatchObject({key:'direction'});
+ const year=parseQuickIntent('2025',{awaiting:'period',draft:intent}).intent;
+ expect(year).toMatchObject({start:'2025-09-01',end:'2025-09-30'});
 });
 it('resolves short answers against the question, never assumes collections',()=>{
  expect(parseQuickIntent('her ikisi',{awaiting:'direction'})).toMatchObject({handled:true,intent:{direction:'both'}});

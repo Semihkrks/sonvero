@@ -1,12 +1,12 @@
-import {Decimal} from '../lib/money.js';
 import {summarizeRows} from './report-data.js';
 const currency=value=>new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY'}).format(Number(value));
 const palette=['#16a34a','#0f766e','#2563eb','#dc2626'];
 export function reportCardModel(group,accounts,options,opening){
  const visible=accounts.filter(a=>group.rows.some(r=>r.accountId===a.id));
  const total=summarizeRows(group.rows);
- const full=options.direction==='both'&&options.withCollections&&opening?.value!=null;
- const balance=full?new Decimal(opening.value).plus(total.net).toFixed(2):total.net;
+ // Match the screen and the exported period exactly. Never add unrelated archived history.
+ const full=options.direction==='both'&&options.withCollections;
+ const balance=total.net;
  return {name:group.name,tax:group.tax||'Belirtilmemiş',balanceLabel:full?'Bakiye':'Dönem neti',balance,columns:visible.map((account,index)=>{
   const rows=group.rows.filter(r=>r.accountId===account.id),part=summarizeRows(rows);
   return {name:account.name,color:account.color||palette[index%palette.length],count:rows.length,satis:part.satis,alis:part.alis,tahsilat:part.tahsilat};
@@ -41,6 +41,6 @@ export async function createReportImage(group,accounts,options,opening){
   paint(`${column.count} hareket`,columnX+16,lineY,12,'#64748b',false,colW-24);lineY+=28;
   for(const [label,key,color] of [['Satış','satis','#15803d'],['Alış','alis','#c2410c'],['Tahsilat','tahsilat','#15803d']]){paint(label+':',columnX+16,lineY,12,'#64748b',false,70);paint(currency(column[key]),columnX+78,lineY,13,color,true,colW-100);lineY+=24;}
  });
- if(card.balanceLabel!=='Bakiye')paint('Dönem neti, doğrulanmış genel bakiye değildir.',pad,height-28,12,'#94a3b8');
+ paint(`${options.start} – ${options.end} · Seçili dönem`,pad,height-28,12,'#94a3b8');
  return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('Rapor görseli oluşturulamadı.')),'image/png'));
 }
