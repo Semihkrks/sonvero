@@ -9,7 +9,7 @@
 - Seçili Hesaplar'daki WhatsApp yanındaki dropdown kaldırıldı. Gönder düğmesi hesaplar ayrı (varsayılan)/tek sayfa seçimini modal içinde açar. Önizlemede müşteri, dönem, Excel bağlantısı ve görsel kalır; telefon ve teknik metinler gizlenir.
 - Doğrulama: npm run check (76 test + typecheck + build) başarılı; ardından eklenen sesli önizleme/onay testi dahil ilgili 3 sohbet testi başarılı (toplam 77). Backend 8 test başarılı. İki ardışık ses kaydının tek izin isteği kullanması, iptal/temizlik, sesli onayın yinelenmemesi, 2026 varsayılanı, ayrı sayfalar ve dönem bakiyesi testli. 390×844 gerçek tarayıcıda kompakt panel, koyu önizleme ve seçim modalı kontrol edildi; yatay taşma yok, sentetik görsel 1200 − 300 = 900 TL gösteriyor.
 - Sınırlar: fiziksel iPhone/Android PWA mikrofon testi bu ortamda yapılamadı. Site izninin oturumlar arasında kalması tarayıcı/işletim sistemi kontrolündedir; kod panel içinde tekrar izin istemez. Ses çözümleme Gemini ağı/kotasına bağlıdır. Canlı müşteri verisiyle gönderim yapılmadı; gerçek gönderim yalnız izin verilen iki test dosyasıyla doğrulandı. Asistanın yetkisi cari rapor hazırlama/gönderme ile sınırlıdır.
-- Frontend üretim dağıtımı başlatıldı: FCeaW3NyWsSrLEeFGJHJvu3NqzoD. Son yayın sonucu aşağıya eklenecek. Değişiklikler çalışma ağacında; bu tur commit/push yapılmadı.
+- Siri/ChatGPT tarzı asistan ses paneli `main`'e pushlandı; Vercel production Ready (`dpl_Cjn1L2mTgam4Egy5dXcy486YK9BN`, sonvera.com.tr).
 
 ## 15 Ekim — rapor kartında fatura/tahsilat ve toplam
 
