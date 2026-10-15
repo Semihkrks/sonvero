@@ -9,6 +9,9 @@ import { listCollections } from '../services/tahsilat-manager.js';
 import { showToast } from '../components/toast.js';
 import { exportAllTransactions } from '../services/cari-export-worker-client.js';
 import { forEachLimited } from '../lib/concurrency.js';
+import {groupReportItems} from '../services/report-data.js';
+import {previewReport} from '../components/report-send.js';
+import {rememberSelectedContext} from '../services/assistant-context.js';
 
 const ic = {
   search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
@@ -118,6 +121,8 @@ export async function renderSelectedAccountCari() {
       <span class="sac-export-label" id="sacExportLabel">Tüm işlemleri Excel'e aktar:</span>
       <button type="button" class="btn btn-sm btn-success" id="sacExportTum">${ic.download} Tek Sayfa</button>
       <button type="button" class="btn btn-sm btn-success" id="sacExportAyri">${ic.download} Hesaplar Ayrı</button>
+      <select class="filter-input" id="sacWhatsAppLayout" aria-label="WhatsApp Excel düzeni"><option value="tum">Tek sayfa</option><option value="ayri">Hesaplar ayrı</option></select>
+      <button type="button" class="btn btn-sm btn-primary" id="sacWhatsApp">WhatsApp’a gönder</button>
       <span class="sac-export-info" id="sacExportInfo"></span>
     </div>
 
@@ -172,6 +177,21 @@ export async function renderSelectedAccountCari() {
 
   page.querySelector('#sacExportTum')?.addEventListener('click', () => doExport(page, 'tum'));
   page.querySelector('#sacExportAyri')?.addEventListener('click', () => doExport(page, 'ayri'));
+  page.querySelector('#sacWhatsApp')?.addEventListener('click', async () => {
+    const button=page.querySelector('#sacWhatsApp');button.disabled=true;
+    try{
+      if(isScanning)throw new Error('Taramanın bitmesini bekleyin.');
+      const period=exportPeriod(page,'#sacDateStart','#sacDateEnd');
+      const current=JSON.stringify({ids:[...selectedIds].sort(),direction,withTahsilat});
+      if(current!==page._whatsAppFilters)throw new Error('Hesap veya filtreler değişti. Önce yeniden tarayın.');
+      const keys=exportCustomerKeys.size?[...exportCustomerKeys]:(selectedCustomerKey?[selectedCustomerKey]:[]);
+      if(!keys.length)throw new Error('WhatsApp gönderimi için müşteri seçin.');
+      const items=keys.flatMap(k=>customerMap[k]?.items||[]);
+      const groups=groupReportItems(items,selectedAccounts);
+      const layout=page.querySelector('#sacWhatsAppLayout').value;
+      await previewReport({groups,accounts:selectedAccounts,options:{...period,scope:'selected',direction,withCollections:withTahsilat,layout:layout==='ayri'?'separate':'single'},exportSpec:{name:'exportAllTransactions',args:[items,selectedAccounts,{layout,direction,withTahsilat,name:groups.length===1?groups[0].name:`Seçili ${groups.length} Firma`,dateRange:period}]}});
+    }catch(error){showToast(error.message,'error');}finally{button.disabled=false;}
+  });
 
   page.querySelector('#sacCustSelAll')?.addEventListener('click', () => {
     // Sadece o an listede görünen (aramaya uyan) müşterileri seçer
@@ -183,6 +203,9 @@ export async function renderSelectedAccountCari() {
     renderCustomerList(page);
   });
 
+  rememberSelectedContext(page);
+  page.addEventListener('change',()=>rememberSelectedContext(page));
+  page.addEventListener('click',()=>rememberSelectedContext(page));
   return page;
 }
 
@@ -190,6 +213,7 @@ async function loadData(page) {
   if (isScanning) return;
   if (selectedIds.size === 0) { showToast('En az bir hesap seçin.', 'error'); return; }
   isScanning = true;
+  const whatsAppFilters=JSON.stringify({ids:[...selectedIds].sort(),direction,withTahsilat});
   customerMap = {};
   allItems = [];
   selectedCustomerKey = null;
@@ -260,6 +284,7 @@ async function loadData(page) {
   });
 
   rememberExportPeriod(page,{start:startDate,end:endDate,complete:completeScan});
+  page._whatsAppFilters=whatsAppFilters;
   if(!completeScan)showToast('Bazı kaynaklar yüklenemedi. Görünen bakiye eksiktir; dışa aktarmadan önce taramayı yenileyin.','warning');
   function ensureCustomer(key, name, taxNo) {
     if (!customerMap[key]) customerMap[key] = { name, taxNo, items: [], totalSatis: 0, totalAlis: 0, totalTahsilat: 0, accountBreakdown: {} };

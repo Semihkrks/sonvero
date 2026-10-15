@@ -1,5 +1,40 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 15 Ekim — asistan sadeleştirme ve gönderim doğrulaması
+
+- WhatsApp gönderimi artık zaman aşımında sohbete bakıyor. Dosya oradaysa tekrarlamıyor; yoksa yalnız o dosyayı en fazla iki kez yeniden deniyor. Sohbet okunamazsa kör tekrar yok. Aynı önizlemeden “Eksik dosyaları kontrol et ve gönder” önce sohbeti kontrol edip eksik dosyayı iletiyor. Servis yeniden başlarsa yarım iş `unknown` kalır; aynı kimlikle gelen dosyalar bu yolu kullanır.
+- QR, alıcı, Gemini anahtarı ve gönderim geçmişi asistan sohbetinden çıkarıldı; Ayarlar sayfasında “Asistan bağlantısı” bölümünde. Asistan yalnız sohbet. Konuşma metin kutusuna kelime kelime yazılır; sesli komut modele gider, anahtar yoksa yerel ayrıştırıcıya düşer. Asistan yanıtları kelime kelime açılır.
+- Rapor görseli firma adı, VKN, turuncu bakiye ve renkli hesap kırılımı kartı. Doğrulanmış dönem sonu “Bakiye”, değilse “Dönem neti”. Excel aynı.
+- Asistan servisi yeniden kuruldu; `/health` 200. Gerçek WhatsApp mesajı bu turda gönderilmedi. Arayüz `sonvera.com.tr` üzerinde değil; yayın için commit ve Vercel dağıtımı bekliyor. Yerelde 390px asistan taşmıyor. Oturumsuz tarayıcıda Ayarlar formu ve sohbet görüldü; girişli canlı uçtan uca gönderim yapılmadı.
+
+## 15 Ekim — sohbet paneli, hız ve WhatsApp bağlantısı düzeltmesi
+
+- Kullanıcı tasarım skill'lerini istemedi; kullanılmadı. Mevcut tema renkleriyle mobil navbarın ortasına Asistan eklendi. Düğme sayfadan ayrılmadan sohbet panelini açıp mikrofonu başlatır; masaüstünde başlıkta da düğme var. Yazılı komut, tek tek eksik bilgi soruları ve seçenek düğmeleri bulunur.
+- Asistan açık Seçili Hesaplar ekranındaki hesap/tarih/yön/tahsilat seçimlerini alır. Son hesap seçimleri aynı tarayıcı sekmesinde korunur. Önizleme sohbet içinde gösterilir, kullanıcı onayı sonrası dosyaların gönderim durumu takip edilir.
+- WhatsApp kök neden: Chromium oturumu CONNECTED/hasSynced olmasına rağmen whatsapp-web.js /app/.wwebjs_cache oluşturamıyordu (EACCES). Önbellek /data/web-cache olarak değiştirildi. Kullanıcının mevcut oturumu korundu; tekrar QR gerekmeden ready oldu ve sonraki yeniden başlatmalarda da ready doğrulandı.
+- "seçili hesaplarda 9.ayda harmanda excelini bana gönder" ve kısa takip yanıtları yerel ayrıştırıcıyla işlenir. Belirsiz ifadeler konuşma, mevcut seçimler ve hesap adları bağlamıyla Gemini'ye gider. Yıl yoksa sorulur; bilinmeyen müşteri uydurulmaz.
+- Daha hızlı Gemini 3.5 Flash-Lite + minimal thinking doğrulandı (örnek API isteği HTTP 200 / 1411 ms). Resmi fiyat sayfasında ücretsiz katman doğrulandı. 3.8 Flash minimal'i desteklemiyordu; 2.5 Flash-Lite yeni kullanıcılara kapalı olduğu için kullanılmadı. Ücretli modele otomatik geçiş yok.
+- 71 frontend testi, typecheck ve build geçti; son değişikliklere yönelik 8 test ve 4 backend testi yeniden geçti. Lint yalnız supabase.js içindeki 4 eski uyarı. 390px mobilde yatay taşma yok, navbar sırası Ana Sayfa / Toplu Tahsilat / Asistan / Cari / Diğer. Açık-koyu panel ekran görüntüleri test-results içinde; sentetik verilerle test edildi.
+- Backend güncel ve health 200 / WhatsApp ready. Production dağıtım dpl_4Q6KjW43UCTiuoa1b6Lq5XmpGuJ3 READY, sonvera.com.tr alan adına bağlandı.
+- Gerçek WhatsApp mesajı gönderilmedi; kullanıcı önizleme onayıyla gerçek dosya gönderimini denemeli. Finansal veri erişimi hâlâ mevcut yetkili Sonvera oturumunu gerektirir; asistan fatura/tahsilat kaydı değiştiren genel amaçlı bir ajan değildir.
+
+## 15 Ekim 2026 — Asistan ve WhatsApp kurulumu
+
+### Son doğrulama — Vercel girişi tamamlandı
+
+- Kullanıcı cihaz yetkilendirmesini tamamladı; CLI semihkrks hesabını doğruladı. Production dağıtımı READY: dpl_2f8hNuKhhJLvjkuyoB4QMUgtfxyQ, https://sonvera.com.tr alan adına bağlandı. Aşağıdaki önceki Vercel yetki engeli giderildi.
+- Gemini 3.8 Flash yeniden denemesi HTTP 200: örnek Ayşe Karabut / Cihan / Eylül 2026 / satış+alış / tahsilat dahil komutunu doğru yapılandırılmış alanlara çevirdi. Önceki 503 geçiciydi.
+- Canlı /assistant adresi tarayıcıda 200 ve giriş ekranı gösterdi. Yetkili kullanıcı oturumu bu test tarayıcısında yok; canlı finansal veriyle uçtan uca rapor gönderimi yapılmadı.
+- WhatsApp hâlâ QR durumunda. Kullanıcının Asistan sayfasından telefonla eşleştirmesi gerekiyor; gerçek mesaj gönderimi henüz doğrulanmadı.
+
+- Sesli/yazılı komut, eksik filtre soruları, mevcut üç Excel şablonunu koruyan dosya üretimi, gerçek veriden PNG özet ve onaylı WhatsApp gönderim önizlemesi eklendi. Cari, Seçili Hesaplar ve Tüm Hesaplar ekranlarında gönderim girişi var.
+- Oracle 193.122.1.32 üzerinde rootless Podman + systemd asistanı ve Caddy HTTPS kurulu. Servis adresi https://193-122-1-32.sslip.io. Oracle 80/443 kurallarını kullanıcı açtı; /health 200 doğrulandı. Özel uçlar Supabase sahibi oturumu gerektiriyor.
+- Gemini anahtarı yalnız sunucunun özel settings.json dosyasına kaydedildi. Models isteği başarılı; gemini-3.8-flash komut denemesi iki kez 503 UNAVAILABLE döndü. Uçtan uca AI başarısı henüz doğrulanmadı; kullanıcıya geçici sağlayıcı hatası gösteriliyor.
+- WhatsApp QR bekliyor; telefonla eşleştirme ve gerçek gönderim henüz yapılmadı. Sabit alıcı 905308625540. Hiçbir gerçek mesaj gönderilmedi.
+- npm run check: 66 test, typecheck, production build başarılı. Backend 4 test başarılı. Lint hata yok, supabase.js içinde 4 mevcut uyarı var. Önceki sentetik tarayıcı testleri mobil taşma, Excel/PNG ve aynı modal içindeki tekrar deneme kimliğini doğruladı.
+- Son backend kaynakları dağıtıldı. Frontend canlı dağıtımı Vercel token geçersiz olduğu için reddedildi; yeni kodun canlı olduğu varsayılmamalı. vercel login başlatıldı ve kullanıcı cihaz yetkilendirmesi bekleniyor.
+- Sıradaki işler: Vercel oturumunu tamamla, frontend dağıt ve canlı girişle kontrol et; WhatsApp QR okut; Gemini geçici hatasını yeniden kontrol et. Modal kapanışı/yeniden yükleme sonrası kalıcı gönderim kimliği iyileştirmesi hâlâ değerlendirilmelidir; mevcut aynı-modal tekrarlar aynı kimliği kullanır, sunucu belirsiz gönderimi otomatik tekrarlamaz.
+
 Son güncelleme: **12 Ekim 2026 (toplu tahsilat mobil kaydırma)**. Bu dosya başka IDE/AI ajanına geçiş için ana başlangıç noktasıdır. HER OTURUM / YANIT BİTİŞİNDE bu dosyayı güncellemek zorunludur; bu kural sonraki IDE ve ajanlar için de geçerlidir. Yapılanları, kalanları, doğrulanmayanları ve sıradaki somut adımı yazın. Tamamlanan işlerin üzerine yazmayın; mevcut kullanıcı değişikliklerini koruyun.
 
 

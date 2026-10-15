@@ -8,6 +8,7 @@ import '@fontsource/inter/400.css';
 import '@fontsource/inter/500.css';
 import '@fontsource/inter/600.css';
 import './styles/system.css';
+import './styles/assistant.css';
 import { clearPrivateStorage, hasPendingMutation } from './lib/operations.js';
 import { clearAccounts } from './services/account-manager.js';
 import { showToast } from './components/toast.js';
@@ -147,6 +148,7 @@ registerRoute('/export', async () => ({
 }));
 
 registerRoute('/settings', async () => (await import('./react/workspace.tsx')).mountWorkspace('settings'));
+registerRoute('/assistant', async () => (await import('./pages/assistant.js')).mountAssistant());
 
 registerRoute('/cari', async () => ({
   page: await renderCariPage(),

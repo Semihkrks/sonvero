@@ -35,3 +35,13 @@ export const exportCustomerCari=(...args)=>exportInWorker('exportCustomerCari',a
 export const exportAllTransactions=(...args)=>exportInWorker('exportAllTransactions',args);
 export const exportMultiAccountCari=(...args)=>exportInWorker('exportMultiAccountCari',args);
 export const exportLedgerRows=(rows,options,controls={})=>exportInWorker('exportLedgerRows',[rows,options],controls);
+
+// Reuse the exact screen-specific workbook; return bytes without triggering a download.
+export async function prepareCariFile(name,args){
+ const optionIndex={exportCustomerCari:3,exportAllTransactions:2,exportMultiAccountCari:3}[name];
+ if(optionIndex===undefined)throw new Error('Geçersiz rapor şablonu.');
+ const values=[...args];values[optionIndex]={...(values[optionIndex]||{}),returnFile:true};
+ const result=await exportInWorker(name,values);
+ if(!result?.success||!result.file)throw new Error(result?.error||'Excel hazırlanamadı.');
+ return result.file;
+}

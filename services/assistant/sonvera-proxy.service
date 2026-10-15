@@ -1,0 +1,12 @@
+[Unit]
+Description=Sonvera assistant HTTPS proxy
+Wants=network-online.target
+After=network-online.target
+[Service]
+Restart=always
+RestartSec=10
+TimeoutStartSec=180
+ExecStart=/usr/bin/podman run --rm --replace --name sonvera-proxy --network host -v /home/opc/sonvera/config/Caddyfile:/etc/caddy/Caddyfile:ro,Z -v sonvera-caddy-data:/data docker.io/library/caddy:2
+ExecStop=/usr/bin/podman stop -t 10 sonvera-proxy
+[Install]
+WantedBy=multi-user.target

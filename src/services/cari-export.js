@@ -814,6 +814,7 @@ export async function exportCustomerCari(invoices, customerName, source, options
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     
     const fileName = excelFileName({name:customerName,items:invoices,dateRange:options.dateRange});
+    if (options.returnFile) return { success: true, count: records.length, file: { blob, fileName } };
     await saveExportFile(blob, fileName);
 
     return { success: true, count: records.length };
@@ -1210,6 +1211,7 @@ export async function exportAllTransactions(items, accounts, opts = {}) {
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const fileName = excelFileName({name:opts.name||(accounts?.length===1?accounts[0].name:'Tüm Firmalar'),items,dateRange:opts.dateRange});
+    if (opts.returnFile) return { success: true, count: items.length, file: { blob, fileName } };
     await saveExportFile(blob, fileName);
 
     return { success: true, count: items.length };
@@ -1533,6 +1535,7 @@ export async function exportMultiAccountCari(invoices, customerName, accountBrea
     const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     
     const fileName = excelFileName({name:customerName,items:invoices,dateRange:options.dateRange});
+    if (options.returnFile) return { success: true, count: invoices.length, file: { blob, fileName } };
     await saveExportFile(blob, fileName);
 
     return { success: true, count: invoices.length };

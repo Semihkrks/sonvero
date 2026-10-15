@@ -1,0 +1,8 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {validatePackage,validateIntent} from '../validation.mjs';
+const base=()=>({id:'11111111-1111-4111-8111-111111111111',recipient:'905000000000',confirmed:true,caption:'Özet',files:[{name:'rapor.xlsx',mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64:Buffer.from('PKfake workbook for validation').toString('base64')}]});
+test('explicit confirmation and recipient are mandatory',()=>{assert.throws(()=>validatePackage({...base(),confirmed:false}));assert.throws(()=>validatePackage({...base(),recipient:'abc'}));});
+test('identity covers recipient and file bytes',()=>{assert.notEqual(validatePackage(base()).hash,validatePackage({...base(),recipient:'905000000001'}).hash);assert.equal(validatePackage(base()).hash,validatePackage(base()).hash);});
+test('rejects executable files, invalid base64, and excess attachments',()=>{assert.throws(()=>validatePackage({...base(),files:[{name:'x.exe',mime:'application/octet-stream',base64:'TVqQ'}]}));assert.throws(()=>validatePackage({...base(),files:[{...base().files[0],base64:'!'}]}));assert.throws(()=>validatePackage({...base(),files:Array(13).fill(base().files[0])}));});
+test('intent refuses impossible calendar dates and unrecognized directions',()=>{const v=validateIntent({start:'2026-02-30',end:'2026-09-30',direction:'delete',withCollections:'true'});assert.equal(v.start,null);assert.equal(v.end,'2026-09-30');assert.equal(v.direction,null);assert.equal(v.withCollections,null);assert.throws(()=>validateIntent({start:'2026-10-02',end:'2026-10-01'}));});

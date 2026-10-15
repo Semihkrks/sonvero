@@ -1,0 +1,12 @@
+# Publish only the frontend source and its build inputs. Keep private files and server data local.
+*
+!src
+!src/**
+!public
+!public/**
+!index.html
+!package.json
+!package-lock.json
+!vite.config.js
+!tsconfig.json
+!vercel.json

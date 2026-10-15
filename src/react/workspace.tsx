@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createPortal } from 'react-dom';
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -12,6 +12,7 @@ import { addCollection, updateCollection, deleteCollection, collectionHistory, C
 import { parseTurkishAmount, istanbulDate, Decimal } from '../lib/money.js';
 import { showToast } from '../components/toast.js';
 import { registerCacheReset } from '../router.js';
+import { assistantRequest } from '../services/assistant-client.js';
 
 const client = new QueryClient({defaultOptions:{queries:{staleTime:30000,retry:1,refetchOnWindowFocus:false},mutations:{retry:false}}});
 registerCacheReset(()=>{client.cancelQueries();client.clear();});
@@ -217,6 +218,37 @@ function NotificationPreferences(){
  const [permission,setPermission]=useState(supported?Notification.permission:'unsupported'),[busy,setBusy]=useState(false);
  return <section className="sv-section"><div className="sv-section-head"><h2>Fatura bildirimleri</h2></div><div className="sv-section-body"><p>{permission==='granted'?'Tarayıcı bildirimleri açık. Uygulama açıkken yeni belgeler kontrol edilir.':permission==='denied'?'Tarayıcı bildirimleri engellenmiş. İsterseniz tarayıcınızın site ayarlarından açabilirsiniz; uygulama içi bildirimler kullanılmaya devam eder.':permission==='unsupported'?'Bu tarayıcı sistem bildirimlerini desteklemiyor. Uygulama içi bildirimler kullanılabilir.':'Yeni belge uyarılarını tarayıcı bildirimi olarak almak için izin verebilirsiniz.'}</p>{permission==='default'&&<button className="btn btn-secondary" disabled={busy} onClick={async()=>{setBusy(true);try{setPermission(await Notification.requestPermission());}catch{showToast('Bildirim izni alınamadı. Uygulama içi bildirimler kullanılacak.','warning');}finally{setBusy(false);}}}>{busy?'İzin bekleniyor…':'Bildirimleri etkinleştir'}</button>}</div></section>;
 }
+type AssistantJob={id:string;status:string;caption:string;recipient:string;createdAt:string;sent?:{name:string}[];error?:string};
+type AssistantStatus={connection:string;qr?:string|null;loadingPercent?:number|null;recipient?:string;aiConfigured?:boolean;jobs?:AssistantJob[]};
+const assistantStatusLabel:Record<string,string>={disconnected:'WhatsApp bağlı değil',connecting:'WhatsApp bağlanıyor…',qr:'QR kodunu okutun',authenticated:'Hesap bağlandı, hazırlanıyor…',syncing:'WhatsApp eşitleniyor…',ready:'WhatsApp hazır',auth_failure:'Yeniden bağlantı gerekli',error:'Bağlantı kurulamadı'};
+const assistantJobLabel:Record<string,string>={queued:'Sırada',sending:'Gönderiliyor',sent:'WhatsApp’a gönderildi',failed:'Gönderilemedi',unknown:'Sonuç doğrulanamadı'};
+function AssistantConnection(){
+ const status=useQuery({queryKey:['assistant-status'],queryFn:()=>assistantRequest('/status') as Promise<AssistantStatus>,refetchInterval:4000});
+ const [recipient,setRecipient]=useState(''),[geminiKey,setGeminiKey]=useState(''),[filled,setFilled]=useState(false),[saving,setSaving]=useState(false),[connecting,setConnecting]=useState(false),[notice,setNotice]=useState('');
+ useEffect(()=>{if(filled||status.data?.recipient===undefined)return;setRecipient(status.data.recipient?'+'+status.data.recipient:'');setFilled(true);},[filled,status.data]);
+ const data=status.data,connection=data?.connection||'disconnected';
+ async function save(event:FormEvent){
+  event.preventDefault();if(saving)return;setSaving(true);setNotice('');
+  try{const body:{recipient:string;geminiKey?:string}={recipient};if(geminiKey.trim())body.geminiKey=geminiKey.trim();await assistantRequest('/settings',body);setGeminiKey('');setNotice('Ayarlar sunucuya kaydedildi.');await status.refetch();}
+  catch(error){setNotice(error instanceof Error?error.message:'Ayarlar kaydedilemedi.');}finally{setSaving(false);}
+ }
+ async function connect(){if(connecting)return;setConnecting(true);try{await assistantRequest('/connect',{});await status.refetch();}catch(error){showToast(error instanceof Error?error.message:'Bağlantı başlatılamadı.','error');}finally{setConnecting(false);}}
+ const tone=connection==='ready'?'succeeded':connection==='error'||connection==='auth_failure'?'failed':'unknown';
+ return <section className="sv-section"><div className="sv-section-head"><h2>Asistan bağlantısı</h2><span className={'sv-status '+tone}>{status.error?'Ulaşılamadı':assistantStatusLabel[connection]||connection}{connection==='syncing'&&data?.loadingPercent!=null?` %${data.loadingPercent}`:''}</span></div><div className="sv-section-body">{status.isPending&&!data?<Loading/>:<>
+  {status.error?<ErrorBox error={status.error}/>:null}
+  <p>WhatsApp bağlantısı, alıcı numarası, Gemini anahtarı ve gönderim geçmişi burada durur.</p>
+  {data?.qr?<img src={data.qr} alt="WhatsApp bağlı cihaz ekleme QR kodu" width={280} height={280} style={{maxWidth:'100%',height:'auto',background:'white',borderRadius:8}}/>:null}
+  <p className="sv-subtitle">Telefonunda WhatsApp → Bağlı cihazlar → Cihaz bağla.</p>
+  <div className="sv-actions"><button className="btn btn-secondary" type="button" disabled={connecting||connection==='ready'} onClick={()=>void connect()}>{connection==='ready'?'Bağlantı hazır':connecting?'Bağlanıyor…':'Bağlan / yeniden dene'}</button><button className="btn btn-secondary" type="button" onClick={()=>void status.refetch()}><RefreshCw size={16}/>Yenile</button></div>
+  <form onSubmit={event=>void save(event)}><div className="sv-filters"><label className="sv-field">Varsayılan alıcı<input value={recipient} onChange={event=>setRecipient(event.target.value)} type="tel" placeholder="+90…" required/></label><label className="sv-field">Gemini API anahtarı<input value={geminiKey} onChange={event=>setGeminiKey(event.target.value)} type="password" autoComplete="new-password" placeholder="Değiştirmek için gir"/></label></div>
+  <p className="sv-subtitle">{data?.aiConfigured?'Yapay zekâ anahtarı kayıtlı.':'Yapay zekâ anahtarı eksik. Konuşmayı anlamak için ücretsiz bir Gemini anahtarı ekleyebilirsin; yazarak da rapor hazırlanır.'}</p>
+  <p className="sv-subtitle">Ücretsiz kota için faturalandırma bağlı olmayan bir Gemini projesi kullan. Komut metni ve konuşman sağlayıcıya gider; cari tabloların gönderilmez.</p>
+  <p><a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">Gemini API anahtarı oluştur</a></p>
+  <button className="btn btn-secondary" type="submit" disabled={saving}>{saving?'Kaydediliyor…':'Bağlantı ayarlarını kaydet'}</button>{notice?<p role="status">{notice}</p>:null}</form>
+  <h3 style={{margin:'22px 0 8px',fontSize:15}}>Gönderim geçmişi</h3>
+  {data?.jobs?.length?<div className="sv-history">{data.jobs.map(job=><div className="sv-history-row" key={job.id}><span><strong>{assistantJobLabel[job.status]||job.status}</strong><small>{job.caption}</small><small>+{job.recipient} · {new Date(job.createdAt).toLocaleString('tr-TR')} · {job.sent?.length||0} dosya</small>{job.error?<small>{job.error}</small>:null}</span></div>)}</div>:<p className="sv-subtitle">Henüz gönderim yok.</p>}
+ </>}</div></section>;
+}
 function Settings(){
  const [theme,setTheme]=useState(localStorage.getItem('nilfatura_theme')||document.documentElement.dataset.theme||'light');
  const health=useQuery({queryKey:['health'],queryFn:()=>rpc<{databaseBytes:number;databaseLimitBytes:number;pendingJobs:number;failedJobs:number;unknownOperations:number;lastSync:string|null}>('system_health'),refetchInterval:60000});
@@ -247,6 +279,7 @@ function Settings(){
  const percentage=health.data?health.data.databaseBytes/health.data.databaseLimitBytes*100:0;
  return <div className="sv-workspace"><Header eyebrow="Çalışma alanı" title="Ayarlar ve sistem durumu" description="Görünümünüzü seçin, bekleyen işlemleri ve kapasiteyi takip edin."/>
  <section className="sv-section"><div className="sv-section-head"><h2>Görünüm</h2><Sun size={18}/></div><div className="sv-section-body sv-theme-options">{(['light','dark'] as const).map(value=><button key={value} className="btn btn-secondary" aria-pressed={theme===value} onClick={()=>{setTheme(value);localStorage.setItem('nilfatura_theme',value);document.documentElement.dataset.theme=value;}}>{value==='light'?<Sun size={18}/>:<Moon size={18}/>} {value==='light'?'Açık tema':'Koyu tema'}</button>)}</div></section>
+ <AssistantConnection/>
  {health.error?<ErrorBox error={health.error}/>:health.isPending?<Loading/>:<><div className="sv-grid">{[{label:'Bekleyen işler',value:health.data.pendingJobs},{label:'Kontrol gereken işler',value:health.data.failedJobs},{label:'Sonucu belirsiz işlemler',value:health.data.unknownOperations},{label:'Firma hesapları',value:getAllAccounts().length}].map(item=><div className="sv-metric" key={item.label}><span className="sv-metric-label">{item.label}</span><strong>{item.value}</strong></div>)}</div><section className="sv-section"><div className="sv-section-head"><h2>Veritabanı kapasitesi</h2><span className={'sv-status '+(percentage>=85?'failed':'succeeded')}>%{percentage.toFixed(1)}</span></div><div className="sv-section-body"><p>{(health.data.databaseBytes/1048576).toFixed(1)} MB / 500 MB</p><progress className="sv-capacity" max={100} value={percentage}/><p className="sv-subtitle">{percentage>=85?'Arka plan taramaları kapasite nedeniyle durdurulur. Finansal kayıtlar otomatik silinmez.':percentage>=70?'Kapasite yüzde 70 üzerinde. Yedek ve saklama durumunu kontrol edin.':'Kapasite normal. Ücretli plana otomatik geçiş yapılmaz.'}</p></div></section></>}
  <NotificationPreferences/><BackupStatus/><Notice><ShieldCheck size={16}/> Finansal işlemler geçmişiyle saklanır. Nilvera anahtarları yalnızca sunucuda tutulur. Yerel yedekleme yönergesi proje içindeki dağıtım rehberindedir; ücretsiz plan otomatik yedek garantisi vermez.</Notice>
  <section className="sv-section"><div className="sv-section-head"><h2>Sonucu belirsiz işlemler</h2><span>{operations.data?.length||0}</span></div><div className="sv-section-body"><p>Bu işlemler otomatik yeniden gönderilmez. Sağlayıcıda kontrol ettikten sonra gönderim yollarını yalnız başarısız kapatabilirsiniz; elle başarı işaretlemek gönderimler için kapalıdır.</p>{operations.error?<ErrorBox error={operations.error}/>:operations.isPending?<Loading/>:operations.data?.length?<div className="sv-history">{operations.data.map(operation=><div className="sv-history-row" key={operation.id}><span><strong>{getAllAccounts().find(a=>a.id===operation.account_id)?.name||'Firma hesabı'}</strong><small>{operation.id}</small><small>{date(operation.created_at)}</small></span><div className="sv-actions"><Status value={operation.status}/><button className="btn btn-sm btn-secondary" disabled={!!resolving} onClick={()=>void resolveOperation(operation.id,'failed')}>{resolving===operation.id?'Kapatılıyor…':'Başarısız kapat'}</button></div></div>)}</div>:<p className="sv-subtitle">Belirsiz sonuçlu işlem bulunmuyor.</p>}</div></section>

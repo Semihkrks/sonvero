@@ -10,6 +10,8 @@ import { defaultFilterRange } from '../lib/money.js';
 import { exportMultiAccountCari } from '../services/cari-export-worker-client.js';
 import { escapeHtml, safeColor } from '../lib/html.js';
 import { forEachLimited } from '../lib/concurrency.js';
+import {groupReportItems} from '../services/report-data.js';
+import {previewReport} from '../components/report-send.js';
 
 const ic = {
   search: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
@@ -405,4 +407,14 @@ function renderDetailPanel(page, customer) {
       showToast('Hata: ' + (e.message || e), 'error');
     }
   });
+  const whatsApp=document.createElement('button');whatsApp.type='button';whatsApp.className='btn btn-sm btn-primary';whatsApp.textContent='WhatsApp’a gönder';
+  panel.querySelector('#macExportBtn')?.after(whatsApp);
+  whatsApp.onclick=async()=>{
+    whatsApp.disabled=true;
+    try{
+      if(isScanning)throw new Error('Taramanın bitmesini bekleyin.');
+      const period=exportPeriod(page,'#macDateStart','#macDateEnd');
+      await previewReport({groups:groupReportItems(customer.invoices,allAccounts),accounts:allAccounts,options:{...period,scope:'all',direction:'satis',withCollections:true},exportSpec:{name:'exportMultiAccountCari',args:[customer.invoices,customer.name,customer.accountBreakdown,{dateRange:period}]}});
+    }catch(error){showToast(error.message,'error');}finally{whatsApp.disabled=false;}
+  };
 }

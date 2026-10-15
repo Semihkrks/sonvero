@@ -76,12 +76,14 @@ export function renderBottomNav(currentRoute){
  const items=[
   ['Ana Sayfa','/dashboard',svg('<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>')],
   ['Toplu Tahsilat','/toplu-tahsilat',svg('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>')],
+  ['Asistan','assistant-panel',svg('<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>')],
   ['Cari','/cari',svg('<path d="M20 8H4a2 2 0 0 1 0-4h14v4M4 8v12h16V8M20 12h-5v4h5"/>')],
   ['Diğer',null,svg('<path d="M4 6h16M4 12h16M4 18h16"/>')]
  ];
  for(const [label,path,icon] of items){
-  const link=document.createElement(path?'a':'button');link.className='bnav-item';link.innerHTML=icon+'<span class="bnav-label">'+label+'</span>';
-  if(path){link.href='#'+path;const selected=route===path||(path==='/cari'&&route==='/cari');if(selected){link.classList.add('active');link.setAttribute('aria-current','page');}}
+  const link=document.createElement(path&&path!=='assistant-panel'?'a':'button');link.className='bnav-item';link.innerHTML=icon+'<span class="bnav-label">'+label+'</span>';
+  if(path==='assistant-panel'){link.type='button';link.classList.add('bnav-assistant');link.setAttribute('aria-haspopup','dialog');link.setAttribute('aria-expanded','false');link.addEventListener('click',()=>{closeQuickSheet?.(false);void import('./assistant-panel.js').then(m=>m.openAssistantPanel(link));});}
+  else if(path){link.href='#'+path;const selected=route===path||(path==='/cari'&&route==='/cari');if(selected){link.classList.add('active');link.setAttribute('aria-current','page');}}
   else {
    link.type='button';link.setAttribute('aria-haspopup','dialog');link.setAttribute('aria-expanded','false');
    if(QUICK_GROUPS.some(([,links])=>links.some(([,p])=>p===route))) link.classList.add('active');

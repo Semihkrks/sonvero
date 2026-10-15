@@ -13,6 +13,8 @@ import { attachDatePicker } from '../lib/date-picker.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
 import { exportCustomerCari } from '../services/cari-export-worker-client.js';
+import {groupReportItems} from '../services/report-data.js';
+import {previewReport} from '../components/report-send.js';
 import { addCollection, listCollections, updateCollection, deleteCollection } from '../services/tahsilat-manager.js';
 import { parseUserAmount, formatUserAmount, isDecimalInProgress } from '../services/bank-statement-parser.js';
 
@@ -713,6 +715,7 @@ function renderDetailPanel(page, customer, key) {
       <div class="cari-detail-actions">
         <button class="btn btn-sm btn-warning" id="toggleTahsilatFormBtn">+ Tahsilat Ekle</button>
         <button class="btn btn-sm btn-success" id="exportCariBtn">${ic.download} Excel'e Aktar</button>
+        <button class="btn btn-sm btn-primary" id="cariWhatsAppBtn" type="button">WhatsApp’a gönder</button>
       </div>
     </div>
 
@@ -1046,6 +1049,16 @@ function renderDetailPanel(page, customer, key) {
   });
 
   // Export button
+  panel.querySelector('#cariWhatsAppBtn')?.addEventListener('click',async()=>{
+    const button=panel.querySelector('#cariWhatsAppBtn');button.disabled=true;
+    try{
+      const period=exportPeriod(page,'#cariDateStart','#cariDateEnd');
+      if(page.querySelector('#cariSourceFilter').value!==currentSource)throw new Error('İşlem yönü değişti. Önce Ara ile yenileyin.');
+      const account=getActiveAccount();if(!account)throw new Error('Hesap seçin.');
+      const groups=groupReportItems(customer.movements,[account]);
+      await previewReport({groups,accounts:[account],options:{...period,scope:'cari',direction:currentSource==='giden'?'satis':currentSource==='gelen'?'alis':'both',withCollections:true},exportSpec:{name:'exportCustomerCari',args:[customer.movements,customer.name,currentSource,{dateRange:period}]}});
+    }catch(error){showToast(error.message,'error');}finally{button.disabled=false;}
+  });
   panel.querySelector('#exportCariBtn')?.addEventListener('click', async () => {
     try {
       showToast('Cari defter hazırlanıyor...', 'info');
