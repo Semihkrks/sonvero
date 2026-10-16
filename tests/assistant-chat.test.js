@@ -75,15 +75,15 @@ it('ignores audio delivered from a disposed assistant',async()=>{
  app=await mountAssistant({context:{}});app.cleanup();await voiceHarness.callbacks.onAudio(new Blob(['old'],{type:'audio/mp4'}));
  expect(assistantRequest.mock.calls.some(([url])=>url==='/interpret')).toBe(false);
 });
-it('shows partial spoken text immediately while still listening and runs the command only at the end',async()=>{
- app=await mountAssistant({context:{}});document.body.append(app.page);voiceHarness.callbacks.onState('listening');
- const live=app.page.querySelector('.sv-live-transcript');
- voiceHarness.callbacks.onText('9. ayın',{finalCount:0});expect(live.textContent).toBe('9. ayın');
- voiceHarness.callbacks.onText('9. ayın tüm müşterilerinin Excelini ver',{finalCount:0});
- expect(live.textContent).toBe('9. ayın tüm müşterilerinin Excelini ver');expect(app.page.dataset.voice).toBe('listening');expect(scanReport).not.toHaveBeenCalled();
- await voiceHarness.callbacks.onFinalText('9. ayın tüm müşterilerinin Excelini ver');
- expect(scanReport).toHaveBeenCalledOnce();expect(previewReport.mock.calls[0][0].options).toMatchObject({allCustomers:true,format:'excel'});
- expect(app.page.querySelector('.sv-chat-composer').hidden).toBe(true);
+it('resumes recording after an interpretation failure and accepts the next utterance',async()=>{
+ assistantRequest.mockImplementation(async url=>url==='/interpret'?Promise.reject(new Error('Geçici bağlantı hatası')):{connection:'ready',jobs:[]});
+ app=await mountAssistant({context:{}});document.body.append(app.page);app.page.querySelector('#assistantMic').click();
+ await voiceHarness.callbacks.onAudio(new Blob(['first'],{type:'audio/mp4'}));
+ expect(voiceHarness.resume).toHaveBeenCalled();expect(app.page.querySelector('#assistantMic').disabled).toBe(false);
+ assistantRequest.mockImplementation(async url=>url==='/interpret'?{transcript:'nasılsın',intent:{}}:{connection:'ready',jobs:[]});
+ await voiceHarness.callbacks.onAudio(new Blob(['second'],{type:'audio/mp4'}));
+ await vi.waitFor(()=>expect(app.page.querySelector('#assistantMessages').textContent).toContain('Sen nasılsın?'));
+ expect(app.page.querySelector('#assistantMic').disabled).toBe(false);
 });
 it('prepares every customer for a named account without asking to pick a person',async()=>{
  const customers=Array.from({length:9},(_,index)=>({name:'Müşteri '+index,tax:String(1000+index),rows:[]}));scanReport.mockResolvedValue(customers);

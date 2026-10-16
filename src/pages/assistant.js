@@ -46,7 +46,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  pauseButton.onclick=()=>{voiceActive=false;voice.pause();voiceState('idle');};orbit.append(pauseButton);
  const symbol=document.createElement('span');symbol.className='sonai-orb-symbol';symbol.innerHTML=sonaiMark;mic.prepend(symbol);
  const reduceMotion=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
- function paintLive(text,{animate=true,stream=false,finalCount}={}){
+ function paintLive(text,{animate=true}={}){
   const next=String(text||'').replace(/\s+/g,' ').trim();liveHeard=next;clearTimeout(dictateTimer);
   if(!next){live.replaceChildren();live.classList.remove('sv-live-active','sv-live-typing');return;}
   live.classList.add('sv-live-active');
@@ -55,18 +55,11 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   let shared=0;while(shared<displayed.length&&shared<characters.length&&displayed[shared]===characters[shared])shared++;
   live.replaceChildren(document.createTextNode(characters.slice(0,shared).join('')));
   let index=shared;
-  const settled=finalCount==null?characters.length:Array.from(next.split(' ').slice(0,finalCount).join(' ')).length;
-  if(stream){
-   // Interim results must be visible immediately; CSS only softens newly arrived letters.
-   live.classList.remove('sv-live-typing');
-   while(index<characters.length){const char=document.createElement('span');char.className='sv-live-char'+(index>=settled?' sv-live-interim':'');char.style.animationDelay=Math.min((index-shared)*8,80)+'ms';char.textContent=characters[index++];live.append(char);}
-   return;
-  }
   live.classList.add('sv-live-typing');
   const tick=()=>{
    if(disposed)return;
    if(index>=characters.length){live.classList.remove('sv-live-typing');return;}
-   const char=document.createElement('span');char.className='sv-live-char'+(index>=settled?' sv-live-interim':'');char.textContent=characters[index++];live.append(char);
+   const char=document.createElement('span');char.className='sv-live-char';char.textContent=characters[index++];live.append(char);
    dictateTimer=setTimeout(tick,14);
   };tick();
  }
@@ -84,13 +77,10 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   mic.setAttribute('aria-label',state==='listening'?'Konuşmayı tamamla':'SonAI ile konuş');pauseButton.hidden=state!=='listening';
   if(state==='listening')liveHeard='';
   if(state!=='listening'){targetLevel=0;if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);}
-  if(!busy)reply.textContent={listening:page.dataset.transcription==='recorded'?'Dinliyorum · Bu tarayıcıda metin kayıt sonrası çözülür':'Dinliyorum · Bitirince göndermek için dokun',thinking:'Söylediklerini anlıyorum…',idle:'Konuşmak için dokun',requesting:'Mikrofon iznini bekliyorum…',error:'Tekrar denemek için dokun'}[state]||'';
+  if(!busy)reply.textContent={listening:'Dinliyorum · Bitirince göndermek için dokun',thinking:'Söylediklerini anlıyorum…',idle:'Konuşmak için dokun',requesting:'Mikrofon iznini bekliyorum…',error:'Tekrar denemek için dokun'}[state]||'';
  }
  const voice=createVoiceSession({
   audioContext,
-  onMode:mode=>{page.dataset.transcription=mode;},
-  onText:(text,options)=>{if(!disposed&&!busy&&page.dataset.voice==='listening')paintLive(text,{...options,stream:true});},
-  onFinalText:async text=>{if(disposed)return;try{paintLive(text,{animate:false});await interpret(undefined,{voice:true,heard:text});}finally{if(!disposed&&voiceActive&&!busy)voice.resume();}},
   onAudio:async blob=>{if(disposed)return;const heard=liveHeard;try{await interpret({mime:blob.type,base64:await blobBase64(blob)},{voice:true,heard});}catch(e){message(e.message,'assistant',{instant:true});}finally{if(!disposed&&voiceActive&&!busy)voice.resume();}},
   onState:state=>{if(!disposed)voiceState(state);},onError:text=>{voiceActive=false;if(!disposed)message(text,'assistant',{instant:true});},
   onLevel:level=>{targetLevel=Math.min(1,Number(level)||0);if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);},

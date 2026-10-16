@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import {it,expect,vi,afterEach} from 'vitest';
-import {createVoiceSession,createMicrophoneLease} from '../src/services/voice-session.js';
+import {createVoiceSession,createMicrophoneLease,activateVoiceAudio} from '../src/services/voice-session.js';
 afterEach(()=>vi.restoreAllMocks());
 function harness(){
  let now=0,nextFrame,sound=0;
@@ -65,4 +65,11 @@ it('reports voice level while listening and resets on pause',async()=>{
  expect(h.onLevel).toHaveBeenLastCalledWith(0);
  h.voice.pause();
  expect(h.onLevel).toHaveBeenLastCalledWith(0);
+});
+it('uses recording for consecutive utterances even when browser live recognition is available',async()=>{
+ const recognition=vi.fn(()=>{throw new Error('Live recognition must not be started');});
+ vi.stubGlobal('SpeechRecognition',recognition);vi.stubGlobal('webkitSpeechRecognition',recognition);
+ const h=harness();vi.stubGlobal('AudioContext',h.Audio);const activation=activateVoiceAudio();expect(activation).toBeInstanceOf(h.Audio);activation.close();
+ await h.voice.start();h.utterance();await h.voice.resume();h.utterance();await h.voice.resume();h.utterance();
+ expect(h.onAudio).toHaveBeenCalledTimes(3);expect(h.mediaDevices.getUserMedia).toHaveBeenCalledOnce();expect(recognition).not.toHaveBeenCalled();h.voice.close();
 });

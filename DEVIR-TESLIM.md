@@ -1,5 +1,11 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 17 Ekim — canlı yazı geri alındı
+
+- Kullanıcı, canlı konuşma tanıma sonrasında mikrofonun yeniden çalışmadığını bildirdi ve özelliğin kaldırılmasını istedi. Web Speech/native tanıyıcı yolu, mod seçimi ve ilgili servis kaldırıldı. Tüm tarayıcılar önceki tek MediaRecorder + AudioContext akışını kullanır; metin kayıt çözümlendikten sonra görünür.
+- AudioContext ilk dokunuşta yeniden açılır; tarayıcıda SpeechRecognition bulunması bu adımı atlatmaz. Mavi görünüm, animasyonlar, sesli seçim, toplu müşteri Excel’i ve WhatsApp gönderimi korunur.
+- Ardışık üç kaydın tek mikrofon izniyle alınması, yerel konuşma tanıyıcısının hiç açılmaması ve çözümleme hatasından sonra sonraki komutun işlenmesi regresyon testlerinde kontrol edilir. Fiziksel iPhone testi bu ortamda yapılmadı.
+
 ## 17 Ekim — konuşma sırasında canlı yazı
 
 - Önceki iOS Web Speech engeli kaldırıldı. `SpeechRecognition`/`webkitSpeechRecognition` destekleniyorsa tek yerel konuşma tanıyıcı mikrofonun sahibi olur; paralel MediaRecorder başlatılmaz. Türkçe `interimResults` konuşma devam ederken ekrana doğrudan yazılır. Ara sonuçlar komut çalıştırmaz; yalnız bitişte tek final metin niyet/gönderim akışına girer.
