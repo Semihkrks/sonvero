@@ -1,5 +1,12 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 17 Ekim — tüm müşterilerin Excel’i ve küre animasyonu
+
+- “Ayşe Karabut’un 9. ayki müşterilerin Excelini getir” seçili hesabın; “9. ayın tüm müşterilerinin Excelini ver” mevcut hesap seçiminin dönem hareketlerini tek Excel’de hazırlar. `allCustomers` açıkça modellenir; müşteri seçim sorusu atlanır. 9.ayki/9.ayın çekimleri tanınır. Yeni tek-müşteri isteği toplu modu kapatır.
+- Ortak `exportAllTransactions` kullanılır: müşteri özeti, müşteri detayları ve hesap sayfaları. Toplu Excel’de 6-müşteri sınırı yok; kesmeden tek dosya üretilir. Fotoğraflı paket sınırı korunur. WhatsApp durum servisi ulaşılamazsa Excel yine hazırlanır; gönderim devre dışıdır.
+- Eski yuvarlak mavi görünüm korunur. Dinlemede ses seviyesine bağlı ışık, düşünmede/gönderimde dönen ince halka vardır; azaltılmış hareket tercihinde ek animasyonlar kapanır.
+- Doğrulama: 101 frontend testi, typecheck ve 11 servis testi geçti. 9 müşterilik gerçek Excel dosyası açılarak tüm isimlerin özette olduğu doğrulandı. Gerçek müşteri verisi/WhatsApp mesajı ile test yapılmadı.
+
 ## 17 Ekim — SonAI, sesli seçim ve gönderim biçimi
 
 - Görünüm son kullanıcı düzeltmesiyle önceki kompakt, yuvarlak mavi orb tasarımına geri döndü. Başlık/yeni sohbet ve sohbet balonları görünmez; yalnız son cevap ortada gösterilir. Konuşma altyazısı ve cevaplar harf harf açılır. SonAI adı/simgesi, hizalı kapatma düğmesi ve yeni işlevler korunur.

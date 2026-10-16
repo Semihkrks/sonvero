@@ -34,4 +34,10 @@
 .sonai-formats button[aria-pressed=true]{color:var(--accent,#2563eb);border-color:var(--accent,#2563eb)}
 .sonai-delivery{text-align:center;font-size:12px;color:var(--text-muted);padding:8px;line-height:1.6}
 @keyframes sonai-char-in{from{opacity:0}to{opacity:1}}
+.sv-voice-orbit:after{content:'';position:absolute;inset:5px;border-radius:50%;border:2px solid transparent;border-top-color:#60a5fa99;border-right-color:#93c5fd22;opacity:0;pointer-events:none;transition:opacity .2s ease}
+.sv-voice-app[data-voice=thinking] .sv-voice-orbit:after,.sv-voice-app[data-delivery=queued] .sv-voice-orbit:after,.sv-voice-app[data-delivery=sending] .sv-voice-orbit:after{opacity:1;animation:sonai-orbit-working 1.8s linear infinite}
+.sv-voice-app[data-voice=listening] .sv-orb-glow{animation-duration:4s;opacity:.7}
+.sv-voice-app[data-voice=listening] .sv-voice-aura{transform:scale(calc(1 + var(--sv-voice-level) * .32));transition:transform .12s ease-out}
+@keyframes sonai-orbit-working{from{transform:rotate(-30deg)}to{transform:rotate(330deg)}}
+@media(prefers-reduced-motion:reduce){.sv-voice-orbit:after{animation:none!important;transition:none!important}.sv-voice-app[data-voice=listening] .sv-voice-aura{transform:none}}
 @media(prefers-reduced-motion:reduce){.sv-live-char{animation:none!important}.sv-live-typing:after,.sv-chat-message.sv-typing:after{display:none}}

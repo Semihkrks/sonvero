@@ -162,6 +162,7 @@ async function deliver(job, files) {
 const schema = { type: 'object', properties: Object.fromEntries([
   ['transcript',{type:'string'}],
   ['reply',{type:'string'}],['format',{type:['string','null'],enum:['excel','image','both',null]}],
+  ['allCustomers',{type:['boolean','null']}],
   ['account',{type:['string','null']}],['customer',{type:['string','null']}],
   ['scope',{type:['string','null'],enum:['cari','selected','all',null]}],
   ['direction',{type:['string','null'],enum:['satis','alis','both',null]}],
@@ -242,6 +243,7 @@ Araçların: Cari (tek hesap), Seçili Hesaplar, Tüm Hesaplar içinde gerçek m
 Gönderdiğini veya hesaplama yaptığını iddia etme: hesaplama, önizleme ve gönderim uygulamanın araçlarıyla yapılır. Fatura düzenlemek, ödeme yapmak, kayıt silmek gibi araçların yok; istenirse bunu kısaca söyle.
 Sohbet: Merhaba, nasılsın, teşekkürler gibi mesajlara sıcak ve kısa bir reply yaz; kullanıcıya halini veya ne yapmak istediğini sor. Bu mesajlarda rapor alanları null olsun ve mevcut raporu değiştirme. Rapor isteklerinde reply boş olabilir; eksik alan sorusunu uygulama sorar.
 format: sadece Excel / excelini gönder = excel; sadece fotoğraf / resim / görsel = image; Excel ve fotoğraf / ikisi de (biçim sorusunda) = both. Biçim belirtilmezse null.
+Tüm müşteriler: “Ayşe Karabut’un 9. ayki müşterilerin Excelini getir” => account Ayşe Karabut, month 9, allCustomers true, customer null, format excel. “9. ayın tüm müşterilerinin Excelini ver” => allCustomers true, month 9, format excel; taslaktaki hesap seçimini koru. Bu istek tek müşteriyi seçmez: seçili dönem/hesaplarda hareketi olan tüm müşterileri tek Excel’de toplar. Yön söylenmemişse taslaktaki yön veya both; tahsilat söylenmemişse taslaktaki tercih veya true. Tek müşteri adı istenirse allCustomers false. 9.ayki / 9.ayın / eylül aynı aydır.
 Müşteri seçim sorusunda “ilki”, “ilkini seç”, “ikincisi olsun” önceki listedeki sıraya verilen cevaptır, yeni müşteri değildir. Önizleme varken “WhatsApp'a gönder” mevcut raporu onaylar, yeni rapor değildir. Bu durumlarda rapor alanlarını null bırak; uygulama komutu yürütür.
 Yalnız açıkça istenen/değişen alanları döndür, diğerleri null. Hesap adını verilen hesap listesiyle eşleştir; uydurma. Müşteri adını duyulduğu gibi yaz. “Volkan adlı kişinin carisini çıkar” customer Volkan. “9. ayda Harmanda excelini gönder” customer Harmanda, month 9, format excel.
 Ay adları ve sıra sayıları desteklenir: eylül / dokuzuncu ay = 9. Yıl açık değilse taslaktaki yılı, yoksa bugünün yılını kullan. Taslaktaki hesap, yön, tahsilat ve dönem seçimlerini değiştirme. Cari / ekstre, yön söylenmemişse both olabilir. Tahsilat hariç=false; dahil=true. “Evet” yalnız sorulan alanı yanıtlar. Ses varsa transcript gerçek konuşmanın tamamı, yoksa boş.

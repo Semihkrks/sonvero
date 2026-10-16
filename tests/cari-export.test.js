@@ -23,3 +23,12 @@ it('returns the same workbook for WhatsApp without downloading and preserves eac
  expect(save).not.toHaveBeenCalled();
  for(const result of results){expect(result.success).toBe(true);expect(result.file.fileName).toMatch(/\.xlsx$/);const book=new ExcelJS.Workbook();await book.xlsx.load(await result.file.blob.arrayBuffer());expect(book.worksheets.length).toBeGreaterThan(0);}
 });
+it('keeps all customers and their details in a single all-transactions workbook',async()=>{
+ const invoices=Array.from({length:9},(_,index)=>({_accountId:'a',_accountName:'Ayşe Karabut',_direction:'giden',CurrencyCode:'TRY',PayableAmount:100+index,IssueDate:'2026-09-01',InvoiceNumber:'INV'+index,ReceiverName:'Firma '+index,ReceiverTaxNumber:String(1000000000+index)}));
+ const result=await exportAllTransactions(invoices,[{id:'a',name:'Ayşe Karabut'}],{name:'Tüm Müşteriler',layout:'ayri',direction:'both',withTahsilat:true,returnFile:true,dateRange:{start:'2026-09-01',end:'2026-09-30'}});
+ expect(result.success).toBe(true);expect(result.count).toBe(9);
+ const workbook=new ExcelJS.Workbook();await workbook.xlsx.load(await result.file.blob.arrayBuffer());
+ const summary=workbook.getWorksheet('Müşteri Özeti');expect(summary).toBeDefined();expect(workbook.getWorksheet('Müşteri Detay')).toBeDefined();
+ const cells=[];summary.eachRow(row=>row.eachCell(cell=>cells.push(cell.value)));
+ for(const invoice of invoices)expect(cells).toContain(invoice.ReceiverName);
+});

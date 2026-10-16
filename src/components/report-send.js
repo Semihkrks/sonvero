@@ -2,7 +2,7 @@ import {showModal} from './modal.js';
 import {escapeHtml} from '../lib/html.js';
 import {assistantRequest,blobBase64} from '../services/assistant-client.js';
 import {prepareCariFile} from '../services/cari-export-worker-client.js';
-import {exportArguments} from '../services/report-data.js';
+import {exportArguments,allCustomersExportArguments} from '../services/report-data.js';
 import {createReportImage} from '../services/report-image.js';
 import {getSupabase} from '../lib/supabase.js';
 import {stableJson,singleFlight} from '../lib/operations.js';
@@ -21,8 +21,10 @@ export function chooseExportLayout(){
 export async function previewReport({groups,accounts,options,exportSpec,target,onStatus}){
  ({groups,accounts,options,exportSpec}=structuredClone({groups,accounts,options,exportSpec}));
  if(!groups.length)throw new Error('Gönderilecek müşteri seçilmedi.');
- if(groups.length>6)throw new Error('Tek gönderimde en fazla 6 müşteri seçin.');
- const state=await assistantRequest('/status');
+ if(groups.length>6&&!(options.allCustomers&&options.format==='excel'))throw new Error('6’dan fazla müşteriyi tek dosyada hazırlamak için “sadece Excel” de. Fotoğraflı gönderimde en fazla 6 müşteri seçilebilir.');
+ if(options.allCustomers&&!exportSpec)exportSpec=allCustomersExportArguments(groups,accounts,options);
+ // Preparing/downloading a workbook must not depend on WhatsApp being reachable.
+ const state=await assistantRequest('/status').catch(()=>({connection:'error',recipient:''}));
  const content=document.createElement('div');content.className='sv-report-preview';
  const format=options.format||'both',withExcel=format!=='image',withImage=format!=='excel';
  content.innerHTML=`<p role="status">${formatLabel(format)} hazırlanıyor…</p>`;
@@ -44,8 +46,9 @@ export async function previewReport({groups,accounts,options,exportSpec,target,o
   if(before!==await revision())throw new Error('Rapor hazırlanırken kayıtlar değişti. Verileri yenileyip tekrar önizleyin.');
   if(closed)return;
   const id=crypto.randomUUID();
-  const caption=`${groups.map(g=>g.name).join(', ')} | ${options.start} – ${options.end} | ${options.direction==='both'?'Satış + alış':options.direction==='satis'?'Satış':'Alış'} | Tahsilat ${options.withCollections?'dahil':'hariç'}`;
-  content.innerHTML=`<p class="sv-report-customer">${escapeHtml(groups.map(g=>g.name).join(', '))}</p><p class="sv-muted">${escapeHtml(options.start)} – ${escapeHtml(options.end)}</p><div class="sv-report-files"></div><p role="status" class="sv-send-status"></p><button type="button" class="btn btn-primary sv-confirm-send">WhatsApp’a gönder</button>`;
+  const title=options.allCustomers?`${groups.length} müşteri · ${accounts.map(a=>a.name).join(', ')}`:groups.map(g=>g.name).join(', ');
+  const caption=`${title} | ${options.start} – ${options.end} | ${options.direction==='both'?'Satış + alış':options.direction==='satis'?'Satış':'Alış'} | Tahsilat ${options.withCollections?'dahil':'hariç'}`;
+  content.innerHTML=`<p class="sv-report-customer">${escapeHtml(title)}</p><p class="sv-muted">${escapeHtml(options.start)} – ${escapeHtml(options.end)}</p><div class="sv-report-files"></div><p role="status" class="sv-send-status"></p><button type="button" class="btn btn-primary sv-confirm-send">WhatsApp’a gönder</button>`;
   const fileList=content.querySelector('.sv-report-files');
   for(const file of files){const url=URL.createObjectURL(file.blob);urls.push(url);if(file.blob.type==='image/png'){const img=document.createElement('img');img.src=url;img.alt='Gönderilecek cari hesap özeti';fileList.append(img);}else{const link=document.createElement('a');link.href=url;link.download=file.name;link.textContent='Excel’i incele ↗';fileList.append(link);}}
   const button=content.querySelector('.sv-confirm-send'),status=content.querySelector('.sv-send-status');

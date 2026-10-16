@@ -87,3 +87,18 @@ it('reveals spoken text letter by letter in the compact voice stage',async()=>{
   expect(app.page.querySelector('.sv-chat-heading').hidden).toBe(true);expect(app.page.querySelector('.sv-chat-composer').hidden).toBe(true);
  }finally{app?.cleanup();window.SpeechRecognition=previous;vi.useRealTimers();}
 });
+it('prepares every customer for a named account without asking to pick a person',async()=>{
+ const customers=Array.from({length:9},(_,index)=>({name:'Müşteri '+index,tax:String(1000+index),rows:[]}));scanReport.mockResolvedValue(customers);
+ assistantRequest.mockImplementation(async url=>url==='/interpret'?{transcript:'Ayşe Karabutun 9.ayki müşterilerin excelini getir bana',intent:{customer:'müşteriler'}}:{connection:'ready',jobs:[]});
+ app=await mountAssistant({context:{selected:{accountIds:['a','b']}}});document.body.append(app.page);
+ await voiceHarness.callbacks.onAudio(new Blob(['bulk'],{type:'audio/mp4'}));
+ expect(scanReport).toHaveBeenCalledWith(expect.objectContaining({accounts:[{id:'a',name:'Ayşe Karabut'}],start:'2026-09-01',end:'2026-09-30',allCustomers:true,direction:'both',withCollections:true,format:'excel'}));
+ expect(previewReport).toHaveBeenCalledOnce();expect(previewReport.mock.calls[0][0].groups).toEqual(customers);expect(previewReport.mock.calls[0][0].options.allCustomers).toBe(true);
+ expect(app.page.querySelectorAll('.sv-assistant-customer')).toHaveLength(0);
+});
+it('uses the current account selection for all customers when no account name is spoken',async()=>{
+ app=await mountAssistant({context:{selected:{accountIds:['b']}}});document.body.append(app.page);
+ app.page.querySelector('#assistantCommand').value='9.ayın tüm müşterilerinin excelini ver';app.page.querySelector('#assistantInterpret').click();
+ await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledOnce());
+ expect(scanReport.mock.calls[0][0].accounts.map(a=>a.id)).toEqual(['b']);expect(previewReport.mock.calls[0][0].options).toMatchObject({allCustomers:true,format:'excel'});
+});

@@ -10,15 +10,18 @@ export function monthRange(month,year){
 export function parseQuickIntent(text,{awaiting,accounts=[],draft={}}={}){
  const s=fold(text),intent={};
  const format=requestedFormat(text);if(format)intent.format=format;
+ const allCustomers=/\b(?:(?:tum|butun)\s+musteri\w*|musteriler(?:in|inin|i|ini|e|den)?)\b/.test(s);
+ if(allCustomers){intent.allCustomers=true;intent.customer='';if(!format)intent.format='excel';}
  if(/tum hesap/.test(s))intent.scope='all';else if(/secili hesap/.test(s))intent.scope='selected';else if(/cari ekrani|tek hesap/.test(s))intent.scope='cari';
- const named=accounts.filter(a=>s.includes(fold(a.name)));if(named.length){intent.accountIds=named.map(a=>a.id);if(!intent.scope&&!draft.scope)intent.scope=named.length===1?'cari':'selected';}
+ const named=accounts.filter(a=>s.includes(fold(a.name)));if(named.length){intent.accountIds=named.map(a=>a.id);if(!intent.scope)intent.scope=named.length===1?'cari':'selected';}
  if(/satis ve alis|alis ve satis|satislarla alis/.test(s)||awaiting==='direction'&&/her ikisi|ikisi de/.test(s))intent.direction='both';else if(/\bsatis\b/.test(s))intent.direction='satis';else if(/\balis\b/.test(s))intent.direction='alis';
  if(/\bcari(?:si\w*)?\b|ekstre/.test(s)&&!intent.direction&&!draft.direction)intent.direction='both';
  if(awaiting==='format'&&/^(ikisi de|her ikisi|hepsi)$/.test(s))intent.format='both';
  if(/tahsilat/.test(s))intent.withCollections=!/haric|olmasin|istemiyorum|dahil etme/.test(s);
  if(awaiting==='collections'&&/^(evet|dahil|olsun|hayir|haric|olmasin)[.! ]*$/.test(s))intent.withCollections=/evet|dahil|olsun/.test(s)&&!s.includes('olmasin');
+ if(allCustomers){intent.direction??=draft.direction||'both';intent.withCollections??=draft.withCollections??true;}
  if(/hesaplar ayri|ayri sayfa/.test(s))intent.layout='separate';
- const numbered=s.match(/\b(1[0-2]|0?[1-9])\s*\.?\s*ay(?:da|in|i|a)?\b/);
+ const numbered=s.match(/\b(1[0-2]|0?[1-9])\s*\.?\s*ay(?:da|daki|in|inin|indaki|inki|i|inda|ki|a)?\b/);
  const spoken=Object.entries(ordinals).find(([name])=>new RegExp('\\b'+name+'\\s+ay').test(s));
  const namedMonth=months.findIndex(m=>new RegExp('\\b'+m+'(?:de|da|ki)?\\b').test(s))+1;
  const month=numbered?Number(numbered[1]):spoken?spoken[1]:namedMonth;
@@ -26,18 +29,18 @@ export function parseQuickIntent(text,{awaiting,accounts=[],draft={}}={}){
  if(month)intent.month=month;if(year)intent.year=year;
  if(month||(year&&draft.month))Object.assign(intent,monthRange(month||draft.month,year||draft.year||2026));
  const customer=s.match(/(?:^|\s)([\p{L}\d][\p{L}\d .&'-]*?)\s+(?:musterisinin|musterisi|excelini|ekstresini|carisini|raporunu|fotografini|gorselini)/u);
- if(customer){let name=customer[1].replace(/^.*(?:hesaplarda|hesaplarinda|hesabinda|hesabindaki|ayda|ayinda|ayi|ay|eylul|ekim|kasim|aralik|ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos)\s+/,'').replace(/\b20\d{2}\b/g,'').replace(/^(?:kanka\s+|bana\s+)+/,'').replace(/\s+(?:adli kisinin|adli kisi|isimli kisinin|adli|isimli)$/,'').trim();if(name&&!/^(bana|onun|bu|o|secilen)$/.test(name))intent.customer=name;}
+ if(customer&&!allCustomers){let name=customer[1].replace(/^.*(?:hesaplarda|hesaplarinda|hesabinda|hesabindaki|ayda|ayinda|ayi|ay|eylul|ekim|kasim|aralik|ocak|subat|mart|nisan|mayis|haziran|temmuz|agustos)\s+/,'').replace(/\b20\d{2}\b/g,'').replace(/^(?:kanka\s+|bana\s+)+/,'').replace(/\s+(?:adli kisinin|adli kisi|isimli kisinin|adli|isimli)$/,'').trim();if(name&&!/^(bana|onun|bu|o|secilen)$/.test(name)){intent.customer=name;intent.allCustomers=false;}}
  const customerFallback=awaiting==='customer'&&!Object.keys(intent).length;
  if(customerFallback)intent.customer=text.trim();
  if(awaiting==='accounts'&&/^(hepsi|tum hesaplar|tumunu)$/.test(s))intent.accountIds=accounts.map(a=>a.id);
  const simpleAnswer=!!awaiting&&(intent[awaiting]!==undefined||awaiting==='collections'&&typeof intent.withCollections==='boolean'||awaiting==='accounts'&&intent.accountIds?.length||awaiting==='period'&&(month||year));
- const completeCommand=!!intent.customer&&!!(intent.scope||intent.accountIds?.length)&&(month||intent.start);
+ const completeCommand=!!(intent.customer||intent.allCustomers)&&!!(intent.scope||intent.accountIds?.length||draft.scope)&&(month||intent.start||draft.start);
  return {intent,handled:!!(simpleAnswer||completeCommand)&&!customerFallback&&!s.includes('degil')};
 }
 export function nextQuestion(draft){
  if(!draft.scope)return {key:'scope',text:'Hangi ekrandaki raporu hazırlayayım?',choices:[['Seçili Hesaplar',{scope:'selected'}],['Tüm Hesaplar',{scope:'all'}],['Cari',{scope:'cari'}]]};
  if(draft.scope!=='all'&&!draft.accountIds?.length)return {key:'accounts',text:'Hangi hesapları kullanayım? Aşağıdan seçebilir veya adlarını söyleyebilirsin.'};
- if(!draft.customer)return {key:'customer',text:'Hangi müşteri için hazırlayayım? Adını veya VKN’sini söyle.'};
+ if(!draft.customer&&!draft.allCustomers)return {key:'customer',text:'Hangi müşteri için hazırlayayım? Adını veya VKN’sini söyle; tümü için “tüm müşteriler” de.'};
  if(!draft.start||!draft.end)return {key:'period',text:'Hangi ay için hazırlayayım?'};
  if(!draft.direction)return {key:'direction',text:'Satışlar mı, alışlar mı, her ikisi mi?',choices:[['Satış',{direction:'satis'}],['Alış',{direction:'alis'}],['Her ikisi',{direction:'both'}]]};
  if(typeof draft.withCollections!=='boolean')return {key:'collections',text:'Tahsilatları da ekleyeyim mi?',choices:[['Dahil et',{withCollections:true}],['Hariç tut',{withCollections:false}]]};

@@ -112,9 +112,10 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   };tick();return node;
  }
  function setBusy(value,label=''){busy=value;page.dataset.busy=String(value);if(value){voice.pause();voiceState('thinking');}$('#assistantInterpret').disabled=value;$('#assistantScan').disabled=value;$('#assistantMic').disabled=value;form.querySelectorAll('input,select').forEach(n=>n.disabled=value);if(!value&&draft.scope==='all')form.querySelectorAll('[name=account]').forEach(n=>n.disabled=true);reply.textContent=label;}
- function invalidate(){scanVersion++;previewVersion++;groups=[];snapshot=null;chosenGroups=null;preview?.close();preview=null;formatChoices.hidden=true;delivery.hidden=true;$('#assistantResults').replaceChildren();}
- function sync(){for(const key of ['scope','customer','start','end','direction','layout'])field(key).value=draft[key]||'';field('collections').value=typeof draft.withCollections==='boolean'?(draft.withCollections?'yes':'no'):'';form.querySelectorAll('[name=account]').forEach(cb=>{cb.checked=draft.scope==='all'||(draft.accountIds||[]).includes(cb.value);cb.disabled=draft.scope==='all';});$('#assistantSummary').textContent=[{selected:'Seçili Hesaplar',all:'Tüm Hesaplar',cari:'Cari'}[draft.scope],draft.customer,draft.start&&`${draft.start} → ${draft.end}`].filter(Boolean).join(' · ')||'Rapor seçimleri';}
+ function invalidate(){delete page.dataset.delivery;scanVersion++;previewVersion++;groups=[];snapshot=null;chosenGroups=null;preview?.close();preview=null;formatChoices.hidden=true;delivery.hidden=true;$('#assistantResults').replaceChildren();}
+ function sync(){field('customer').required=!draft.allCustomers;for(const key of ['scope','customer','start','end','direction','layout'])field(key).value=draft[key]||'';field('collections').value=typeof draft.withCollections==='boolean'?(draft.withCollections?'yes':'no'):'';form.querySelectorAll('[name=account]').forEach(cb=>{cb.checked=draft.scope==='all'||(draft.accountIds||[]).includes(cb.value);cb.disabled=draft.scope==='all';});$('#assistantSummary').textContent=[{selected:'Seçili Hesaplar',all:'Tüm Hesaplar',cari:'Cari'}[draft.scope],draft.allCustomers?'Tüm müşteriler':draft.customer,draft.start&&`${draft.start} → ${draft.end}`].filter(Boolean).join(' · ')||'Rapor seçimleri';}
  function merge(intent){
+  if(intent.customer&&intent.allCustomers!==true)draft.allCustomers=false;
   if(intent.scope&&intent.scope!==draft.scope){draft.scope=intent.scope;if(intent.scope==='selected')draft.accountIds=accounts.map(a=>a.id);if(intent.scope==='cari')draft.accountIds=context.activeAccountId?[context.activeAccountId]:[];}
   for(const [key,value] of Object.entries(intent))if(value!==null&&value!==undefined&&key!=='account')draft[key]=value;
   if(intent.account){const exact=accounts.filter(a=>fold(a.name)===fold(intent.account));const matches=exact.length?exact:accounts.filter(a=>fold(a.name).includes(fold(intent.account)));draft.accountIds=matches.length===1?[matches[0].id]:[];if(!draft.scope)draft.scope='cari';}
@@ -150,7 +151,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
     if(['sent','failed','unknown'].includes(status))message(text,'assistant',{instant:true});
    }});
    if(disposed||version!==previewVersion||scan!==scanVersion){result?.close();return;}
-   preview=result;if(result?.ready===false)return;message(formatLabel(draft.format)+' hazır. WhatsApp’a göndermek için “gönder” diyebilirsin.');
+   preview=result;if(result?.ready===false)return;message((snapshot.options.allCustomers&&draft.format==='excel'?chosen.length+' müşterinin Excel’i':formatLabel(draft.format))+' hazır. Dosyayı önizlemeden alabilir veya “WhatsApp’a gönder” diyebilirsin.');
   }finally{if(!disposed&&version===previewVersion){setBusy(false);updateFormats();}}
  }
  async function changeFormat(format){
@@ -211,6 +212,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
    const remote=Object.fromEntries(Object.entries(result?.intent||{}).filter(([,value])=>value!=null));
    if(result?.reply&&!Object.keys(remote).length&&!quick.handled){message(result.reply);return;}
    const intent={...remote,...quick.intent};
+   if(quick.intent.accountIds?.length)delete intent.account;
    const explicit=requestedFormat(transcript);if(explicit)intent.format=explicit;
    if(!Object.keys(intent).length){message(result?.reply||'Cari rapor, satış, alış, tahsilat ve WhatsApp gönderiminde yardımcı olabilirim. Ne yapmak istersin?');return;}
    if(Object.keys(intent).every(key=>key==='format')){await changeFormat(intent.format);message(formatLabel(intent.format)+' olarak hazırlayacağım. Hangi müşteri için olsun?');return;}
@@ -228,16 +230,17 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  form.onsubmit=async event=>{
   event.preventDefault();if(busy)return;invalidate();const version=scanVersion;
   const selected=field('scope').value==='all'?accounts:accounts.filter(a=>[...form.querySelectorAll('[name=account]:checked')].some(cb=>cb.value===a.id));
-  const options={format:draft.format,scope:field('scope').value,start:field('start').value,end:field('end').value,direction:field('direction').value,withCollections:field('collections').value==='yes',layout:field('layout').value};
+  const options={allCustomers:!!draft.allCustomers,format:draft.format,scope:field('scope').value,start:field('start').value,end:field('end').value,direction:field('direction').value,withCollections:field('collections').value==='yes',layout:field('layout').value};
   if(options.scope==='cari'&&selected.length!==1){reply.textContent='Cari şablonu için tek hesap seçin.';return;}
   const button=$('#assistantScan');setBusy(true,'Hesaplar taranıyor…');
-  const progress=message(`${selected.length} hesapta ${field('customer').value} için ${options.start} – ${options.end} dönemini tarıyorum.`,'assistant',{instant:true});
+  const progress=message(`${selected.length} hesapta ${draft.allCustomers?'tüm müşteriler':field('customer').value} için ${options.start} – ${options.end} dönemini tarıyorum.`,'assistant',{instant:true});
   try{
    const query=fold(field('customer').value);const scanned=await scanReport({...options,accounts:selected,onProgress:(done,total)=>reply.textContent=`${done}/${total} hesap tarandı…`});
    if(disposed||version!==scanVersion)return;
-   groups=matchReportGroups(scanned,query);snapshot={options,accounts:selected};
+   groups=options.allCustomers?scanned:matchReportGroups(scanned,query);snapshot={options,accounts:selected};
    const results=$('#assistantResults');results.replaceChildren();
    if(!groups.length){progress.textContent='Bu dönem ve filtrelerde müşteri bulunamadı. Adı, VKN’yi veya tarih aralığını kontrol edin.';return;}
+   if(options.allCustomers){progress.textContent=groups.length+' müşterinin kayıtlarını tek Excel’de topluyorum…';await preparePreview(groups);return;}
    progress.textContent=groups.length+' müşteri buldum. “İlki olsun”, “ikincisi olsun” diyebilir veya aşağıdan seçebilirsin.';
    if(groups.length===1){progress.textContent=groups[0].name+' bulundu.';await preparePreview(groups);return;}
    groups.forEach((g,index)=>{const label=document.createElement('label');label.className='sv-assistant-customer';label.innerHTML=`<input type="checkbox" value="${index}" ${groups.length===1?'checked':''}><span><strong>${index+1}. ${escapeHtml(g.name)}</strong><small>${escapeHtml(g.tax||'VKN yok')} · ${g.rows.length} hareket · Dönem neti ${escapeHtml(summarizeRows(g.rows).net)} TL</small></span>`;results.append(label);});

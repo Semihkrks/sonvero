@@ -3,7 +3,7 @@ vi.mock('../src/lib/supabase.js',()=>({getSupabase:vi.fn()}));
 vi.mock('../src/services/invoice-archive.js',()=>({fetchInvoicesSmart:vi.fn()}));
 vi.mock('../src/services/tahsilat-manager.js',()=>({listCollections:vi.fn()}));
 vi.mock('../src/api/nilvera.js',()=>({EInvoiceWithAccount:{},EArchiveWithAccount:{}}));
-import {groupReportItems,summarizeRows,exportArguments,matchReportGroups} from '../src/services/report-data.js';
+import {groupReportItems,summarizeRows,exportArguments,allCustomersExportArguments,matchReportGroups} from '../src/services/report-data.js';
 import {reportCardModel} from '../src/services/report-image.js';
 const accounts=[{id:'a',name:'Ayşe'},{id:'b',name:'Mert'}];
 const invoice=(overrides={})=>({_accountId:'a',_direction:'giden',ReceiverName:'Cihan',ReceiverTaxNumber:'1234567890',CurrencyCode:'TRY',PayableAmount:'100.10',IssueDate:'2026-09-02',...overrides});
@@ -43,4 +43,11 @@ it('reuses the selected screen template and excludes non-TRY data',()=>{
  expect(exportArguments(group,accounts,{...options,scope:'cari'}).name).toBe('exportCustomerCari');
  expect(exportArguments(group,accounts,{...options,scope:'selected'}).args[2].layout).toBe('ayri');
  expect(exportArguments(group,accounts,{...options,scope:'all',direction:'satis'}).name).toBe('exportMultiAccountCari');
+});
+it('combines every customer into one workbook while retaining account and period filters',()=>{
+ const groups=groupReportItems([invoice(),invoice({ReceiverName:'Volkan',ReceiverTaxNumber:'3333333333'})],accounts);
+ const spec=allCustomersExportArguments(groups,[accounts[0]],{scope:'cari',start:'2026-09-01',end:'2026-09-30',direction:'both',withCollections:true,layout:'separate'});
+ expect(spec.name).toBe('exportAllTransactions');expect(spec.args[0]).toHaveLength(2);
+ expect(spec.args[0].map(row=>row.ReceiverName)).toEqual(['Cihan','Volkan']);
+ expect(spec.args[1]).toEqual([accounts[0]]);expect(spec.args[2]).toMatchObject({name:'Ayşe — Tüm Müşteriler',layout:'ayri',direction:'both',withTahsilat:true,dateRange:{start:'2026-09-01',end:'2026-09-30'}});
 });

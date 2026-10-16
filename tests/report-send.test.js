@@ -28,3 +28,19 @@ it('does not send after the preview closes during recipient validation',async()=
  const send=view.send();await vi.waitFor(()=>expect(finish).toBeTypeOf('function'));view.close();finish({connection:'ready',recipient:'905000000000'});await send;
  expect(assistantRequest.mock.calls.some(([url])=>url==='/send')).toBe(false);
 });
+it('prepares more than six customers as one Excel without truncation or extra attachments',async()=>{
+ const target=document.createElement('div');document.body.append(target);
+ const groups=Array.from({length:9},(_,index)=>({name:'Firma '+index,rows:[{raw:{_accountId:'a',ReceiverName:'Firma '+index}}]}));
+ view=await previewReport({groups,accounts:[{id:'a',name:'Ayşe Karabut'}],options:{allCustomers:true,format:'excel',start:'2026-09-01',end:'2026-09-30',direction:'both',withCollections:true,layout:'separate'},target});
+ expect(view.ready).toBe(true);expect(prepareCariFile).toHaveBeenCalledOnce();expect(createReportImage).not.toHaveBeenCalled();
+ expect(prepareCariFile.mock.calls[0][0]).toBe('exportAllTransactions');expect(prepareCariFile.mock.calls[0][1][0]).toHaveLength(9);
+ expect(target.textContent).toContain('9 müşteri');await view.send();
+ expect(assistantRequest.mock.calls.find(([url])=>url==='/send')[1].files).toHaveLength(1);
+});
+it('keeps the Excel available when the WhatsApp status service cannot be reached',async()=>{
+ assistantRequest.mockRejectedValue(new Error('offline'));
+ const target=document.createElement('div');document.body.append(target);
+ view=await previewReport({groups:[{name:'Firma',rows:[]}],accounts:[{id:'a'}],options:{allCustomers:true,format:'excel'},target});
+ expect(view.ready).toBe(true);expect(target.querySelector('a[download]')).not.toBe(null);expect(target.querySelector('.sv-confirm-send').disabled).toBe(true);
+ expect(await view.send()).toBe(false);
+});

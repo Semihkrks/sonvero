@@ -33,6 +33,7 @@ export function validateIntent(value) {
     start: nullableText('start'), end: nullableText('end'),
     layout: ['single','separate'].includes(value.layout) ? value.layout : null,
     format: ['excel','image','both'].includes(value.format) ? value.format : null,
+    allCustomers: typeof value.allCustomers==='boolean'?value.allCustomers:null,
     month: Number.isInteger(value.month)&&value.month>=1&&value.month<=12?value.month:null,
     year: Number.isInteger(value.year)&&value.year>=2000&&value.year<=2100?value.year:null,
   };

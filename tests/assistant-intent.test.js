@@ -23,3 +23,14 @@ it('recognizes known account names and preserves valid month boundaries',()=>{
  expect(intent).toMatchObject({scope:'cari',accountIds:['a'],customer:'cihan',start:'2026-09-01',end:'2026-09-30'});
  expect(monthRange(2,2024).end).toBe('2024-02-29');expect(monthRange(13,2026)).toEqual({});
 });
+it('understands all customers for a named account and inflected month',()=>{
+ const {intent,handled}=parseQuickIntent('Ayşe Karabutun 9.ayki müşterilerin excelini getir bana',{accounts,draft:{scope:'selected'}});
+ expect(handled).toBe(true);expect(intent).toMatchObject({scope:'cari',accountIds:['a'],allCustomers:true,customer:'',format:'excel',start:'2026-09-01',end:'2026-09-30',direction:'both',withCollections:true});
+ expect(nextQuestion(intent)).toBe(null);
+ const all=parseQuickIntent('9.ayın tüm müşterilerinin excelini ver',{accounts,draft:{scope:'selected',direction:'satis',withCollections:false}});
+ expect(all.handled).toBe(true);expect(all.intent).toMatchObject({allCustomers:true,month:9,direction:'satis',withCollections:false,format:'excel'});
+});
+it('returns from an all-customers draft to a single customer',()=>{
+ const {intent}=parseQuickIntent('seçili hesaplarda 9.ayda Harmanda carisini çıkar',{accounts,draft:{allCustomers:true}});
+ expect(intent).toMatchObject({customer:'harmanda',allCustomers:false});
+});

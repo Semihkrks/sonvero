@@ -110,3 +110,11 @@ export function exportArguments(group,accounts,options){
  }
  return {name:'exportAllTransactions',args:[items,accounts,{name:group.name,layout:options.layout==='separate'?'ayri':'tum',direction:options.direction,withTahsilat:options.withCollections,dateRange:period}]};
 }
+/** One workbook for every matched customer; reuse the screen's summary/detail sheets. */
+export function allCustomersExportArguments(groups,accounts,options){
+ return {name:'exportAllTransactions',args:[groups.flatMap(group=>group.rows.map(row=>row.raw)),accounts,{
+  name:(accounts.length===1?accounts[0].name+' — ':'')+'Tüm Müşteriler',
+  layout:options.layout==='separate'?'ayri':'tum',direction:options.direction,withTahsilat:options.withCollections,
+  dateRange:{start:options.start,end:options.end},
+ }]};
+}
