@@ -34,8 +34,8 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  const $=selector=>page.querySelector(selector),form=$('#assistantFilters'),reply=$('#assistantReply');
  const field=name=>form.elements.namedItem(name);
  page.classList.add('sv-voice-app');
- for(const selector of ['.sv-chat-status','.sv-chat-filters'])$(selector).hidden=true;
- const orbit=document.createElement('div');orbit.className='sv-voice-stage';orbit.innerHTML='<div class="sv-voice-caption">SÖYLE, BİRLİKTE HALLEDELİM</div><div class="sv-voice-orbit"><span class="sv-voice-aura" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span></div><p class="sv-live-transcript" aria-live="polite"></p>';
+ for(const selector of ['.sv-chat-heading','.sv-chat-status','.sv-chat-filters'])$(selector).hidden=true;
+ const orbit=document.createElement('div');orbit.className='sv-voice-stage';orbit.innerHTML='<div class="sv-voice-caption">SONAI</div><div class="sv-voice-orbit"><span class="sv-voice-aura" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span></div><p class="sv-live-transcript" aria-live="polite"></p>';
  const mic=$('#assistantMic');mic.classList.add('sv-voice-orb');mic.innerHTML='<span class="sv-orb-glow" aria-hidden="true"></span><span class="sv-orb-core" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="sr-only sv-mic-label">Dinlemeye başla</span>';mic.setAttribute('aria-label','Dinlemeyi başlat veya duraklat');orbit.querySelector('.sv-voice-orbit').append(mic);orbit.append(reply);$('.sv-chat-heading').after(orbit);$('.sv-chat-composer').hidden=true;
  const thinking=document.createElement('div');thinking.className='sonai-thinking';thinking.setAttribute('aria-hidden','true');thinking.innerHTML='<i></i><i></i><i></i>';reply.before(thinking);
  const formatChoices=document.createElement('div');formatChoices.className='sonai-formats';formatChoices.setAttribute('aria-label','Gönderim biçimi');formatChoices.hidden=true;$('#assistantResults').before(formatChoices);
@@ -46,36 +46,21 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  pauseButton.onclick=()=>{voiceActive=false;voice.pause();stopSpeech();voiceState('idle');};orbit.append(pauseButton);
  const symbol=document.createElement('span');symbol.className='sonai-orb-symbol';symbol.innerHTML=sonaiMark;mic.prepend(symbol);
  const reduceMotion=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
- function appendLiveWord(part,{animate=true,interim=false}={}){
-  if(live.childNodes.length)live.append(document.createTextNode(' '));
-  const word=document.createElement('span');word.className=interim?'sv-live-word sv-live-interim':'sv-live-word';
-  if(!animate)word.style.animation='none';word.textContent=part;live.append(word);
- }
- function paintLive(text,{animate=true,stream=false,finalCount}={}){
-  const next=String(text||'').replace(/\s+/g,' ').trim();
-  clearTimeout(dictateTimer);
-  if(!next){liveHeard='';live.replaceChildren();live.classList.remove('sv-live-active');return;}
+ function paintLive(text,{animate=true,finalCount}={}){
+  const next=String(text||'').replace(/\s+/g,' ').trim();liveHeard=next;clearTimeout(dictateTimer);
+  if(!next){live.replaceChildren();live.classList.remove('sv-live-active','sv-live-typing');return;}
   live.classList.add('sv-live-active');
-  if(!animate||reduceMotion()){liveHeard=next;live.textContent=next;return;}
-  const prevWords=liveHeard?liveHeard.split(/\s+/).filter(Boolean):[];
-  const nextWords=next.split(/\s+/).filter(Boolean);
-  let shared=0;while(shared<prevWords.length&&shared<nextWords.length&&prevWords[shared]===nextWords[shared])shared+=1;
-  liveHeard=next;
-  const settled=finalCount==null?nextWords.length:Math.min(finalCount,nextWords.length);
-  if(stream){
-   if(!prevWords.length||shared<prevWords.length||!live.childElementCount){
-    live.replaceChildren();
-    nextWords.forEach((part,index)=>appendLiveWord(part,{animate:index>=shared,interim:index>=settled}));
-    return;
-   }
-   for(let index=shared;index<nextWords.length;index+=1)appendLiveWord(nextWords[index],{interim:index>=settled});
-   [...live.querySelectorAll('.sv-live-word')].forEach((word,index)=>word.classList.toggle('sv-live-interim',index>=settled));
-   return;
-  }
-  live.replaceChildren();let index=0;
-  const tick=()=>{if(disposed||!live.isConnected){live.textContent=next;return;}
-   if(index>=nextWords.length)return;
-   appendLiveWord(nextWords[index]);index+=1;if(index<nextWords.length)dictateTimer=setTimeout(tick,42);
+  if(!animate||reduceMotion()){live.textContent=next;live.classList.remove('sv-live-typing');return;}
+  const displayed=Array.from(live.textContent),characters=Array.from(next);
+  let shared=0;while(shared<displayed.length&&shared<characters.length&&displayed[shared]===characters[shared])shared++;
+  live.replaceChildren(document.createTextNode(characters.slice(0,shared).join('')));
+  let index=shared;live.classList.add('sv-live-typing');
+  const settled=finalCount==null?characters.length:Array.from(next.split(' ').slice(0,finalCount).join(' ')).length;
+  const tick=()=>{
+   if(disposed)return;
+   if(index>=characters.length){live.classList.remove('sv-live-typing');return;}
+   const char=document.createElement('span');char.className='sv-live-char'+(index>=settled?' sv-live-interim':'');char.textContent=characters[index++];live.append(char);
+   dictateTimer=setTimeout(tick,14);
   };tick();
  }
  function stopSpeech(){const current=speech;speech=null;if(current){current.onresult=null;current.onend=null;try{current.abort();}catch{}}}
@@ -118,11 +103,12 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   const node=document.createElement('div');node.className='sv-chat-message sv-chat-'+role;$('#assistantMessages').append(node);conversation.push({role,text});if(conversation.length>16)conversation.shift();
   const done=()=>requestAnimationFrame(()=>{if(node.isConnected)node.scrollIntoView({block:'nearest',behavior:'smooth'});});
   if(instant||reduceMotion()){node.textContent=text;done();return node;}
-  const parts=text.split(/(\s+)/).filter((part,i,arr)=>part||(i&&arr[i-1]));let index=0;node.classList.add('sv-typing');
-  const tick=()=>{if(disposed||!node.isConnected){node.textContent=text;node.classList.remove('sv-typing');return;}
+  const parts=Array.from(text);let index=0;node.classList.add('sv-typing');
+  const tick=()=>{
+   if(disposed||!node.isConnected){node.textContent=text;node.classList.remove('sv-typing');return;}
    if(index>=parts.length){node.classList.remove('sv-typing');done();return;}
-   const word=document.createElement('span');word.className='sv-type-word';word.textContent=parts[index];node.append(word);
-   index+=1;const timerId=setTimeout(()=>{typeTimers.delete(timerId);tick();},parts[index-1]?.trim()?30:10);typeTimers.add(timerId);
+   node.append(document.createTextNode(parts.slice(index,index+2).join('')));index+=2;
+   const timerId=setTimeout(()=>{typeTimers.delete(timerId);tick();},14);typeTimers.add(timerId);
   };tick();return node;
  }
  function setBusy(value,label=''){busy=value;page.dataset.busy=String(value);if(value){voice.pause();voiceState('thinking');}$('#assistantInterpret').disabled=value;$('#assistantScan').disabled=value;$('#assistantMic').disabled=value;form.querySelectorAll('input,select').forEach(n=>n.disabled=value);if(!value&&draft.scope==='all')form.querySelectorAll('[name=account]').forEach(n=>n.disabled=true);reply.textContent=label;}

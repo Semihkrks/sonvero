@@ -2,6 +2,8 @@
 
 ## 17 Ekim — SonAI, sesli seçim ve gönderim biçimi
 
+- Görünüm son kullanıcı düzeltmesiyle önceki kompakt, yuvarlak mavi orb tasarımına geri döndü. Başlık/yeni sohbet ve sohbet balonları görünmez; yalnız son cevap ortada gösterilir. Konuşma altyazısı ve cevaplar harf harf açılır. SonAI adı/simgesi, hizalı kapatma düğmesi ve yeni işlevler korunur.
+
 - Asistan SonAI olarak adlandırıldı; navbar ve mobil gezinmede yeni S şerit simgesi var. Kullanıcının son talimatıyla yazı alanı görünmez: konuşma, canlı/çözümlenmiş altyazı, sohbet mesajları ve dinleme/düşünme/gönderim durumları bulunur.
 - “İlki olsun / ikincisini seç” yalnız o an gösterilen müşteri listesini seçer. Önizlemedeki “WhatsApp’a gönder” sesli onaydır; yeni müşteri/dönem içeren komut eski raporu yanlışlıkla göndermez. Selamlaşma ve kısa sohbet rapor taslağını korur. Model yetkileri mevcut rapor araçlarıyla sınırlıdır.
 - Excel / fotoğraf / ikisi de seçimi gerçek dosya üretimini ve gönderim paketini belirler. Gönderim başladıktan sonra biçim kilitlenir; belirsiz sonuçta tekrar aynı iş kimliğiyle kontrol edilir.
