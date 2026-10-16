@@ -75,17 +75,15 @@ it('ignores audio delivered from a disposed assistant',async()=>{
  app=await mountAssistant({context:{}});app.cleanup();await voiceHarness.callbacks.onAudio(new Blob(['old'],{type:'audio/mp4'}));
  expect(assistantRequest.mock.calls.some(([url])=>url==='/interpret')).toBe(false);
 });
-it('reveals spoken text letter by letter in the compact voice stage',async()=>{
- vi.useFakeTimers();const previous=window.SpeechRecognition;let recognition;
- window.SpeechRecognition=class{constructor(){recognition=this;}start(){}abort(){}};
- try{
-  app=await mountAssistant({context:{}});document.body.append(app.page);voiceHarness.callbacks.onState('listening');
-  recognition.onresult({results:[{0:{transcript:'Volkan carisini hazırla'},isFinal:true}]});
-  const live=app.page.querySelector('.sv-live-transcript');
-  expect(live.textContent).toBe('V');vi.advanceTimersByTime(56);expect(live.textContent.length).toBeGreaterThan(1);expect(live.textContent.length).toBeLessThan(22);
-  vi.advanceTimersByTime(500);expect(live.textContent).toBe('Volkan carisini hazırla');
-  expect(app.page.querySelector('.sv-chat-heading').hidden).toBe(true);expect(app.page.querySelector('.sv-chat-composer').hidden).toBe(true);
- }finally{app?.cleanup();window.SpeechRecognition=previous;vi.useRealTimers();}
+it('shows partial spoken text immediately while still listening and runs the command only at the end',async()=>{
+ app=await mountAssistant({context:{}});document.body.append(app.page);voiceHarness.callbacks.onState('listening');
+ const live=app.page.querySelector('.sv-live-transcript');
+ voiceHarness.callbacks.onText('9. ayın',{finalCount:0});expect(live.textContent).toBe('9. ayın');
+ voiceHarness.callbacks.onText('9. ayın tüm müşterilerinin Excelini ver',{finalCount:0});
+ expect(live.textContent).toBe('9. ayın tüm müşterilerinin Excelini ver');expect(app.page.dataset.voice).toBe('listening');expect(scanReport).not.toHaveBeenCalled();
+ await voiceHarness.callbacks.onFinalText('9. ayın tüm müşterilerinin Excelini ver');
+ expect(scanReport).toHaveBeenCalledOnce();expect(previewReport.mock.calls[0][0].options).toMatchObject({allCustomers:true,format:'excel'});
+ expect(app.page.querySelector('.sv-chat-composer').hidden).toBe(true);
 });
 it('prepares every customer for a named account without asking to pick a person',async()=>{
  const customers=Array.from({length:9},(_,index)=>({name:'Müşteri '+index,tax:String(1000+index),rows:[]}));scanReport.mockResolvedValue(customers);

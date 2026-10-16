@@ -1,5 +1,12 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 17 Ekim — konuşma sırasında canlı yazı
+
+- Önceki iOS Web Speech engeli kaldırıldı. `SpeechRecognition`/`webkitSpeechRecognition` destekleniyorsa tek yerel konuşma tanıyıcı mikrofonun sahibi olur; paralel MediaRecorder başlatılmaz. Türkçe `interimResults` konuşma devam ederken ekrana doğrudan yazılır. Ara sonuçlar komut çalıştırmaz; yalnız bitişte tek final metin niyet/gönderim akışına girer.
+- Tarayıcının düzelttiği ara kelimeler güncellenir; kapanmış panelin eski olayları atılır. Sessizlik/bitiş/izin-hata zamanlayıcıları kapatılır. Destek yoksa eski kayıt yolu kalır ve durum metni kayıt-sonrası çözümlemeyi açıkça belirtir. Bu destek sınırlaması uygulamadan aşılamaz.
+- Görünüm ve mavi küre değişmedi. Canlı harfler CSS ile yumuşakça açılır; metnin görünmesi için JS yazma kuyruğu/cümle sonu beklenmez.
+- Typecheck, 107 frontend testi ve üretim buildi geçti. Yerel olaylarla canlı metin/final ayrımı, tek mikrofon yolu, geç gelen olaylar ve izin hataları testli. Tarayıcı otomasyonu hareketli mikrofon düğmesine tıklamada takıldığı için gerçek tarayıcı/cihaz mikrofon testi tamamlanmadı. Fiziksel iPhone testi ve gerçek WhatsApp mesajı yapılmadı.
+
 ## 17 Ekim — tüm müşterilerin Excel’i ve küre animasyonu
 
 - “Ayşe Karabut’un 9. ayki müşterilerin Excelini getir” seçili hesabın; “9. ayın tüm müşterilerinin Excelini ver” mevcut hesap seçiminin dönem hareketlerini tek Excel’de hazırlar. `allCustomers` açıkça modellenir; müşteri seçim sorusu atlanır. 9.ayki/9.ayın çekimleri tanınır. Yeni tek-müşteri isteği toplu modu kapatır.

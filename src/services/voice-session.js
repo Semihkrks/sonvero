@@ -1,3 +1,4 @@
+import {createLiveSpeechSession} from './live-speech-session.js';
 /** Reuse a disabled stream briefly between panel opens; never record outside the panel. */
 export function createMicrophoneLease({mediaDevices=globalThis.navigator?.mediaDevices,idleMs=30000}={}){
  let stream,pending,timer,users=0,generation=0;
@@ -21,6 +22,7 @@ export function createMicrophoneLease({mediaDevices=globalThis.navigator?.mediaD
 }
 const sharedMicrophone=createMicrophoneLease();
 export function activateVoiceAudio(){
+ if(globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition)return;
  const Audio=globalThis.AudioContext||globalThis.webkitAudioContext;
  if(!Audio)return;
  const context=new Audio();void context.resume().catch(()=>{});return context;
@@ -31,7 +33,9 @@ if(typeof window!=='undefined'){
 }
 
 /** Each session owns its audio graph and each utterance owns its recorder. */
-export function createVoiceSession({onAudio,onState,onError,onLevel,mediaDevices=globalThis.navigator?.mediaDevices,Recorder=globalThis.MediaRecorder,Audio=globalThis.AudioContext||globalThis.webkitAudioContext,microphone,audioContext}={}){
+export function createVoiceSession({onAudio,onText,onFinalText,onState,onError,onLevel,onMode,Recognition=globalThis.SpeechRecognition||globalThis.webkitSpeechRecognition,mediaDevices=globalThis.navigator?.mediaDevices,Recorder=globalThis.MediaRecorder,Audio=globalThis.AudioContext||globalThis.webkitAudioContext,microphone,audioContext}={}){
+ onMode?.(Recognition&&onFinalText?'live':'recorded');
+ if(Recognition&&onFinalText){void audioContext?.close();return createLiveSpeechSession({Recognition,onText,onFinalText,onState,onError,onLevel});}
  const lease=microphone||(mediaDevices===globalThis.navigator?.mediaDevices?sharedMicrophone:createMicrophoneLease({mediaDevices,idleMs:0}));
  let stream,context=audioContext,source,analyser,recorder,frame,closed=false,paused=true,opening=null,sequence=0,leased=false;
  const stopLoop=()=>{cancelAnimationFrame(frame);frame=null;};

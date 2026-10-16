@@ -41,12 +41,12 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  const formatChoices=document.createElement('div');formatChoices.className='sonai-formats';formatChoices.setAttribute('aria-label','Gönderim biçimi');formatChoices.hidden=true;$('#assistantResults').before(formatChoices);
  const delivery=document.createElement('div');delivery.className='sonai-delivery';delivery.setAttribute('role','status');delivery.hidden=true;formatChoices.after(delivery);
  for(const [value,label] of [['excel','Excel'],['image','Fotoğraf'],['both','İkisi de']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.format=value;button.onclick=()=>{if(!busy&&!preview?.sending)void changeFormat(value);};formatChoices.append(button);}
- const live=$('.sv-live-transcript');let liveHeard='',dictateTimer=null,speech=null,targetLevel=0,displayLevel=0,levelRaf=null;
+ const live=$('.sv-live-transcript');let liveHeard='',dictateTimer=null,targetLevel=0,displayLevel=0,levelRaf=null;
  const pauseButton=document.createElement('button');pauseButton.className='sonai-pause';pauseButton.type='button';pauseButton.textContent='Dinlemeyi durdur';pauseButton.hidden=true;
- pauseButton.onclick=()=>{voiceActive=false;voice.pause();stopSpeech();voiceState('idle');};orbit.append(pauseButton);
+ pauseButton.onclick=()=>{voiceActive=false;voice.pause();voiceState('idle');};orbit.append(pauseButton);
  const symbol=document.createElement('span');symbol.className='sonai-orb-symbol';symbol.innerHTML=sonaiMark;mic.prepend(symbol);
  const reduceMotion=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
- function paintLive(text,{animate=true,finalCount}={}){
+ function paintLive(text,{animate=true,stream=false,finalCount}={}){
   const next=String(text||'').replace(/\s+/g,' ').trim();liveHeard=next;clearTimeout(dictateTimer);
   if(!next){live.replaceChildren();live.classList.remove('sv-live-active','sv-live-typing');return;}
   live.classList.add('sv-live-active');
@@ -54,27 +54,21 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   const displayed=Array.from(live.textContent),characters=Array.from(next);
   let shared=0;while(shared<displayed.length&&shared<characters.length&&displayed[shared]===characters[shared])shared++;
   live.replaceChildren(document.createTextNode(characters.slice(0,shared).join('')));
-  let index=shared;live.classList.add('sv-live-typing');
+  let index=shared;
   const settled=finalCount==null?characters.length:Array.from(next.split(' ').slice(0,finalCount).join(' ')).length;
+  if(stream){
+   // Interim results must be visible immediately; CSS only softens newly arrived letters.
+   live.classList.remove('sv-live-typing');
+   while(index<characters.length){const char=document.createElement('span');char.className='sv-live-char'+(index>=settled?' sv-live-interim':'');char.style.animationDelay=Math.min((index-shared)*8,80)+'ms';char.textContent=characters[index++];live.append(char);}
+   return;
+  }
+  live.classList.add('sv-live-typing');
   const tick=()=>{
    if(disposed)return;
    if(index>=characters.length){live.classList.remove('sv-live-typing');return;}
    const char=document.createElement('span');char.className='sv-live-char'+(index>=settled?' sv-live-interim':'');char.textContent=characters[index++];live.append(char);
    dictateTimer=setTimeout(tick,14);
   };tick();
- }
- function stopSpeech(){const current=speech;speech=null;if(current){current.onresult=null;current.onend=null;try{current.abort();}catch{}}}
- function startSpeech(){
-  // iOS must use one audio capture: Web Speech competes with MediaRecorder there.
-  if(/iPad|iPhone|iPod/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)return;
-  stopSpeech();const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SpeechRecognition)return;
-  const current=speech=new SpeechRecognition();current.lang='tr-TR';current.interimResults=true;current.continuous=true;
-  current.onresult=event=>{if(disposed||speech!==current||page.dataset.voice!=='listening')return;let finalText='',interim='';
-   for(let i=0;i<event.results.length;i++){const piece=event.results[i][0].transcript;if(event.results[i].isFinal)finalText+=piece+' ';else interim+=piece+' ';}
-   const settled=finalText.trim().split(/\s+/).filter(Boolean).length;
-   paintLive((finalText+interim).trim(),{stream:true,finalCount:settled});};
-  current.onerror=()=>{};current.onend=()=>{if(speech===current)speech=null;};
-  try{current.start();}catch{speech=null;}
  }
  function pumpLevel(){
   if(disposed){levelRaf=null;return;}
@@ -88,13 +82,15 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   if(disposed)return;
   page.dataset.voice=state;mic.setAttribute('aria-pressed',String(state==='listening'));mic.querySelector('.sv-mic-label').textContent=state==='listening'?'Dinleniyor':'Dinlemeye başla';
   mic.setAttribute('aria-label',state==='listening'?'Konuşmayı tamamla':'SonAI ile konuş');pauseButton.hidden=state!=='listening';
-  if(state==='listening')startSpeech();else stopSpeech();
   if(state==='listening')liveHeard='';
   if(state!=='listening'){targetLevel=0;if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);}
-  if(!busy)reply.textContent={listening:'Dinliyorum · Bitirince göndermek için dokun',thinking:'Söylediklerini anlıyorum…',idle:'Konuşmak için dokun',requesting:'Mikrofon iznini bekliyorum…',error:'Tekrar denemek için dokun'}[state]||'';
+  if(!busy)reply.textContent={listening:page.dataset.transcription==='recorded'?'Dinliyorum · Bu tarayıcıda metin kayıt sonrası çözülür':'Dinliyorum · Bitirince göndermek için dokun',thinking:'Söylediklerini anlıyorum…',idle:'Konuşmak için dokun',requesting:'Mikrofon iznini bekliyorum…',error:'Tekrar denemek için dokun'}[state]||'';
  }
  const voice=createVoiceSession({
   audioContext,
+  onMode:mode=>{page.dataset.transcription=mode;},
+  onText:(text,options)=>{if(!disposed&&!busy&&page.dataset.voice==='listening')paintLive(text,{...options,stream:true});},
+  onFinalText:async text=>{if(disposed)return;try{paintLive(text,{animate:false});await interpret(undefined,{voice:true,heard:text});}finally{if(!disposed&&voiceActive&&!busy)voice.resume();}},
   onAudio:async blob=>{if(disposed)return;const heard=liveHeard;try{await interpret({mime:blob.type,base64:await blobBase64(blob)},{voice:true,heard});}catch(e){message(e.message,'assistant',{instant:true});}finally{if(!disposed&&voiceActive&&!busy)voice.resume();}},
   onState:state=>{if(!disposed)voiceState(state);},onError:text=>{voiceActive=false;if(!disposed)message(text,'assistant',{instant:true});},
   onLevel:level=>{targetLevel=Math.min(1,Number(level)||0);if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);},
@@ -190,7 +186,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  }
  async function interpret(audio,{voice:spokenInput=false,heard=''}={}){
   if(audio instanceof Event)audio=undefined;if(busy||disposed)return;
-  voice.pause();stopSpeech();const text=$('#assistantCommand').value.trim()||String(heard||'').trim();if(!text&&!audio)return;
+  voice.pause();const text=$('#assistantCommand').value.trim()||String(heard||'').trim();if(!text&&!audio)return;
   const version=scanVersion,requestSeq=++commandSeq;setBusy(true,'Söylediklerini anlıyorum…');$('#assistantCommand').value='';
   try{
    let transcript=text,result;
@@ -224,9 +220,9 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  $('#assistantInterpret').onclick=interpret;
  $('#assistantCommand').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void interpret();}};
  function reset(){commandSeq++;invalidate();conversation.length=0;draft=defaults();sync();$('#assistantMessages').replaceChildren();$('#assistantChoices').replaceChildren();$('#assistantCommand').value='';paintLive('');awaiting=null;setBusy(false);message('Merhaba, ben SonAI. Bugün ne yapalım? Cari rapor hazırlayabilir, Excel veya fotoğrafını WhatsApp’a gönderebilirim.');}
- $('#assistantReset').onclick=()=>{voice.pause();stopSpeech();reset();if(voiceActive)voice.resume();};
+ $('#assistantReset').onclick=()=>{voice.pause();reset();if(voiceActive)voice.resume();};
  $('#assistantMic').onclick=async()=>{if(busy)return;if(page.dataset.voice==='listening'){voice.finish();return;}voiceActive=true;await voice.start();};
- const visibility=()=>{if(document.hidden){voiceActive=false;voice.pause();stopSpeech();voiceState('idle');}};document.addEventListener('visibilitychange',visibility);
+ const visibility=()=>{if(document.hidden){voiceActive=false;voice.pause();voiceState('idle');}};document.addEventListener('visibilitychange',visibility);
  form.onsubmit=async event=>{
   event.preventDefault();if(busy)return;invalidate();const version=scanVersion;
   const selected=field('scope').value==='all'?accounts:accounts.filter(a=>[...form.querySelectorAll('[name=account]:checked')].some(cb=>cb.value===a.id));
@@ -257,5 +253,5 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   }catch(error){if(!disposed){$('#assistantStatusBadge').textContent=error.message;page.dataset.connection='error';}}finally{refreshBusy=false;}
  }
  reset();voiceState('idle');void refresh();
- return {page,title:'SonAI',cleanup(){disposed=true;previewVersion++;voiceActive=false;voice.close();stopSpeech();clearTimeout(dictateTimer);if(levelRaf)cancelAnimationFrame(levelRaf);document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
+ return {page,title:'SonAI',cleanup(){disposed=true;previewVersion++;voiceActive=false;voice.close();clearTimeout(dictateTimer);if(levelRaf)cancelAnimationFrame(levelRaf);document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
 }
