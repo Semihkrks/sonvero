@@ -32,6 +32,7 @@ export function validateIntent(value) {
     withCollections: typeof value.withCollections === 'boolean' ? value.withCollections : null,
     start: nullableText('start'), end: nullableText('end'),
     layout: ['single','separate'].includes(value.layout) ? value.layout : null,
+    format: ['excel','image','both'].includes(value.format) ? value.format : null,
     month: Number.isInteger(value.month)&&value.month>=1&&value.month<=12?value.month:null,
     year: Number.isInteger(value.year)&&value.year>=2000&&value.year<=2100?value.year:null,
   };

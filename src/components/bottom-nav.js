@@ -1,3 +1,4 @@
+import {sonaiMark} from './sonai-mark.js';
 const svg=(body)=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+body+'</svg>';
 const ICONS={
  layers:svg('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>'),
@@ -76,7 +77,7 @@ export function renderBottomNav(currentRoute){
  const items=[
   ['Ana Sayfa','/dashboard',svg('<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>')],
   ['Toplu Tahsilat','/toplu-tahsilat',svg('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>')],
-  ['Asistan','assistant-panel',svg('<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/>')],
+  ['SonAI','assistant-panel',sonaiMark],
   ['Cari','/cari',svg('<path d="M20 8H4a2 2 0 0 1 0-4h14v4M4 8v12h16V8M20 12h-5v4h5"/>')],
   ['Diğer',null,svg('<path d="M4 6h16M4 12h16M4 18h16"/>')]
  ];

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import {it,expect,vi,afterEach} from 'vitest';
+import {it,expect,vi,afterEach,beforeEach} from 'vitest';
 const voiceHarness=vi.hoisted(()=>({callbacks:null,resume:vi.fn()}));
 vi.mock('../src/services/voice-session.js',()=>({createVoiceSession:options=>{voiceHarness.callbacks=options;return {pause:vi.fn(),resume:voiceHarness.resume,start:vi.fn(),close:vi.fn()};}}));
 vi.mock('../src/services/account-manager.js',()=>({listAccounts:async()=>[{id:'a',name:'Ayşe Karabut'},{id:'b',name:'Mert Sarısoy'}],getActiveAccountId:()=> 'a'}));
@@ -11,6 +11,12 @@ import {scanReport} from '../src/services/report-data.js';
 import {assistantRequest} from '../src/services/assistant-client.js';
 import {previewReport} from '../src/components/report-send.js';
 let app;
+beforeEach(()=>{
+ HTMLElement.prototype.scrollIntoView=vi.fn();
+ assistantRequest.mockImplementation(async()=>({connection:'ready',recipient:'905000000000',jobs:[]}));
+ scanReport.mockImplementation(async()=>[{name:'Harmanda',tax:'1234',rows:[]}]);
+ previewReport.mockImplementation(async()=>({close:vi.fn()}));
+});
 afterEach(()=>{app?.cleanup();document.body.replaceChildren();vi.clearAllMocks();});
 it('continues the requested conversation locally and opens the single customer preview inline',async()=>{
  HTMLElement.prototype.scrollIntoView=vi.fn();
@@ -18,7 +24,7 @@ it('continues the requested conversation locally and opens the single customer p
  const send=text=>{app.page.querySelector('#assistantCommand').value=text;app.page.querySelector('#assistantInterpret').click();};
  send('seçili hesaplarda 9.ayda harmanda excelini bana gönder');
  await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledOnce());
- expect(scanReport).toHaveBeenCalledWith(expect.objectContaining({start:'2026-09-01',end:'2026-09-30',direction:'both',withCollections:true,layout:'separate',accounts:[{id:'a',name:'Ayşe Karabut'},{id:'b',name:'Mert Sarısoy'}]}));
+ expect(scanReport).toHaveBeenCalledWith(expect.objectContaining({start:'2026-09-01',end:'2026-09-30',direction:'both',withCollections:true,layout:'separate',format:'excel',accounts:[{id:'a',name:'Ayşe Karabut'}]}));
  expect(previewReport.mock.calls[0][0].target).toBe(app.page.querySelector('#assistantResults'));
  expect(assistantRequest.mock.calls.every(([url])=>url==='/status')).toBe(true);
  expect(app.page.querySelector('#assistantStatusBadge').textContent).toContain('WhatsApp hazır');
@@ -46,4 +52,26 @@ it('accepts the next spoken command as preview confirmation without preparing or
  expect(sent).toHaveBeenCalledOnce();expect(scanReport).toHaveBeenCalledOnce();
  await voiceHarness.callbacks.onAudio(new Blob(['third'],{type:'audio/mp4'}));
  expect(sent).toHaveBeenCalledOnce();expect(voiceHarness.resume).toHaveBeenCalled();
+});
+it('selects the first of two customers by voice and sends only the requested format',async()=>{
+ scanReport.mockResolvedValue([{name:'Volkan Tekstil',tax:'111',rows:[]},{name:'Volkan Kumaş',tax:'222',rows:[]}]);
+ const send=vi.fn(async()=>true);previewReport.mockImplementation(async()=>({close:vi.fn(),send}));
+ let transcript='';assistantRequest.mockImplementation(async url=>url==='/interpret'?{transcript,intent:{}}:{connection:'ready',jobs:[]});
+ app=await mountAssistant({context:{direction:'both',withCollections:true}});document.body.append(app.page);
+ app.page.querySelector('#assistantCommand').value='seçili hesaplarda 9.ay Volkan carisini hazırla';app.page.querySelector('#assistantInterpret').click();
+ await vi.waitFor(()=>expect(app.page.querySelectorAll('.sv-assistant-customer')).toHaveLength(2));
+ transcript='ilki olsun';await voiceHarness.callbacks.onAudio(new Blob(['first'],{type:'audio/mp4'}));
+ expect(previewReport.mock.calls[0][0].groups.map(group=>group.name)).toEqual(['Volkan Tekstil']);
+ transcript='sadece fotoğrafını WhatsApp’a gönder';await voiceHarness.callbacks.onAudio(new Blob(['second'],{type:'audio/mp4'}));
+ expect(previewReport.mock.calls.at(-1)[0].options.format).toBe('image');expect(send).toHaveBeenCalledOnce();expect(scanReport).toHaveBeenCalledOnce();
+});
+it('answers small talk while retaining the unfinished report',async()=>{
+ app=await mountAssistant({context:{}});document.body.append(app.page);
+ app.page.querySelector('#assistantCommand').value='nasılsın';app.page.querySelector('#assistantInterpret').click();
+ await vi.waitFor(()=>expect(app.page.querySelector('#assistantMessages').textContent).toContain('Sen nasılsın?'));
+ expect(scanReport).not.toHaveBeenCalled();expect(assistantRequest.mock.calls.some(([url])=>url==='/interpret')).toBe(false);
+});
+it('ignores audio delivered from a disposed assistant',async()=>{
+ app=await mountAssistant({context:{}});app.cleanup();await voiceHarness.callbacks.onAudio(new Blob(['old'],{type:'audio/mp4'}));
+ expect(assistantRequest.mock.calls.some(([url])=>url==='/interpret')).toBe(false);
 });

@@ -1,5 +1,14 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 17 Ekim — SonAI, sesli seçim ve gönderim biçimi
+
+- Asistan SonAI olarak adlandırıldı; navbar ve mobil gezinmede yeni S şerit simgesi var. Kullanıcının son talimatıyla yazı alanı görünmez: konuşma, canlı/çözümlenmiş altyazı, sohbet mesajları ve dinleme/düşünme/gönderim durumları bulunur.
+- “İlki olsun / ikincisini seç” yalnız o an gösterilen müşteri listesini seçer. Önizlemedeki “WhatsApp’a gönder” sesli onaydır; yeni müşteri/dönem içeren komut eski raporu yanlışlıkla göndermez. Selamlaşma ve kısa sohbet rapor taslağını korur. Model yetkileri mevcut rapor araçlarıyla sınırlıdır.
+- Excel / fotoğraf / ikisi de seçimi gerçek dosya üretimini ve gönderim paketini belirler. Gönderim başladıktan sonra biçim kilitlenir; belirsiz sonuçta tekrar aynı iş kimliğiyle kontrol edilir.
+- iOS’ta MediaRecorder ile paralel Web Speech başlatılmaz. Kullanıcı dokunuşunda AudioContext açılır; eski/bitmiş akışın grafiği yeniden oluşturulur. Panel kapanırken kayıt ve dinleme durur, akış devre dışı bırakılır. Hızlı yeniden açmada izin istemeyi azaltmak için devre dışı akış en fazla 30 sn tutulur, sonra veya uygulama arka plana geçince bırakılır. Kapanıştan sonra gelen izin/yanıt eski paneli başlatamaz.
+- Fiziksel iPhone/PWA testi yapılmadı. Uygulama tamamen kapanıp açıldığında izin kalıcılığı iOS kontrolündedir. iOS’ta metin ses çözümlendikten sonra animasyonla gösterilir; desteklenen diğer tarayıcılarda Web Speech canlı altyazıyı sağlar.
+- Doğrulama: 92 frontend testi, typecheck, üretim buildi ve 10 servis testi geçti. 390×844 mobil görünümde yatay taşma/yazı alanı yok; açık/koyu görünüm kontrol edildi. Bu tur gerçek WhatsApp mesajı gönderilmedi.
+
 ## 15 Ekim — gerçek WhatsApp teslimi, sesli panel ve dönem bakiyesi
 
 - Bu bölüm aşağıdaki eski oturum notlarının son durumudur. Kullanıcı iki müşteri verisiz test dosyasının gönderilmesine açıkça izin verdi. `sonvera-baglanti-testi.xlsx` ve `.png` gerçek WhatsApp sohbetine gönderildi; ikisi için önce ack=2 (teslim), sonra ack=3 (okundu) doğrulandı. Tekrar göndermeyin. SAFE/test-whatsapp.mjs gerçek gönderim yapar, idempotent değildir.

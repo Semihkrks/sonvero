@@ -6,15 +6,17 @@ import {previewReport} from '../components/report-send.js';
 import {assistantContext} from '../services/assistant-context.js';
 import {parseQuickIntent,nextQuestion,monthRange} from '../lib/assistant-intent.js';
 import {createVoiceSession} from '../services/voice-session.js';
+import {dialogueCommand,requestedFormat,formatLabel} from '../lib/assistant-dialogue.js';
+import {sonaiMark} from '../components/sonai-mark.js';
 
 const statusLabel={disconnected:'WhatsApp bağlı değil',connecting:'WhatsApp bağlanıyor…',qr:'QR kodunu okutun',authenticated:'Hesap bağlandı, hazırlanıyor…',syncing:'WhatsApp eşitleniyor…',ready:'WhatsApp hazır · Gönderim yapılabilir',auth_failure:'Yeniden bağlantı gerekli',error:'Bağlantı kurulamadı'};
-export async function mountAssistant({context=assistantContext(),compact=false}={}){
+export async function mountAssistant({context=assistantContext(),compact=false,audioContext}={}){
  const accounts=await listAccounts();const page=document.createElement('div');page.className='sv-assistant';
  let disposed=false,refreshBusy=false,scanVersion=0,groups=[],snapshot=null;
- const typeTimers=new Set(),conversation=[];let awaiting=null,draft={},busy=false,preview=null,voiceActive=false,commandSeq=0;
- const defaults=()=>({scope:'selected',year:2026,layout:'separate',accountIds:accounts.map(a=>a.id),direction:context.direction||context.selected?.direction,withCollections:context.withCollections??context.selected?.withCollections});
+ const typeTimers=new Set(),conversation=[];let awaiting=null,draft={},busy=false,preview=null,voiceActive=false,commandSeq=0,chosenGroups=null,previewVersion=0;
+ const defaults=()=>({scope:context.scope||'selected',year:new Date().getFullYear(),layout:'separate',format:'both',accountIds:context.accountIds||context.selected?.accountIds||accounts.map(a=>a.id),direction:context.direction||context.selected?.direction,withCollections:context.withCollections??context.selected?.withCollections});
  page.classList.add('sv-chat-app');if(compact)page.classList.add('sv-chat-compact');
- page.innerHTML=`<div class="sv-chat-heading"><div><span class="sv-eyebrow">ASİSTAN</span><h2>Ne hazırlayalım?</h2></div><button class="btn btn-sm" id="assistantReset" type="button">Yeni sohbet</button></div>
+ page.innerHTML=`<div class="sv-chat-heading"><div><span class="sv-eyebrow">KİŞİSEL İŞ ASİSTANIN</span><h2>SonAI</h2></div><button class="btn btn-sm" id="assistantReset" type="button">Yeni sohbet</button></div>
  <div class="sv-chat-status"><span class="sv-connection-dot"></span><span id="assistantStatusBadge" role="status">Bağlantı kontrol ediliyor…</span><a href="#/settings">Ayarlar</a></div>
  <div id="assistantMessages" class="sv-chat-log" role="log" aria-label="Asistan konuşması" aria-live="polite"></div>
  <div id="assistantResults"></div><div id="assistantChoices" class="sv-chat-choices"></div>
@@ -32,10 +34,17 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
  const $=selector=>page.querySelector(selector),form=$('#assistantFilters'),reply=$('#assistantReply');
  const field=name=>form.elements.namedItem(name);
  page.classList.add('sv-voice-app');
- for(const selector of ['.sv-chat-heading','.sv-chat-status','.sv-chat-filters'])$(selector).hidden=true;
- const orbit=document.createElement('div');orbit.className='sv-voice-stage';orbit.innerHTML='<div class="sv-voice-caption">SONVERA</div><div class="sv-voice-orbit"><span class="sv-voice-aura" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span></div><p class="sv-live-transcript" aria-live="polite"></p>';
- const mic=$('#assistantMic');mic.classList.add('sv-voice-orb');mic.innerHTML='<span class="sv-orb-glow" aria-hidden="true"></span><span class="sv-orb-core" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="sr-only sv-mic-label">Dinlemeye başla</span>';mic.setAttribute('aria-label','Dinlemeyi başlat veya duraklat');orbit.querySelector('.sv-voice-orbit').append(mic);orbit.append(reply);page.prepend(orbit);$('.sv-chat-composer').hidden=true;
+ for(const selector of ['.sv-chat-status','.sv-chat-filters'])$(selector).hidden=true;
+ const orbit=document.createElement('div');orbit.className='sv-voice-stage';orbit.innerHTML='<div class="sv-voice-caption">SÖYLE, BİRLİKTE HALLEDELİM</div><div class="sv-voice-orbit"><span class="sv-voice-aura" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span></div><p class="sv-live-transcript" aria-live="polite"></p>';
+ const mic=$('#assistantMic');mic.classList.add('sv-voice-orb');mic.innerHTML='<span class="sv-orb-glow" aria-hidden="true"></span><span class="sv-orb-core" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="sr-only sv-mic-label">Dinlemeye başla</span>';mic.setAttribute('aria-label','Dinlemeyi başlat veya duraklat');orbit.querySelector('.sv-voice-orbit').append(mic);orbit.append(reply);$('.sv-chat-heading').after(orbit);$('.sv-chat-composer').hidden=true;
+ const thinking=document.createElement('div');thinking.className='sonai-thinking';thinking.setAttribute('aria-hidden','true');thinking.innerHTML='<i></i><i></i><i></i>';reply.before(thinking);
+ const formatChoices=document.createElement('div');formatChoices.className='sonai-formats';formatChoices.setAttribute('aria-label','Gönderim biçimi');formatChoices.hidden=true;$('#assistantResults').before(formatChoices);
+ const delivery=document.createElement('div');delivery.className='sonai-delivery';delivery.setAttribute('role','status');delivery.hidden=true;formatChoices.after(delivery);
+ for(const [value,label] of [['excel','Excel'],['image','Fotoğraf'],['both','İkisi de']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.format=value;button.onclick=()=>{if(!busy&&!preview?.sending)void changeFormat(value);};formatChoices.append(button);}
  const live=$('.sv-live-transcript');let liveHeard='',dictateTimer=null,speech=null,targetLevel=0,displayLevel=0,levelRaf=null;
+ const pauseButton=document.createElement('button');pauseButton.className='sonai-pause';pauseButton.type='button';pauseButton.textContent='Dinlemeyi durdur';pauseButton.hidden=true;
+ pauseButton.onclick=()=>{voiceActive=false;voice.pause();stopSpeech();voiceState('idle');};orbit.append(pauseButton);
+ const symbol=document.createElement('span');symbol.className='sonai-orb-symbol';symbol.innerHTML=sonaiMark;mic.prepend(symbol);
  const reduceMotion=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
  function appendLiveWord(part,{animate=true,interim=false}={}){
   if(live.childNodes.length)live.append(document.createTextNode(' '));
@@ -54,7 +63,7 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
   liveHeard=next;
   const settled=finalCount==null?nextWords.length:Math.min(finalCount,nextWords.length);
   if(stream){
-   if(shared<prevWords.length||!live.childElementCount){
+   if(!prevWords.length||shared<prevWords.length||!live.childElementCount){
     live.replaceChildren();
     nextWords.forEach((part,index)=>appendLiveWord(part,{animate:index>=shared,interim:index>=settled}));
     return;
@@ -69,13 +78,16 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
    appendLiveWord(nextWords[index]);index+=1;if(index<nextWords.length)dictateTimer=setTimeout(tick,42);
   };tick();
  }
- function stopSpeech(){try{speech?.stop();}catch{}speech=null;}
+ function stopSpeech(){const current=speech;speech=null;if(current){current.onresult=null;current.onend=null;try{current.abort();}catch{}}}
  function startSpeech(){
+  // iOS must use one audio capture: Web Speech competes with MediaRecorder there.
+  if(/iPad|iPhone|iPod/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1)return;
   stopSpeech();const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SpeechRecognition)return;
-  const current=speech=new SpeechRecognition();current.lang='tr-TR';current.interimResults=true;current.continuous=true;let finalText='';
-  current.onresult=event=>{let interim='';for(let i=event.resultIndex;i<event.results.length;i++){const piece=event.results[i][0].transcript;if(event.results[i].isFinal)finalText+=piece+' ';else interim+=piece;}
-   const settled=finalText.replace(/\s+/g,' ').trim().split(/\s+/).filter(Boolean).length;
-   paintLive((finalText+interim).replace(/\s+/g,' ').trim(),{stream:true,finalCount:settled});};
+  const current=speech=new SpeechRecognition();current.lang='tr-TR';current.interimResults=true;current.continuous=true;
+  current.onresult=event=>{if(disposed||speech!==current||page.dataset.voice!=='listening')return;let finalText='',interim='';
+   for(let i=0;i<event.results.length;i++){const piece=event.results[i][0].transcript;if(event.results[i].isFinal)finalText+=piece+' ';else interim+=piece+' ';}
+   const settled=finalText.trim().split(/\s+/).filter(Boolean).length;
+   paintLive((finalText+interim).trim(),{stream:true,finalCount:settled});};
   current.onerror=()=>{};current.onend=()=>{if(speech===current)speech=null;};
   try{current.start();}catch{speech=null;}
  }
@@ -88,30 +100,33 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
   else{page.style.setProperty('--sv-voice-level','0');levelRaf=null;}
  }
  function voiceState(state){
+  if(disposed)return;
   page.dataset.voice=state;mic.setAttribute('aria-pressed',String(state==='listening'));mic.querySelector('.sv-mic-label').textContent=state==='listening'?'Dinleniyor':'Dinlemeye başla';
+  mic.setAttribute('aria-label',state==='listening'?'Konuşmayı tamamla':'SonAI ile konuş');pauseButton.hidden=state!=='listening';
   if(state==='listening')startSpeech();else stopSpeech();
-  if(state==='listening')paintLive('');
+  if(state==='listening')liveHeard='';
   if(state!=='listening'){targetLevel=0;if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);}
-  if(!busy)reply.textContent={listening:'Dinliyorum…',thinking:'Anlıyorum…',idle:'Konuşmak için dokun',error:'Tekrar denemek için dokun'}[state]||'';
+  if(!busy)reply.textContent={listening:'Dinliyorum · Bitirince göndermek için dokun',thinking:'Söylediklerini anlıyorum…',idle:'Konuşmak için dokun',requesting:'Mikrofon iznini bekliyorum…',error:'Tekrar denemek için dokun'}[state]||'';
  }
  const voice=createVoiceSession({
-  onAudio:async blob=>{const heard=liveHeard;try{await interpret({mime:blob.type,base64:await blobBase64(blob)},{voice:true,heard});}catch(e){message(e.message,'assistant',{instant:true});}finally{if(!disposed&&voiceActive&&!busy)voice.resume();}},
-  onState:voiceState,onError:text=>message(text,'assistant',{instant:true}),
+  audioContext,
+  onAudio:async blob=>{if(disposed)return;const heard=liveHeard;try{await interpret({mime:blob.type,base64:await blobBase64(blob)},{voice:true,heard});}catch(e){message(e.message,'assistant',{instant:true});}finally{if(!disposed&&voiceActive&&!busy)voice.resume();}},
+  onState:state=>{if(!disposed)voiceState(state);},onError:text=>{voiceActive=false;if(!disposed)message(text,'assistant',{instant:true});},
   onLevel:level=>{targetLevel=Math.min(1,Number(level)||0);if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);},
  });
  function message(text,role='assistant',{instant=false}={}){
   const node=document.createElement('div');node.className='sv-chat-message sv-chat-'+role;$('#assistantMessages').append(node);conversation.push({role,text});if(conversation.length>16)conversation.shift();
   const done=()=>requestAnimationFrame(()=>{if(node.isConnected)node.scrollIntoView({block:'nearest',behavior:'smooth'});});
-  if(role!=='assistant'||instant||reduceMotion()){node.textContent=text;done();return node;}
+  if(instant||reduceMotion()){node.textContent=text;done();return node;}
   const parts=text.split(/(\s+)/).filter((part,i,arr)=>part||(i&&arr[i-1]));let index=0;node.classList.add('sv-typing');
   const tick=()=>{if(disposed||!node.isConnected){node.textContent=text;node.classList.remove('sv-typing');return;}
    if(index>=parts.length){node.classList.remove('sv-typing');done();return;}
    const word=document.createElement('span');word.className='sv-type-word';word.textContent=parts[index];node.append(word);
-   index+=1;const timerId=setTimeout(tick,parts[index-1]?.trim()?30:10);typeTimers.add(timerId);
+   index+=1;const timerId=setTimeout(()=>{typeTimers.delete(timerId);tick();},parts[index-1]?.trim()?30:10);typeTimers.add(timerId);
   };tick();return node;
  }
- function setBusy(value,label=''){busy=value;if(value){voice.pause();voiceState('thinking');}$('#assistantInterpret').disabled=value;$('#assistantScan').disabled=value;$('#assistantMic').disabled=value;form.querySelectorAll('input,select').forEach(n=>n.disabled=value);if(!value&&draft.scope==='all')form.querySelectorAll('[name=account]').forEach(n=>n.disabled=true);reply.textContent=label;}
- function invalidate(){scanVersion++;groups=[];snapshot=null;preview?.close();preview=null;$('#assistantResults').replaceChildren();}
+ function setBusy(value,label=''){busy=value;page.dataset.busy=String(value);if(value){voice.pause();voiceState('thinking');}$('#assistantInterpret').disabled=value;$('#assistantScan').disabled=value;$('#assistantMic').disabled=value;form.querySelectorAll('input,select').forEach(n=>n.disabled=value);if(!value&&draft.scope==='all')form.querySelectorAll('[name=account]').forEach(n=>n.disabled=true);reply.textContent=label;}
+ function invalidate(){scanVersion++;previewVersion++;groups=[];snapshot=null;chosenGroups=null;preview?.close();preview=null;formatChoices.hidden=true;delivery.hidden=true;$('#assistantResults').replaceChildren();}
  function sync(){for(const key of ['scope','customer','start','end','direction','layout'])field(key).value=draft[key]||'';field('collections').value=typeof draft.withCollections==='boolean'?(draft.withCollections?'yes':'no'):'';form.querySelectorAll('[name=account]').forEach(cb=>{cb.checked=draft.scope==='all'||(draft.accountIds||[]).includes(cb.value);cb.disabled=draft.scope==='all';});$('#assistantSummary').textContent=[{selected:'Seçili Hesaplar',all:'Tüm Hesaplar',cari:'Cari'}[draft.scope],draft.customer,draft.start&&`${draft.start} → ${draft.end}`].filter(Boolean).join(' · ')||'Rapor seçimleri';}
  function merge(intent){
   if(intent.scope&&intent.scope!==draft.scope){draft.scope=intent.scope;if(intent.scope==='selected')draft.accountIds=accounts.map(a=>a.id);if(intent.scope==='cari')draft.accountIds=context.activeAccountId?[context.activeAccountId]:[];}
@@ -136,45 +151,98 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
  }
  form.addEventListener('input',()=>{if(!busy)invalidate();});
  form.addEventListener('change',()=>{if(busy)return;draft={...draft,...Object.fromEntries(['scope','customer','start','end','direction','layout'].map(k=>[k,field(k).value])),withCollections:field('collections').value?field('collections').value==='yes':undefined,accountIds:[...form.querySelectorAll('[name=account]:checked')].map(n=>n.value)};sync();});
- async function interpret(audio,{voice:spokenInput=false,heard=''}={}){
-  if(audio instanceof Event)audio=undefined;if(busy)return;
-  voice.pause();stopSpeech();const spoken=spokenInput;const text=$('#assistantCommand').value.trim()||String(heard||'').trim();if(!text&&!audio)return;
-  const version=scanVersion,requestSeq=++commandSeq;setBusy(true,'Anlıyorum…');if(text&&!audio)message(text,'user',{instant:true});$('#assistantCommand').value='';
-  try{
-   const quick=parseQuickIntent(text,{awaiting,accounts,draft});let intent=quick.intent;
-   if(spoken||!quick.handled||audio){
-    try{
-     const result=await assistantRequest('/interpret',{text,context:{draft,awaiting,accounts:accounts.map(a=>({id:a.id,name:a.name})),customers:groups.slice(0,12).map(g=>({name:g.name,tax:g.tax})),route:context.route,conversation:conversation.slice(-8)},...(audio?{audio}:{})});
-     if(disposed||version!==scanVersion)return;
-     const transcript=result.transcript?.trim()||text;
-     if(transcript){paintLive(transcript,{animate:!liveHeard||fold(liveHeard)!==fold(transcript)});message(transcript,'user',{instant:true});}
-     if(/^(yeni istek|yeni rapor|bastan basla|sifirla)$/.test(fold(transcript))){reset();return;}
-     if(preview){const command=fold(transcript).replace(/[.!?]/g,'').trim();if(/^(gonder|gonder gelsin|evet gonder|onayliyorum|whatsapp.?a gonder)$/.test(command)){const send=$('#assistantResults .sv-confirm-send');if(send&&!send.disabled){send.click();message('Gönderimi takip ediyorum.','assistant',{instant:true});}return;}if(/^(iptal|vazgec|hayir)$/.test(command)){invalidate();message('Gönderim iptal edildi. Başka bir rapor söyleyebilirsin.');return;}}
-
-     if(!preview&&snapshot&&groups.length>1){
-      const answer=fold(transcript).replace(/[.!?]/g,'').trim();
-      const ordinal=answer.match(/^(birinci|ikinci|ucuncu|dorduncu|besinci|altinci|[1-6])(?:yi|sini|si|i)?(?: sec| hazirla| olsun)?$/);
-      const index=ordinal?(Number(ordinal[1])||['birinci','ikinci','ucuncu','dorduncu','besinci','altinci'].indexOf(ordinal[1])+1)-1:-1;
-      const chosen=index>=0&&groups[index]?[groups[index]]:matchReportGroups(groups,transcript);
-      if(chosen.length===1){$('#assistantResults').replaceChildren();preview=await previewReport({groups:chosen,...snapshot,target:$('#assistantResults')});message('Rapor hazır. Göndermek için “gönder” de.');return;}
-     }
-     const understood=Object.values(result.intent||{}).some(v=>v!==null&&v!==undefined);
-     if(understood)intent=result.intent;else if(!Object.keys(quick.intent).length){message('Cari rapor hazırlayabilir, hesapları tarayabilir, Excel ve görseli WhatsApp’a gönderebilirim. Müşteriyi, hesapları ve dönemi söyleyerek başlayabilirsin.');return;}
-    }catch(error){if(!Object.keys(quick.intent).length)throw error;}
-   }
-   if(disposed||version!==scanVersion)return;invalidate();merge(intent);setBusy(false);await advance();
-  }catch(error){if(!disposed&&version===scanVersion)message(error.message,'assistant',{instant:true});}finally{if(!disposed&&requestSeq===commandSeq){setBusy(false);if(voiceActive)voice.resume();}}
+ function updateFormats(){
+  formatChoices.hidden=!chosenGroups;for(const button of formatChoices.children){button.setAttribute('aria-pressed',String(button.dataset.format===draft.format));button.disabled=busy||!!preview?.sending||!!preview?.formatLocked;}
  }
+ async function preparePreview(chosen){
+  if(preview?.sending)return;
+  const version=++previewVersion,scan=scanVersion;chosenGroups=chosen;preview?.close();preview=null;
+  $('#assistantResults').replaceChildren();setBusy(true,formatLabel(draft.format)+' hazırlanıyor…');updateFormats();
+  try{
+   const result=await previewReport({groups:chosen,...snapshot,options:{...snapshot.options,format:draft.format},target:$('#assistantResults'),onStatus:({status,text})=>{
+    if(disposed||version!==previewVersion)return;page.dataset.delivery=status;reply.textContent=text;delivery.hidden=false;delivery.dataset.state=status;delivery.textContent=text;updateFormats();
+    if(['sent','failed','unknown'].includes(status))message(text,'assistant',{instant:true});
+   }});
+   if(disposed||version!==previewVersion||scan!==scanVersion){result?.close();return;}
+   preview=result;if(result?.ready===false)return;message(formatLabel(draft.format)+' hazır. WhatsApp’a göndermek için “gönder” diyebilirsin.');
+  }finally{if(!disposed&&version===previewVersion){setBusy(false);updateFormats();}}
+ }
+ async function changeFormat(format){
+  if(preview?.sending||preview?.formatLocked){message('Bu gönderim zaten başladı. Önce aynı gönderimin sonucunu doğrulayalım; yeni biçim için yeni bir rapor hazırlayabiliriz.');return;}
+  draft.format=format;updateFormats();if(chosenGroups&&snapshot)await preparePreview(chosenGroups);
+ }
+ async function handleDialogue(text){
+  const command=dialogueCommand(text,{awaiting,candidates:!preview&&snapshot?groups:[],hasPreview:!!preview});
+  if(!command)return false;
+  if(command.action==='reset'){reset();return true;}
+  if(command.action==='cancel'){
+   if(preview?.sending)message('Gönderim WhatsApp’a iletildi; bu aşamada geri çekemiyorum.');
+   else{invalidate();message('Tamam, iptal ettim. Ne yapmak istersin?');}
+   return true;
+  }
+  if(command.action==='chat'){message(command.reply);return true;}
+  if(command.action==='needs_report'){if(command.format)draft.format=command.format;message(groups.length>1?'Önce müşteriyi seçelim. “İlki olsun” veya “ikincisi olsun” diyebilirsin.':'Önce raporu hazırlayalım. Hangi müşterinin, hangi aydaki carisini göndereyim?');return true;}
+  if(command.action==='choose'){
+   if(command.format)draft.format=command.format;
+   message((command.index+1)+'. müşteriyi seçtim: '+groups[command.index].name);
+   await preparePreview([groups[command.index]]);return true;
+  }
+  if(command.action==='format'){await changeFormat(command.format);return true;}
+  if(command.action==='send'){
+   if(preview?.status==='sent'){message('Bu rapor WhatsApp’a zaten gönderildi. Yeni bir rapor hazırlamamı istersen söyleyebilirsin.');return true;}
+   if(command.format&&command.format!==draft.format&&preview?.formatLocked){message('Gönderimin sonucu henüz kesinleşmedi. “Gönder” diyerek aynı işlemi kontrol edebiliriz; bu sırada dosya türünü değiştirmiyorum.');return true;}
+   if(preview?.sending){message('Gönderim devam ediyor; sonucunu takip ediyorum.');return true;}
+   if(command.format&&command.format!==draft.format)await changeFormat(command.format);
+   const button=$('#assistantResults .sv-confirm-send');
+   if(preview?.send){const accepted=await preview.send();if(!accepted)message('Gönderim başlatılamadı. Önizlemedeki bağlantı veya hata mesajını kontrol edebilirsin.');}
+   else if(button&&!button.disabled){button.click();message('Gönderimi takip ediyorum.');}
+   else message('Gönderim için Ayarlar’daki WhatsApp bağlantısını ve alıcı numarasını kontrol edelim.');
+   return true;
+  }
+  return false;
+ }
+ async function interpret(audio,{voice:spokenInput=false,heard=''}={}){
+  if(audio instanceof Event)audio=undefined;if(busy||disposed)return;
+  voice.pause();stopSpeech();const text=$('#assistantCommand').value.trim()||String(heard||'').trim();if(!text&&!audio)return;
+  const version=scanVersion,requestSeq=++commandSeq;setBusy(true,'Söylediklerini anlıyorum…');$('#assistantCommand').value='';
+  try{
+   let transcript=text,result;
+   if(audio){
+    result=await assistantRequest('/interpret',{text,context:{draft,awaiting,accounts:accounts.map(a=>({id:a.id,name:a.name})),customers:groups.slice(0,12).map(g=>({name:g.name,tax:g.tax})),route:context.route,conversation:conversation.slice(-8)},audio});
+    if(disposed||version!==scanVersion||requestSeq!==commandSeq)return;
+    transcript=result.transcript?.trim()||text;
+    if(!transcript){message('Söylediklerini seçemedim. Biraz daha yakından konuşup tekrar söyleyebilir misin?');return;}
+    paintLive(transcript,{animate:!liveHeard||fold(liveHeard)!==fold(transcript)});
+   }
+   message(transcript,'user',{instant:!audio});
+   if(await handleDialogue(transcript))return;
+   const quick=parseQuickIntent(transcript,{awaiting,accounts,draft});
+   if(!result&&!quick.handled){
+    try{result=await assistantRequest('/interpret',{text:transcript,context:{draft,awaiting,accounts:accounts.map(a=>({id:a.id,name:a.name})),customers:groups.slice(0,12).map(g=>({name:g.name,tax:g.tax})),route:context.route,conversation:conversation.slice(-8)}});}
+    catch(error){if(!Object.keys(quick.intent).length)throw error;}
+   }
+   if(disposed||version!==scanVersion||requestSeq!==commandSeq)return;
+   const remote=Object.fromEntries(Object.entries(result?.intent||{}).filter(([,value])=>value!=null));
+   if(result?.reply&&!Object.keys(remote).length&&!quick.handled){message(result.reply);return;}
+   const intent={...remote,...quick.intent};
+   const explicit=requestedFormat(transcript);if(explicit)intent.format=explicit;
+   if(!Object.keys(intent).length){message(result?.reply||'Cari rapor, satış, alış, tahsilat ve WhatsApp gönderiminde yardımcı olabilirim. Ne yapmak istersin?');return;}
+   if(Object.keys(intent).every(key=>key==='format')){await changeFormat(intent.format);message(formatLabel(intent.format)+' olarak hazırlayacağım. Hangi müşteri için olsun?');return;}
+   invalidate();merge(intent);setBusy(false);await advance();
+  }catch(error){if(!disposed&&version===scanVersion)message(error.message,'assistant',{instant:true});}
+  finally{if(!disposed&&requestSeq===commandSeq){setBusy(false);updateFormats();if(voiceActive)void voice.resume();else voiceState('idle');}}
+ }
+
  $('#assistantInterpret').onclick=interpret;
  $('#assistantCommand').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void interpret();}};
- function reset(){commandSeq++;invalidate();conversation.length=0;draft=defaults();sync();$('#assistantMessages').replaceChildren();$('#assistantChoices').replaceChildren();$('#assistantCommand').value='';paintLive('');awaiting=null;setBusy(false);message('Hangi müşterinin raporunu hazırlayayım?');}
+ function reset(){commandSeq++;invalidate();conversation.length=0;draft=defaults();sync();$('#assistantMessages').replaceChildren();$('#assistantChoices').replaceChildren();$('#assistantCommand').value='';paintLive('');awaiting=null;setBusy(false);message('Merhaba, ben SonAI. Bugün ne yapalım? Cari rapor hazırlayabilir, Excel veya fotoğrafını WhatsApp’a gönderebilirim.');}
  $('#assistantReset').onclick=()=>{voice.pause();stopSpeech();reset();if(voiceActive)voice.resume();};
- $('#assistantMic').onclick=async()=>{if(busy)return;if(page.dataset.voice==='listening'){voiceActive=false;voice.pause();stopSpeech();voiceState('idle');return;}voiceActive=true;await voice.start();};
+ $('#assistantMic').onclick=async()=>{if(busy)return;if(page.dataset.voice==='listening'){voice.finish();return;}voiceActive=true;await voice.start();};
  const visibility=()=>{if(document.hidden){voiceActive=false;voice.pause();stopSpeech();voiceState('idle');}};document.addEventListener('visibilitychange',visibility);
  form.onsubmit=async event=>{
   event.preventDefault();if(busy)return;invalidate();const version=scanVersion;
   const selected=field('scope').value==='all'?accounts:accounts.filter(a=>[...form.querySelectorAll('[name=account]:checked')].some(cb=>cb.value===a.id));
-  const options={scope:field('scope').value,start:field('start').value,end:field('end').value,direction:field('direction').value,withCollections:field('collections').value==='yes',layout:field('layout').value};
+  const options={format:draft.format,scope:field('scope').value,start:field('start').value,end:field('end').value,direction:field('direction').value,withCollections:field('collections').value==='yes',layout:field('layout').value};
   if(options.scope==='cari'&&selected.length!==1){reply.textContent='Cari şablonu için tek hesap seçin.';return;}
   const button=$('#assistantScan');setBusy(true,'Hesaplar taranıyor…');
   const progress=message(`${selected.length} hesapta ${field('customer').value} için ${options.start} – ${options.end} dönemini tarıyorum.`,'assistant',{instant:true});
@@ -184,11 +252,11 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
    groups=matchReportGroups(scanned,query);snapshot={options,accounts:selected};
    const results=$('#assistantResults');results.replaceChildren();
    if(!groups.length){progress.textContent='Bu dönem ve filtrelerde müşteri bulunamadı. Adı, VKN’yi veya tarih aralığını kontrol edin.';return;}
-   progress.textContent=`${groups.length} müşteri bulundu. Gönderilecek müşteriyi seç.`;
-   if(groups.length===1){progress.textContent=`${groups[0].name} bulundu. Excel ve görsel hazırlanıyor…`;preview=await previewReport({groups,...snapshot,target:results});if(disposed||version!==scanVersion){preview?.close();return;}progress.textContent='Rapor hazır. Göndermek için “gönder” de.';return;}
-   groups.forEach((g,index)=>{const label=document.createElement('label');label.className='sv-assistant-customer';label.innerHTML=`<input type="checkbox" value="${index}" ${groups.length===1?'checked':''}><span><strong>${escapeHtml(g.name)}</strong><small>${escapeHtml(g.tax||'VKN yok')} · ${g.rows.length} hareket · Dönem neti ${escapeHtml(summarizeRows(g.rows).net)} TL</small></span>`;results.append(label);});
-   const send=document.createElement('button');send.className='btn btn-primary';send.type='button';send.textContent='Excel ve görseli önizle';results.append(send);
-   send.onclick=async()=>{send.disabled=true;try{const chosen=[...results.querySelectorAll('input:checked')].map(cb=>groups[Number(cb.value)]);preview=await previewReport({groups:chosen,...snapshot,target:results});}catch(error){message(error.message,'assistant',{instant:true});}finally{send.disabled=false;}};
+   progress.textContent=groups.length+' müşteri buldum. “İlki olsun”, “ikincisi olsun” diyebilir veya aşağıdan seçebilirsin.';
+   if(groups.length===1){progress.textContent=groups[0].name+' bulundu.';await preparePreview(groups);return;}
+   groups.forEach((g,index)=>{const label=document.createElement('label');label.className='sv-assistant-customer';label.innerHTML=`<input type="checkbox" value="${index}" ${groups.length===1?'checked':''}><span><strong>${index+1}. ${escapeHtml(g.name)}</strong><small>${escapeHtml(g.tax||'VKN yok')} · ${g.rows.length} hareket · Dönem neti ${escapeHtml(summarizeRows(g.rows).net)} TL</small></span>`;results.append(label);});
+   const send=document.createElement('button');send.className='btn btn-primary';send.type='button';send.textContent='Seçilen müşteriyi hazırla';results.append(send);
+   send.onclick=async()=>{send.disabled=true;try{const chosen=[...results.querySelectorAll('input:checked')].map(cb=>groups[Number(cb.value)]);if(!chosen.length){message('Bir müşteri seç veya “ilki olsun” de.');return;}await preparePreview(chosen);}catch(error){message(error.message,'assistant',{instant:true});}finally{send.disabled=false;}};
   }catch(error){progress.textContent=error.message;}finally{if(!disposed&&version===scanVersion){setBusy(false);if(voiceActive)voice.resume();}}
  };
  async function refresh(){
@@ -200,5 +268,5 @@ export async function mountAssistant({context=assistantContext(),compact=false}=
   }catch(error){if(!disposed){$('#assistantStatusBadge').textContent=error.message;page.dataset.connection='error';}}finally{refreshBusy=false;}
  }
  reset();voiceState('idle');void refresh();
- return {page,title:'Asistan',cleanup(){disposed=true;voiceActive=false;voice.close();stopSpeech();clearTimeout(dictateTimer);if(levelRaf)cancelAnimationFrame(levelRaf);document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
+ return {page,title:'SonAI',cleanup(){disposed=true;previewVersion++;voiceActive=false;voice.close();stopSpeech();clearTimeout(dictateTimer);if(levelRaf)cancelAnimationFrame(levelRaf);document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
 }

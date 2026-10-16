@@ -1,0 +1,2 @@
+/** SonAI: two interlocking ribbons forming an S. Inline SVG stays sharp in the navbar. */
+export const sonaiMark='<svg class="sonai-mark" width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M25 7H13a6 6 0 0 0 0 12h6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><path d="M7 25h12a6 6 0 0 0 0-12h-6" stroke="currentColor" stroke-width="4" stroke-linecap="round"/><circle cx="26" cy="25" r="2" fill="currentColor"/></svg>';
