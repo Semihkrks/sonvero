@@ -34,3 +34,11 @@ it('returns from an all-customers draft to a single customer',()=>{
  const {intent}=parseQuickIntent('seçili hesaplarda 9.ayda Harmanda carisini çıkar',{accounts,draft:{allCustomers:true}});
  expect(intent).toMatchObject({customer:'harmanda',allCustomers:false});
 });
+it('recognizes a unique full spoken account with a missing letter and inflection',()=>{
+ const scoped=[{id:'serkan',name:'Serkan Bingöl'},{id:'other',name:'Serkan Akın'}];
+ expect(parseQuickIntent('bugün serkan bingl hesabındaki harmanda müşterisinin carisini getir',{accounts:scoped}).intent).toMatchObject({scope:'cari',accountIds:['serkan'],customer:'harmanda'});
+ expect(parseQuickIntent('Serkan Bingölün 9.ayda Harmanda carisini getir',{accounts:scoped}).intent.accountIds).toEqual(['serkan']);
+ expect(parseQuickIntent('Serkan hesabında Harmanda carisini getir',{accounts:scoped}).intent.accountIds).toBeUndefined();
+ expect(parseQuickIntent('Serkan Bingl hesabında Harmanda carisini getir',{accounts:[...scoped,{id:'near',name:'Serkan Bingal'}]}).intent.accountIds).toBeUndefined();
+ expect(parseQuickIntent('XSerkan Bingöl hesabında Harmanda carisini getir',{accounts:scoped}).intent.accountIds).toBeUndefined();
+});

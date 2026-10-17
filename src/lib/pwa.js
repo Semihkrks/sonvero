@@ -1,5 +1,10 @@
 import { hasPendingMutation } from './operations.js';
+import {getPwaInstallController} from './pwa-install.js';
+export function canAutomaticallyUpdatePwa({dirty=false,document:doc=globalThis.document,pending=hasPendingMutation()}={}){
+  return !dirty&&!pending&&!doc?.querySelector('.sv-assistant-panel,.sv-voice-app[data-voice="listening"],.sv-voice-app[data-voice="requesting"],.sv-voice-app[data-voice="thinking"],.sv-voice-app[data-voice="speaking"]');
+}
 export function startPwa() {
+  getPwaInstallController();
   const updateOnline = () => {
     let banner = document.getElementById('connection-banner');
     if (!navigator.onLine && !banner) {
@@ -42,16 +47,16 @@ export function startPwa() {
   if (!('serviceWorker' in navigator) || !import.meta.env.PROD) return;
   navigator.serviceWorker.register('/sw.js').then(reg => {
     const applyUpdate = () => {
-      if (!reg.waiting || dirty || hasPendingMutation()) return;
+      if (!reg.waiting || !canAutomaticallyUpdatePwa({dirty})) return;
       reloadApproved = true;
       reg.waiting.postMessage({ type: 'ACTIVATE_UPDATE' });
     };
     applyUpdate();
-    reg.addEventListener('updatefound', () => reg.installing?.addEventListener('statechange', applyUpdate));
+    reg.addEventListener('updatefound', () => reg.installing?.addEventListener('statechange', () => setTimeout(applyUpdate,0)));
   }).catch(()=>{ /* Application remains usable without PWA installation. */ });
   navigator.serviceWorker.addEventListener('controllerchange',()=>{
     if (!hadController) return;
-    if (reloadApproved || (!dirty && !hasPendingMutation())) { location.reload(); return; }
+    if (reloadApproved || canAutomaticallyUpdatePwa({dirty})) { location.reload(); return; }
     const box=document.createElement('div'); box.className='app-update'; box.setAttribute('role','status');
     box.textContent='Yeni sürüm başka bir sekmede açıldı. Bu formu tamamlayıp sayfayı yenileyebilirsiniz.';
     document.body.append(box);

@@ -7,9 +7,15 @@ import {EInvoiceWithAccount,EArchiveWithAccount} from '../api/nilvera.js';
 import {forEachLimited} from '../lib/concurrency.js';
 
 export const fold=value=>String(value||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').trim();
-export function matchReportGroups(groups,query){
+export function matchReportGroups(groups,query,{accountIds}={}){
  const key=fold(query).replace(/[^a-z0-9]/g,'');if(!key)return [];
- return groups.filter(g=>fold(g.name).replace(/[^a-z0-9]/g,'').includes(key)||String(g.tax||'').includes(key));
+ const scoped=accountIds?groups.map(g=>({...g,rows:(g.rows||[]).filter(row=>accountIds.includes(row.accountId))})).filter(g=>g.rows.length):groups;
+ // Rebuild names after scoping: one tax identity can have different trading names across accounts.
+ const candidates=accountIds?scoped.map(g=>({...g,name:g.rows[0].name||g.name})):scoped;
+ if(/^\d+$/.test(key))return candidates.filter(g=>String(g.tax||'')===key);
+ const nameKey=g=>fold(g.name).replace(/[^a-z0-9]/g,'');
+ const exact=candidates.filter(g=>nameKey(g)===key);
+ return exact.length?exact:candidates.filter(g=>nameKey(g).includes(key));
 }
 export function normalizeReportItem(item,account){
  const raw=item.raw||item;
@@ -26,7 +32,13 @@ export function normalizeReportItem(item,account){
   accountId:item._accountId||account?.id,accountName:item._accountName||account?.name||'Hesap'};
 }
 export function groupReportItems(items,accounts){
- const rows=items.map(item=>normalizeReportItem(item,accounts.find(a=>a.id===item._accountId)||accounts[0])).filter(Boolean);
+ const rows=items.flatMap(item=>{
+  const id=item._accountId||item.raw?._accountId;
+  const account=id?accounts.find(a=>a.id===id):accounts.length===1?accounts[0]:null;
+  if(!account)return [];
+  const row=normalizeReportItem({...item,_accountId:account.id},account);
+  return row?[row]:[];
+ });
  const groups=new Map(),identities=new Map();
  for(const row of rows){if(!row.tax)continue;const key=row.accountId+':'+fold(row.name);if(!identities.has(key))identities.set(key,new Set());identities.get(key).add(row.tax);}
  for(const row of rows){

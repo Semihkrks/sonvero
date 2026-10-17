@@ -1,0 +1,6 @@
+<!doctype html><html lang="tr" data-theme="light"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Sonvera PWA kurulum testi</title><body><main id="fixture" style="padding:16px;max-width:900px;margin:auto"></main><script type="module">
+import '/src/styles/main.css';import '/src/styles/mobile.css';import '/src/styles/system.css';import '@fontsource/inter/400.css';
+import {createRoot} from 'react-dom/client';import {createElement} from 'react';import {PwaSettings} from '/src/react/pwa-settings.tsx';
+createRoot(document.querySelector('#fixture')).render(createElement(PwaSettings));
+window.installRequests=0;window.testInstall=()=>{const event=new Event('beforeinstallprompt',{cancelable:true});event.prompt=async()=>{window.installRequests++;};event.userChoice=Promise.resolve({outcome:'accepted'});window.dispatchEvent(event);};
+</script></body></html>

@@ -1,9 +1,10 @@
 const CACHE_NAME = 'sonvera-shell-__BUILD_ID__';
-const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/logo.svg'];
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting())));
+const SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png', '/logo.svg', '/apple-touch-icon.png', '/apple-touch-icon-precomposed.png', '/favicon-32.png', '/icons/sonvera-touch-v2.png', '/icons/sonvera-192-v2.png', '/icons/sonvera-512-v2.png', '/icons/sonvera-maskable-192-v2.png', '/icons/sonvera-maskable-512-v2.png'];
+// Existing pages decide when their active forms and financial operations can safely reload.
+self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(SHELL))));
 self.addEventListener('message',event=>{ if(event.data?.type==='ACTIVATE_UPDATE') self.skipWaiting(); });
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
-  for(const key of await caches.keys()) if(key!==CACHE_NAME) await caches.delete(key);
+  for(const key of await caches.keys()) if(key.startsWith('sonvera-shell-')&&key!==CACHE_NAME) await caches.delete(key);
   await self.clients.claim();
 })()));
 self.addEventListener('fetch',event=>{

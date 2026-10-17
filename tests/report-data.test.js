@@ -36,6 +36,24 @@ it('matches spoken spacing and VKN against actual customers',()=>{
  expect(matchReportGroups(groups,'3333333333')).toEqual([groups[1]]);
  expect(matchReportGroups(groups,'')).toEqual([]);
 });
+it('never uses another account customer or assigns an unknown account to the first account',()=>{
+ const groups=groupReportItems([invoice({ReceiverName:'Harmanda Tekstil'}),invoice({_accountId:'b',ReceiverName:'Mustafa Harmanda',ReceiverTaxNumber:'2222222222'})],accounts);
+ expect(matchReportGroups(groups,'harmanda',{accountIds:['a']}).map(g=>g.name)).toEqual(['Harmanda Tekstil']);
+ expect(groupReportItems([invoice({_accountId:'unknown'})],[accounts[0]])).toEqual([]);
+});
+it('prefers an exact customer identity over a longer substring match',()=>{
+ const groups=[{name:'Harmanda',tax:'1234567890'},{name:'Mustafa Harmanda',tax:'3333333333'}];
+ expect(matchReportGroups(groups,'harmanda')).toEqual([groups[0]]);
+ expect(matchReportGroups(groups,'1234')).toEqual([]);
+});
+it('rebuilds a shared tax identity name and movements inside the requested account',()=>{
+ const groups=groupReportItems([invoice({ReceiverName:'Mustafa Harmanda'}),invoice({_accountId:'b',ReceiverName:'Harmanda Tekstil'})],accounts);
+ const [matched]=matchReportGroups(groups,'harmanda',{accountIds:['b']});
+ expect(matched.name).toBe('Harmanda Tekstil');expect(matched.rows).toHaveLength(1);
+ expect(matched.rows[0].accountId).toBe('b');
+ expect(matchReportGroups(groups,'mustafa',{accountIds:['b']})).toEqual([]);
+ expect(matchReportGroups(groups,'harmanda',{accountIds:[]})).toEqual([]);
+});
 it('reuses the selected screen template and excludes non-TRY data',()=>{
  const [group]=groupReportItems([invoice(),invoice({CurrencyCode:'USD'})],accounts);
  expect(group.rows).toHaveLength(1);

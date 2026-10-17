@@ -41,3 +41,47 @@
 @keyframes sonai-orbit-working{from{transform:rotate(-30deg)}to{transform:rotate(330deg)}}
 @media(prefers-reduced-motion:reduce){.sv-voice-orbit:after{animation:none!important;transition:none!important}.sv-voice-app[data-voice=listening] .sv-voice-aura{transform:none}}
 @media(prefers-reduced-motion:reduce){.sv-live-char{animation:none!important}.sv-live-typing:after,.sv-chat-message.sv-typing:after{display:none}}
+/* Voice controls stay legible and reachable on small PWA viewports. */
+.sv-voice-app .sv-composer-actions{justify-content:flex-end}
+.sv-voice-app .sv-composer-actions .btn{min-height:44px}
+.sv-assistant-panel{box-sizing:border-box;scrollbar-gutter:stable;animation:sonai-panel-in .24s ease-out both}
+.sv-assistant-overlay{animation:sonai-overlay-in .18s ease-out both}
+.sv-voice-stage{padding-top:30px}
+.sv-voice-caption{opacity:1;letter-spacing:.22em}
+.sv-voice-stage #assistantReply{max-width:32ch;line-height:1.6;text-wrap:pretty}
+.sv-voice-app .sv-chat-message{font-variant-numeric:tabular-nums;text-wrap:pretty}
+.sv-voice-app .sv-chat-choices{align-items:stretch}
+.sv-voice-app .sv-choice{min-height:44px;max-width:100%;white-space:normal;overflow-wrap:anywhere;line-height:1.45}
+.sonai-pause,.sonai-formats button{min-height:44px;min-width:44px;touch-action:manipulation}
+.sonai-pause{font-size:12px;color:var(--text-primary);border-radius:12px}
+.sv-panel-close{opacity:1;transition:background .18s ease,color .18s ease}
+.sv-panel-close:focus-visible,.sv-header-assistant:focus-visible,.sv-voice-app button:focus-visible{outline:3px solid var(--accent,#2563eb);outline-offset:4px}
+.sv-voice-app .sv-voice-orb:focus-visible{outline:3px solid var(--text-primary,#172236)!important;outline-offset:7px}
+.sv-voice-app button:disabled{cursor:progress}
+.sv-voice-app .sv-choice:disabled,.sonai-formats button:disabled{opacity:.55}
+.sv-voice-app[data-busy=true] .sv-voice-orb{cursor:progress}
+@media(hover:hover){.sv-panel-close:hover,.sonai-pause:hover{background:var(--bg-secondary)}.sonai-formats button:hover{border-color:var(--accent,#2563eb);color:var(--text-primary)}}
+.sv-voice-app .sv-choice:active,.sonai-formats button:active,.sonai-pause:active{transform:translateY(1px)}
+@keyframes sonai-panel-in{from{opacity:0;transform:translate(-50%,12px)}to{opacity:1;transform:translate(-50%,0)}}
+@keyframes sonai-overlay-in{from{opacity:0}to{opacity:1}}
+@media(max-width:480px){.sv-assistant-panel{max-height:calc(100dvh - 100px - env(safe-area-inset-bottom,0px))}.sv-voice-stage{padding-inline:4px}.sv-voice-app .sv-chat-message{padding-inline:4px!important}.sv-voice-app .sv-choice{flex:1 1 140px}.sv-live-transcript{max-width:100%}}
+@media(max-height:580px){.sv-assistant-panel{bottom:calc(12px + env(safe-area-inset-bottom,0px));max-height:calc(100dvh - 24px - env(safe-area-inset-bottom,0px))}.sv-voice-orbit{width:124px;height:124px}.sv-voice-orb{width:84px;height:84px}.sv-voice-stage{gap:8px;padding-top:28px}}
+@media(prefers-reduced-motion:reduce){.sv-assistant-panel,.sv-assistant-overlay{animation:none!important}.sv-voice-app *,.sv-panel-close{transition:none!important}}
+/* Five audio bars fold into a rotating thought constellation and return to voice. */
+.sv-voice-app .sv-orb-core{position:relative;display:block;width:40px;height:36px;transform-origin:center}
+.sv-voice-app .sv-orb-core i:nth-child(1){--sv-bar-x:-16px;--sv-bar-angle:0deg;--sv-bar-weight:.62;--sv-bar-level:var(--sv-voice-band-1,var(--sv-voice-level,0))}
+.sv-voice-app .sv-orb-core i:nth-child(2){--sv-bar-x:-8px;--sv-bar-angle:72deg;--sv-bar-weight:.86;--sv-bar-level:var(--sv-voice-band-2,var(--sv-voice-level,0))}
+.sv-voice-app .sv-orb-core i:nth-child(3){--sv-bar-x:0px;--sv-bar-angle:144deg;--sv-bar-weight:1;--sv-bar-level:var(--sv-voice-band-3,var(--sv-voice-level,0))}
+.sv-voice-app .sv-orb-core i:nth-child(4){--sv-bar-x:8px;--sv-bar-angle:216deg;--sv-bar-weight:.78;--sv-bar-level:var(--sv-voice-band-4,var(--sv-voice-level,0))}
+.sv-voice-app .sv-orb-core i:nth-child(5){--sv-bar-x:16px;--sv-bar-angle:288deg;--sv-bar-weight:.54;--sv-bar-level:var(--sv-voice-band-5,var(--sv-voice-level,0))}
+.sv-voice-app[data-voice] .sv-orb-core i{position:absolute;left:18px;top:2px;width:4px;height:32px;border-radius:99px;animation:none;opacity:.94;transform:translateX(var(--sv-bar-x)) scaleY(calc(.18 + var(--sv-bar-weight) * .35));transition:transform .32s cubic-bezier(.22,1,.36,1),opacity .25s ease}
+.sv-voice-app[data-voice=listening] .sv-orb-core i{height:32px;transform:translateX(var(--sv-bar-x)) scaleY(calc(.16 + var(--sv-bar-level,var(--sv-voice-level,0)) * var(--sv-bar-weight) * .84));transition:transform .09s ease-out,opacity .2s ease}
+.sv-voice-app[data-voice=thinking] .sv-orb-core{animation:sonai-thought-turn 2.8s linear infinite}
+.sv-voice-app[data-voice=thinking] .sv-orb-core i{width:4px;height:32px;border-radius:50%;transform:rotate(var(--sv-bar-angle)) translateY(-12px) scaleY(.125);opacity:.5}
+.sv-voice-app[data-voice=thinking] .sv-orb-core i:nth-child(1){opacity:1}
+.sv-voice-app[data-voice=thinking] .sv-orb-core i:nth-child(2){opacity:.85}
+.sv-voice-app[data-voice=thinking] .sv-orb-core i:nth-child(3){opacity:.7}
+@keyframes sonai-thought-turn{to{transform:rotate(360deg)}}
+.sv-voice-app[data-voice=speaking] .sv-orb-core i{transform:translateX(var(--sv-bar-x)) scaleY(calc(.3 + var(--sv-bar-weight) * .4));animation:sonai-answer-wave .9s ease-in-out infinite alternate;animation-delay:calc(var(--sv-bar-weight) * -.8s)}
+@keyframes sonai-answer-wave{to{transform:translateX(var(--sv-bar-x)) scaleY(.2);opacity:.65}}
+@media(prefers-reduced-motion:reduce){.sv-voice-app[data-voice=listening] .sv-orb-core i{transform:translateX(var(--sv-bar-x)) scaleY(calc(.18 + var(--sv-bar-weight) * .55))}.sv-voice-app[data-voice=thinking] .sv-orb-core{animation:none!important}}

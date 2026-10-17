@@ -1,16 +1,18 @@
 /** Reuse a disabled stream briefly between panel opens; never record outside the panel. */
 export function createMicrophoneLease({mediaDevices=globalThis.navigator?.mediaDevices,idleMs=30000}={}){
  let stream,pending,timer,users=0,generation=0;
- function releaseAll(){generation++;clearTimeout(timer);stream?.getTracks().forEach(track=>track.stop());stream=null;}
+ function releaseAll(){generation++;clearTimeout(timer);pending=null;stream?.getTracks().forEach(track=>track.stop());stream=null;}
  async function acquire(){
   clearTimeout(timer);users++;
   try{
    if(!stream?.getAudioTracks().some(track=>track.readyState==='live')){
     if(!mediaDevices?.getUserMedia)throw new Error('Mikrofon bu tarayıcıda desteklenmiyor.');
-    if(!pending){const current=generation;pending=mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}).then(value=>{
+    if(!pending){const current=generation;const request=mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}).then(value=>{
      if(current!==generation){value.getTracks().forEach(track=>track.stop());throw new Error('Mikrofon açılışı iptal edildi.');}
+     // Permission may arrive after the user paused; only record() may unmute.
+     value.getAudioTracks().forEach(track=>track.enabled=false);
      stream=value;return value;
-    }).finally(()=>{pending=null;});}
+    }).finally(()=>{if(pending===request)pending=null;});pending=request;}
     await pending;
    }
    return stream;
@@ -43,7 +45,7 @@ export function createVoiceSession({onAudio,onState,onError,onLevel,mediaDevices
   // Resume in the user's tap, before any permission/network await (important on iOS).
   let activation;
   try{if(!Recorder||!Audio)throw new Error('Sesli asistan bu tarayıcıda desteklenmiyor.');if(!context||context.state==='closed')context=new Audio();activation=Promise.resolve(context.resume());activation.catch(()=>{});}catch(error){notifyError(error);return;}
-  const requestedSequence=sequence;
+  const requestedSequence=sequence;let recordingStarted=false;
   opening=(async()=>{
    if(!stream?.getAudioTracks().some(track=>track.readyState==='live')){
     onState('requesting');
@@ -55,8 +57,8 @@ export function createVoiceSession({onAudio,onState,onError,onLevel,mediaDevices
    }
    await activation;if(closed||requestedSequence!==sequence)return;
    if(context.state==='suspended'||context.state==='interrupted')await context.resume();
-   record();
-  })().catch(notifyError).finally(()=>{opening=null;});
+   recordingStarted=true;record();
+  })().catch(error=>{if(recordingStarted||requestedSequence===sequence)notifyError(error);}).finally(()=>{opening=null;});
   return opening;
  }
  function resume(){if(!closed)return start();}
@@ -71,11 +73,17 @@ export function createVoiceSession({onAudio,onState,onError,onLevel,mediaDevices
   active.onstop=()=>{onLevel?.(0);if(closed||current!==sequence)return;if(voiced<250||!chunks.length){onState('idle');return;}onState('thinking');void onAudio(new Blob(chunks,{type:mime.split(';')[0]}));};
   active.onerror=()=>notifyError(new Error('Ses kaydı kesildi. Yeniden dokunarak deneyebilirsin.'));
   active.start();onState('listening');const samples=new Float32Array(analyser.fftSize);
+  const frequencies=new Uint8Array(analyser.frequencyBinCount||analyser.fftSize/2);
   const tick=()=>{
    if(closed||paused||current!==sequence)return;
    if(context.state==='suspended'||context.state==='interrupted'){pause();onState('idle');return;}
    const now=performance.now();analyser.getFloatTimeDomainData(samples);const rms=Math.sqrt(samples.reduce((sum,n)=>sum+n*n,0)/samples.length);
-   onLevel?.(Math.min(1,rms*8));if(rms>0.018){voiced+=Math.min(now-previous,100);lastSound=now;}previous=now;
+   const level=Math.min(1,rms*8),bands=[];
+   if(analyser.getByteFrequencyData){
+    analyser.getByteFrequencyData(frequencies);const limits=[100,300,700,1400,2600,4800],hz=(context.sampleRate||44100)/analyser.fftSize;
+    for(let band=0;band<5;band++){const from=Math.max(1,Math.floor(limits[band]/hz)),to=Math.min(frequencies.length,Math.ceil(limits[band+1]/hz));let energy=0;for(let bin=from;bin<to;bin++)energy+=frequencies[bin]*frequencies[bin];bands.push(level>0.02?Math.min(1,Math.sqrt(energy/Math.max(1,to-from))/190):0);}
+   }
+   onLevel?.(level,bands);if(rms>0.018){voiced+=Math.min(now-previous,100);lastSound=now;}previous=now;
    if(voiced>=250&&now-lastSound>1500){finish();return;}
    if(now-started>25000){if(voiced>=250)finish();else{pause();onState('idle');}return;}
    frame=requestAnimationFrame(tick);

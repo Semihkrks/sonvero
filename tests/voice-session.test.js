@@ -2,7 +2,7 @@
 import {it,expect,vi,afterEach} from 'vitest';
 import {createVoiceSession,createMicrophoneLease,activateVoiceAudio} from '../src/services/voice-session.js';
 afterEach(()=>vi.restoreAllMocks());
-function harness(){
+function harness({spectrum=false}={}){
  let now=0,nextFrame,sound=0;
  vi.spyOn(performance,'now').mockImplementation(()=>now);
  vi.stubGlobal('requestAnimationFrame',fn=>{nextFrame=fn;return 1;});
@@ -18,7 +18,7 @@ function harness(){
  const disconnect=vi.fn(),close=vi.fn();
  class Audio{
   createMediaStreamSource(){return {connect:vi.fn(),disconnect};}
-  createAnalyser(){return {fftSize:1024,getFloatTimeDomainData:array=>array.fill(sound)};}
+  createAnalyser(){return {fftSize:1024,frequencyBinCount:512,getFloatTimeDomainData:array=>array.fill(sound),...(spectrum?{getByteFrequencyData:array=>{array.fill(0);for(let bin=2;bin<7;bin++)array[bin]=160;}}:{})};}
   async resume(){} close(){close();}
  }
  const onAudio=vi.fn(),onError=vi.fn(),onState=vi.fn(),onLevel=vi.fn();
@@ -28,6 +28,28 @@ function harness(){
  return {voice,track,stream,Audio,Recorder,mediaDevices,recorders,onAudio,onError,onState,onLevel,utterance,close,disconnect};
 }
 afterEach(()=>vi.unstubAllGlobals());
+it('does not request microphone access until listening is explicitly started',()=>{
+ const h=harness();expect(h.mediaDevices.getUserMedia).not.toHaveBeenCalled();h.voice.close();
+});
+it('keeps a late permission grant muted when listening was paused',async()=>{
+ const h=harness();let grant;h.mediaDevices.getUserMedia.mockImplementation(()=>new Promise(resolve=>{grant=resolve;}));
+ const opening=h.voice.start();h.voice.pause();grant(h.stream);await opening;
+ expect(h.recorders).toHaveLength(0);expect(h.track.enabled).toBe(false);
+ await h.voice.resume();expect(h.recorders).toHaveLength(1);expect(h.mediaDevices.getUserMedia).toHaveBeenCalledOnce();h.voice.close();
+});
+it('ignores an old permission rejection after listening was cancelled',async()=>{
+ const h=harness();let reject;h.mediaDevices.getUserMedia.mockImplementation(()=>new Promise((resolve,fail)=>{reject=fail;}));
+ const opening=h.voice.start();h.voice.pause();reject(new Error('permission cancelled'));await opening;
+ expect(h.onError).not.toHaveBeenCalled();expect(h.recorders).toHaveLength(0);h.voice.close();
+});
+it('can request a fresh microphone while a cancelled permission request is unresolved',async()=>{
+ const h=harness();let firstGrant;h.mediaDevices.getUserMedia.mockImplementationOnce(()=>new Promise(resolve=>{firstGrant=resolve;}));
+ const lease=createMicrophoneLease({mediaDevices:h.mediaDevices,idleMs:0});
+ const first=lease.acquire();const cancelled=expect(first).rejects.toThrow('iptal');lease.releaseAll();
+ const secondStream={getAudioTracks:()=>[],getTracks:()=>[]};h.mediaDevices.getUserMedia.mockResolvedValueOnce(secondStream);
+ const second=lease.acquire();expect(h.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);
+ firstGrant(h.stream);await cancelled;expect(await second).toBe(secondStream);expect(h.track.stop).toHaveBeenCalledOnce();lease.releaseAll();
+});
 it('records two utterances with one permission request and releases the mic on close',async()=>{
  const h=harness();await h.voice.start();h.utterance();
  expect(h.onAudio).toHaveBeenCalledOnce();expect(h.onAudio.mock.calls[0][0].type).toBe('audio/mp4');
@@ -65,6 +87,13 @@ it('reports voice level while listening and resets on pause',async()=>{
  expect(h.onLevel).toHaveBeenLastCalledWith(0);
  h.voice.pause();
  expect(h.onLevel).toHaveBeenLastCalledWith(0);
+});
+it('reports five independent frequency bands and silences them when voice ends',async()=>{
+ const h=harness({spectrum:true});await h.voice.start();h.utterance();
+ const spoken=h.onLevel.mock.calls.find(([level,bands])=>level>0&&bands?.length===5);
+ expect(spoken[1][0]).toBeGreaterThan(0);expect(spoken[1][4]).toBe(0);
+ const silence=h.onLevel.mock.calls.find(([level,bands])=>level===0&&bands?.length===5);
+ expect(silence[1]).toEqual([0,0,0,0,0]);h.voice.close();
 });
 it('uses recording for consecutive utterances even when browser live recognition is available',async()=>{
  const recognition=vi.fn(()=>{throw new Error('Live recognition must not be started');});

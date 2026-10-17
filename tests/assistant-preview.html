@@ -5,7 +5,7 @@ const user={id:'11111111-1111-4111-8111-111111111111',email:'sonvera@gmail.com',
 const account={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Ayşe Karabut',user_id:user.id,environment:'test',color:'#16a34a',has_api_key:true};
 const token=['eyJhbGciOiJIUzI1NiJ9',btoa(JSON.stringify({sub:user.id,role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})),'test'].join('.');
 localStorage.setItem('sb-sonvera-test-auth-token',JSON.stringify({access_token:token,refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}));
-const nativeFetch=window.fetch.bind(window);window.sentRequests=[];window.loseSendResponse=false;
+const nativeFetch=window.fetch.bind(window);window.sentRequests=[];window.loseSendResponse=false;window.businessWrites=[];window.loseCollectionResponse=false;const collections=new Map(),commands=new Map();
 window.fetch=async(input,init)=>{
  const url=new URL(typeof input==='string'?input:input.url,location.href);
  const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}});
@@ -19,7 +19,18 @@ window.fetch=async(input,init)=>{
  if(url.hostname==='sonvera-test.supabase.co'){
   if(url.pathname.includes('/auth/'))return json(user);
   if(url.pathname.endsWith('/accounts'))return json([account]);
-  if(url.pathname.endsWith('/rpc/customer_ledger_page'))return json({count:1,rows:[{customer_tax_no:'1234567890',customer_name:'Cihan Tekstil',opening:'250.00'}]});
+  if(url.pathname.endsWith('/rpc/customer_ledger_page'))return json({count:2,rows:[{account_id:account.id,customer_key:'1234567890',customer_tax_no:'1234567890',customer_name:'Cihan Tekstil',opening:'250.00',balance:'1250.00',excluded:0},{account_id:account.id,customer_key:'9876543210',customer_tax_no:'9876543210',customer_name:'Harmanda Tekstil',opening:'0.00',balance:'2500.00',excluded:0}]});
+  if(url.pathname.endsWith('/customer_collections'))return json([...collections.values()].filter(row=>url.searchParams.get('cancelled_at')!=='is.null'||!row.cancelled_at));
+  if(url.pathname.endsWith('/rpc/collection_command')){
+   const args=JSON.parse(init.body);window.businessWrites.push(args);
+   if(!commands.has(args.p_key)){
+    let row;
+    if(args.p_action==='create')row={...args.p_record,id:crypto.randomUUID(),account_id:account.id,user_id:user.id,currency:'TRY',version:1,created_at:new Date().toISOString()};
+    else {const old=collections.get(args.p_record.id);if(!old||old.version!==args.p_record.version)return json({code:'40001',message:'Kayıt başka bir sekmede değişti'},409);row={...old,...args.p_record,version:old.version+1,...(args.p_action==='cancel'?{cancelled_at:new Date().toISOString()}:{})};}
+    collections.set(row.id,row);commands.set(args.p_key,row);
+   }
+   if(window.loseCollectionResponse&&window.businessWrites.length===1)throw new Error('Synthetic lost response');return json(commands.get(args.p_key));
+  }
   if(url.pathname.endsWith('/rpc/ledger_revision'))return json({revision:1});
   return json([]);
  }
@@ -27,7 +38,7 @@ window.fetch=async(input,init)=>{
 };
 const {mountAssistant}=await import('/src/pages/assistant.js');const app=await mountAssistant();document.querySelector('#fixture').append(app.page);
 const {renderBottomNav}=await import('/src/components/bottom-nav.js');document.body.append(renderBottomNav('/dashboard'));
-const {openAssistantPanel}=await import('/src/components/assistant-panel.js');window.testPanel=()=>openAssistantPanel(null,{listen:false});
+const {openAssistantPanel}=await import('/src/components/assistant-panel.js');window.testPanel=()=>openAssistantPanel(null);
 const {groupReportItems}=await import('/src/services/report-data.js');
 const {previewReport}=await import('/src/components/report-send.js');
 window.testPreview=()=>previewReport({accounts:[account],groups:groupReportItems([

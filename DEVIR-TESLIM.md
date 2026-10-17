@@ -1,5 +1,15 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 17 Ekim — SonAI bağlamı ve PWA kurulumu
+
+- SonAI gerçek müşteri seçildikten sonra aynı açık sohbette hesap/müşteri/dönem bağlamını kullanır. “Harmanda müşterimiz” ardından “buna 2k daha ekle” yeni 2.000 TL tahsilat taslağıdır; tekrar kimlik sormaz, kaydetmeden onay ister. Belirsiz `2*k` tutarında yalnız tutar sorulur. Panel kapanınca/yeni sohbet komutunda bağlam temizlenir.
+- Tahsilat düzeltme/iptal, sırayla ayrı onaylanan çoklu tahsilat, gerçek kayıtlardan özetler ve cihazın ücretsiz konuşma özelliği eklendi. Fatura oluşturma, dekont ve ödeme araçları eklenmedi. Ayrıntı: `docs/sonai-voice-commands.md`.
+- Kullanıcı gerçek native uygulama istemediğini netleştirdi. Capacitor/native bağımlılık veya iOS/Android projesi kurulmadı. PWA korunuyor.
+- Canlı `sonvera.com.tr` HTML, manifest ve ikon uçları salt okunur kontrol edildi: PNG ikonlar 200 ve yerelle birebir aynı. Telefonda düz harf görülmesinin kesin nedeni cihazda doğrulanamadı; eski kısayol/ikon önbelleği olası. Apple touch ve manifest PNG ikonları yeni sürümlü `/icons/sonvera-*-v2.png` adreslerine bağlandı; uygulama manifest kimliği `/` korundu.
+- Ayarlar’a ana ekran kurulum durumu, iPhone adımları ve mikrofon izni açıklaması eklendi. İzin talebi ayarlarda veya uygulama açılışında kendiliğinden yapılmaz; SonAI dokunuşu başlatır. Tam kapanıştan sonra iOS'un yeniden izin sorması uygulama koduyla garanti edilerek kaldırılamaz; WebKit 280394 hâlâ açık: https://bugs.webkit.org/show_bug.cgi?id=280394.
+- Service worker kurulumda zorla devralmaz; mevcut formlar/finansal işlemler/SonAI açıkken otomatik yeniden yükleme ertelenir. Yalnız kendi eski shell cache'lerini temizler. PWA yükleme düğmesi destekleyen tarayıcıda yalnız kullanıcı dokunuşuyla çalışır; iPhone için Safari paylaş menüsü yönergesi gösterilir.
+- Kullanıcı GitHub push ve bağlı Vercel otomatik yayınını istedi; SonAI/PWA değişiklikleri `main` için hazırlandı. Kontroller: 204 istemci testi, typecheck/build, 14 servis testi ve 8 tarayıcı senaryosu başarılı; lint hata yok (4 mevcut uyarı). Gerçek finansal kayıt değişikliği ve fiziksel iPhone testi yapılmadı. Ayrı çalışan `services/assistant` sunucusu GitHub/Vercel frontend push'uyla güncellenmez; tam özellikler için ayrıca yayın bekler. Fiziksel iPhone ikon/yeniden açılış/mikrofon izin kontrolü açık iş olarak kalır. Önceden duran `SONVERA-TAM-SISTEM-REHBERI.md` bu commit kapsamına alınmadı.
+
 ## 17 Ekim — canlı yazı geri alındı
 
 - Kullanıcı, canlı konuşma tanıma sonrasında mikrofonun yeniden çalışmadığını bildirdi ve özelliğin kaldırılmasını istedi. Web Speech/native tanıyıcı yolu, mod seçimi ve ilgili servis kaldırıldı. Tüm tarayıcılar önceki tek MediaRecorder + AudioContext akışını kullanır; metin kayıt çözümlendikten sonra görünür.

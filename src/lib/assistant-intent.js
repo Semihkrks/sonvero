@@ -2,6 +2,23 @@ const fold=s=>String(s||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(
 import {requestedFormat} from './assistant-dialogue.js';
 const months=['ocak','subat','mart','nisan','mayis','haziran','temmuz','agustos','eylul','ekim','kasim','aralik'];
 const ordinals={birinci:1,ikinci:2,ucuncu:3,dorduncu:4,besinci:5,altinci:6,yedinci:7,sekizinci:8,dokuzuncu:9,onuncu:10,onbirinci:11,onikinci:12};
+const accountSuffix="(?:['’]?(?:nin|nun|in|un|n|i|u))?";
+const escapePattern=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+function oneEditApart(left,right){
+ if(Math.abs(left.length-right.length)>1)return false;
+ let i=0,j=0,edits=0;
+ while(i<left.length&&j<right.length){if(left[i]===right[j]){i++;j++;continue;}if(++edits>1)return false;if(left.length>=right.length)i++;if(right.length>=left.length)j++;}
+ return edits+Number(i<left.length||j<right.length)<=1;
+}
+/** Resolve only known full account names; ambiguous speech stays a question. */
+export function matchSpokenAccounts(text,accounts=[]){
+ const s=fold(text);
+ const exact=accounts.filter(a=>new RegExp('(?:^|[^a-z0-9])'+escapePattern(fold(a.name))+accountSuffix+'(?=$|[^a-z0-9])').test(s));
+ if(exact.length)return exact;
+ const phrases=[...s.matchAll(/([a-z]+(?:\s+[a-z]+)*)\s+hesab\w*/g)].map(m=>m[1].split(/\s+/));
+ const fuzzy=accounts.filter(a=>{const name=fold(a.name).split(/\s+/);if(name.length<2)return false;return phrases.some(words=>{const spoken=words.slice(-name.length);return spoken.length===name.length&&spoken.slice(0,-1).every((word,i)=>word===name[i])&&oneEditApart(spoken.at(-1),name.at(-1));});});
+ return fuzzy.length===1?fuzzy:[];
+}
 export function monthRange(month,year){
  if(!Number.isInteger(month)||month<1||month>12||!Number.isInteger(year)||year<2000||year>2100)return {};
  return {start:`${year}-${String(month).padStart(2,'0')}-01`,end:`${year}-${String(month).padStart(2,'0')}-${new Date(year,month,0).getDate()}`};
@@ -13,7 +30,7 @@ export function parseQuickIntent(text,{awaiting,accounts=[],draft={}}={}){
  const allCustomers=/\b(?:(?:tum|butun)\s+musteri\w*|musteriler(?:in|inin|i|ini|e|den)?)\b/.test(s);
  if(allCustomers){intent.allCustomers=true;intent.customer='';if(!format)intent.format='excel';}
  if(/tum hesap/.test(s))intent.scope='all';else if(/secili hesap/.test(s))intent.scope='selected';else if(/cari ekrani|tek hesap/.test(s))intent.scope='cari';
- const named=accounts.filter(a=>s.includes(fold(a.name)));if(named.length){intent.accountIds=named.map(a=>a.id);if(!intent.scope)intent.scope=named.length===1?'cari':'selected';}
+ const named=matchSpokenAccounts(text,accounts);if(named.length){intent.accountIds=named.map(a=>a.id);if(!intent.scope)intent.scope=named.length===1?'cari':'selected';}
  if(/satis ve alis|alis ve satis|satislarla alis/.test(s)||awaiting==='direction'&&/her ikisi|ikisi de/.test(s))intent.direction='both';else if(/\bsatis\b/.test(s))intent.direction='satis';else if(/\balis\b/.test(s))intent.direction='alis';
  if(/\bcari(?:si\w*)?\b|ekstre/.test(s)&&!intent.direction&&!draft.direction)intent.direction='both';
  if(awaiting==='format'&&/^(ikisi de|her ikisi|hepsi)$/.test(s))intent.format='both';

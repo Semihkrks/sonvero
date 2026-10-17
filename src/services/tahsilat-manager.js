@@ -3,7 +3,7 @@ import { positiveMoney } from '../lib/money.js';
 import { completeIntent, fingerprint, operationIntent, requireOnline, singleFlight, stableJson } from '../lib/operations.js';
 const versions = new Map();
 export class CollectionCommandError extends Error {
-  constructor(message, uncertain = false) { super(message); this.uncertain = uncertain; }
+  constructor(message, uncertain = false, code = null) { super(message); this.uncertain = uncertain; this.code = code; }
 }
 async function userId() {
   const { data } = await getSupabase().auth.getSession();
@@ -45,7 +45,7 @@ function command(accountId, action, payload, suppliedKey) {
     if (error) {
       const uncertain = !error.code || ['PGRST000','PGRST001','PGRST002'].includes(error.code);
       if (!uncertain) completeIntent(scope);
-      throw new CollectionCommandError(databaseMessage(error), uncertain);
+      throw new CollectionCommandError(databaseMessage(error), uncertain, error.code);
     }
     if (!data?.id) throw new CollectionCommandError('Kayıt sonucu doğrulanamadı. Aynı bilgilerle tekrar kontrol edin.', true);
     completeIntent(scope);
