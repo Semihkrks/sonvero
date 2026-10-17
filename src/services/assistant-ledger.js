@@ -63,6 +63,21 @@ export async function findAssistantCollections({accountId,customer=null,start=nu
   .sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.created_at||'').localeCompare(String(a.created_at||''))||String(b.id).localeCompare(String(a.id)));
 }
 
+/** Last inserted collection, independently of its possibly backdated payment date. */
+export async function readLatestAssistantCollection({accountIds,customer=null,start=null,end=null}={}){
+ const ids=[...new Set((accountIds||[]).filter(id=>typeof id==='string'&&id))];
+ if(!ids.length)throw new Error('Son tahsilat için hesap seçmelisin.');
+ if(customer&&!customerKey(customer))throw new Error('Önce hesabın gerçek müşteri kaydını seçmelisin.');
+ checkPeriod(start,end);
+ const rows=(await Promise.all(ids.map(accountId=>findAssistantCollections({accountId,customer,start,end,includeCancelled:true})))).flat();
+ for(const row of rows){
+  if(!row.id||!row.created_at||!Number.isFinite(Date.parse(row.created_at)))throw new Error('Tahsilatın eklenme zamanı doğrulanamadı.');
+  if(row.currency!=='TRY')throw new Error('Tahsilatın para birimi desteklenmiyor.');
+  decimal(row.amount);
+ }
+ return rows.sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||String(b.created_at).localeCompare(String(a.created_at))||String(b.id).localeCompare(String(a.id)))[0]||null;
+}
+
 /** Read-only summaries from the same authenticated ledger used by the Cari screens. */
 export async function readAssistantSummary({accountIds,metric='net',start=null,end=null,customer=null,limit=5}={}){
  let ids=[...new Set((accountIds||[]).filter(id=>typeof id==='string'&&id))];

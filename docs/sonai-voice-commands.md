@@ -11,6 +11,7 @@ SonAI düğmesine dokunmak mikrofonu başlatır. Dinleme, düşünme ve yanıt v
 - “Bugün toplam ne topladık?”, “Tüm hesaplarda bugün toplam ne topladık?”, “Bu ay en çok borcu olan beş müşteri kim?”
 - “Serkan’ın satışından tahsilatını çıkar.” Bu hesaplama satış eksi tahsilattır. Genel “net durum” satış eksi alış eksi tahsilattır.
 - “Az önce eklediğim tahsilatı 65 bin olarak düzelt”, “az önce eklediğim tahsilatı iptal et.”
+- “En son eklediğim tahsilat ne?”, “Hangi tahsilatı ekledim?” gerçek kayıtları eklenme zamanına göre okur; yeni tahsilat oluşturmaz. “Harmanda’nın son tahsilatı” müşteriyle sınırlar. Hesap belirsizse hesap sorulur.
 - “Bugün Serkan Bingöl hesabındaki Harmanda’ya 60 bin, Cihan’a 20 bin tahsilat ekle.” Her kayıt ayrı onaylanır; en fazla 10 istek sıraya alınır.
 - “Giden faturaları aç.” Ekran açma, fatura düzenleme veya gönderme işlemi değildir.
 
@@ -24,7 +25,9 @@ Hesap, müşteri, dönem ve son doğrulanmış tahsilat bağlamı yalnız açık
 
 ## Sesli yanıt
 
-Tarayıcının/cihazın `speechSynthesis` özelliği kullanılır; yeni bir ücretli API veya sağlayıcı eklenmez. Varsa yerel Türkçe ses seçilir; ses listesinde Türkçe bulunamazsa platforma `tr-TR` dil isteği iletilir. Yanıt sırasında mikrofon duraklatılır; bitince yeniden dinlenir. Küreye dokunarak yanıt kesilebilir. Konuşma desteklenmez veya başarısız olursa metin yanıtı kalır. Gerçek iPhone/PWA ses ve izin davranışı cihazda ayrıca doğrulanmalıdır.
+Tarayıcının/cihazın `speechSynthesis` özelliği kullanılır; yeni bir ücretli API veya sağlayıcı eklenmez. Varsa yerel Türkçe ses seçilir; ses listesinde Türkçe bulunamazsa platforma `tr-TR` dil isteği iletilir. Yanıt sırasında mikrofon duraklatılır; bitince ses kuyruğu bırakılır, kısa bekleme sonrası mikrofon ses grafiği yeniden bağlanır. İşletim sistemi canlı mikrofonu sessize almışsa sorunlu akış yenilenir; normal sessizlik izin isteğini tekrarlamaz. Kalıcı sessize alma bir kez kurtarılıp başarısızsa açık hata gösterilir. Küreye veya “Araya gir” düğmesine dokunarak yanıt kesilip hemen dinlemeye geçilebilir. Genel yanıtlar kısa okunur; finansal onay bilgileri korunur, tam metin ekranda kalır. Konuşma desteklenmez veya başarısız olursa metin yanıtı kalır. Gerçek iPhone/PWA ses ve izin davranışı cihazda ayrıca doğrulanmalıdır.
+
+Küredeki beş çizgi sessizlikte eşit ve kısadır. Konuşma algılanınca farklı ritimlerle hareket eder; tek tek frekans bantlarına bağlı değildir. Düşünürken dönen noktalara dönüşür. Azaltılmış hareket tercihinde animasyonlar kapanır.
 
 ## Doğrulama ve yayın
 
@@ -33,4 +36,4 @@ Tarayıcının/cihazın `speechSynthesis` özelliği kullanılır; yeni bir ücr
 - `npx playwright test tests/e2e/sonai.spec.ts`: sahte dış servislerle gerçek tarayıcıda mikrofon başlangıcı, responsive arayüz, düzeltme/özet/iptal, sıra ve belirsiz sonuçta aynı işlem kimliği.
 - `services/assistant` içinde `npm test`: servis doğrulama testleri.
 
-Bu değişiklikler yeni veritabanı migration’ı gerektirmez; mevcut güvenli kayıt/RPC katmanını kullanır. Canlıya alınırken hem frontend hem `services/assistant` sunucusu güncellenmelidir. Bu çalışma kapsamında canlı deployment veya gerçek finansal kayıt değişikliği yapılmadı. Dekont işleme, fatura oluşturma/gönderme ve ödeme yapma eklenmedi.
+Bu değişiklikler yeni veritabanı migration’ı gerektirmez; mevcut güvenli kayıt/RPC katmanını kullanır. Canlıya alınırken hem frontend hem `services/assistant` sunucusu güncellenmelidir. Yayın durumu ve gerçek test sonuçları `DEVIR-TESLIM.md` dosyasındadır. Testler gerçek finansal kayıt değiştirmez. Dekont işleme, fatura oluşturma/gönderme ve ödeme yapma eklenmedi.

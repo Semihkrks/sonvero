@@ -15,17 +15,18 @@ function harness({spectrum=false}={}){
   start(){this.state='recording';}
   stop(){this.state='inactive';this.ondataavailable({data:new Blob(['audio'])});this.onstop();}
  }
- const disconnect=vi.fn(),close=vi.fn();
+ const disconnect=vi.fn(),close=vi.fn(),contexts=[],graphs=vi.fn(()=>({connect:vi.fn(),disconnect}));
  class Audio{
-  createMediaStreamSource(){return {connect:vi.fn(),disconnect};}
+  constructor(){this.state='running';contexts.push(this);}
+  createMediaStreamSource(){return graphs();}
   createAnalyser(){return {fftSize:1024,frequencyBinCount:512,getFloatTimeDomainData:array=>array.fill(sound),...(spectrum?{getByteFrequencyData:array=>{array.fill(0);for(let bin=2;bin<7;bin++)array[bin]=160;}}:{})};}
-  async resume(){} close(){close();}
+  async resume(){if(this.state!=='closed')this.state='running';} close(){this.state='closed';close();}
  }
  const onAudio=vi.fn(),onError=vi.fn(),onState=vi.fn(),onLevel=vi.fn();
  const voice=createVoiceSession({mediaDevices,Recorder,Audio,onAudio,onError,onState,onLevel});
  const tick=(ms,level)=>{now+=ms;sound=level;const run=nextFrame;nextFrame=null;run?.();};
  const utterance=()=>{for(let i=0;i<4;i++)tick(100,.1);tick(1600,0);};
- return {voice,track,stream,Audio,Recorder,mediaDevices,recorders,onAudio,onError,onState,onLevel,utterance,close,disconnect};
+ return {voice,track,stream,Audio,Recorder,mediaDevices,recorders,onAudio,onError,onState,onLevel,utterance,close,disconnect,tick,contexts,graphs};
 }
 afterEach(()=>vi.unstubAllGlobals());
 it('does not request microphone access until listening is explicitly started',()=>{
@@ -74,6 +75,32 @@ it('rebuilds its graph when iOS ends the old track',async()=>{
  const h=harness();await h.voice.start();h.track.readyState='ended';h.track.onended();
  const next={readyState:'live',enabled:true,stop:vi.fn()};h.mediaDevices.getUserMedia.mockResolvedValue({getAudioTracks:()=>[next],getTracks:()=>[next]});
  await h.voice.resume();h.utterance();expect(h.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);expect(h.onAudio).toHaveBeenCalledOnce();h.voice.close();
+});
+it('rebuilds the audio graph after a spoken reply while reusing a healthy microphone',async()=>{
+ const h=harness();await h.voice.start();h.utterance();h.voice.pause();
+ await h.voice.resume({afterSpeech:true});h.utterance();
+ expect(h.graphs).toHaveBeenCalledTimes(2);expect(h.mediaDevices.getUserMedia).toHaveBeenCalledOnce();expect(h.onAudio).toHaveBeenCalledTimes(2);h.voice.close();
+});
+it('replaces a live but OS-muted microphone after speech instead of pretending to listen',async()=>{
+ const h=harness();await h.voice.start();h.voice.pause();h.track.muted=true;
+ const next={readyState:'live',enabled:false,muted:false,stop:vi.fn()};h.mediaDevices.getUserMedia.mockResolvedValue({getAudioTracks:()=>[next],getTracks:()=>[next]});
+ await h.voice.resume({afterSpeech:true});h.utterance();
+ expect(h.track.stop).toHaveBeenCalledOnce();expect(h.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);expect(next.enabled).toBe(false);expect(h.onAudio).toHaveBeenCalledOnce();h.voice.close();
+});
+it('recovers one delayed OS mute, then reports failure without repeatedly requesting permission',async()=>{
+ const h=harness();await h.voice.start();h.track.muted=true;
+ const next={readyState:'live',enabled:false,muted:true,stop:vi.fn()};h.mediaDevices.getUserMedia.mockResolvedValue({getAudioTracks:()=>[next],getTracks:()=>[next]});
+ h.tick(100,0);h.tick(550,0);await vi.waitFor(()=>expect(h.recorders).toHaveLength(2));
+ h.tick(100,0);h.tick(550,0);
+ expect(h.mediaDevices.getUserMedia).toHaveBeenCalledTimes(2);expect(h.onError).toHaveBeenCalledWith(expect.stringContaining('Mikrofon ses iletmiyor'));expect(h.onAudio).not.toHaveBeenCalled();h.voice.close();
+});
+it('does not reopen microphone permission just because the user is silent',async()=>{
+ const h=harness();await h.voice.start();for(let i=0;i<10;i++)h.tick(500,0);
+ expect(h.mediaDevices.getUserMedia).toHaveBeenCalledOnce();expect(h.onError).not.toHaveBeenCalled();expect(h.onState).toHaveBeenLastCalledWith('listening');h.voice.close();
+});
+it('connects a fresh graph when a closed audio context is recreated',async()=>{
+ const h=harness();await h.voice.start();h.voice.pause();h.contexts[0].state='closed';
+ await h.voice.resume();h.utterance();expect(h.contexts).toHaveLength(2);expect(h.graphs).toHaveBeenCalledTimes(2);expect(h.onAudio).toHaveBeenCalledOnce();h.voice.close();
 });
 it('discards an interrupted utterance and ignores recording after closing',async()=>{
  const h=harness();await h.voice.start();h.voice.pause();expect(h.onAudio).not.toHaveBeenCalled();

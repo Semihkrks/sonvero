@@ -1,5 +1,5 @@
 import {afterEach, beforeEach, describe, expect, it, vi} from 'vitest';
-import {createAssistantSpeech} from '../src/services/assistant-speech.js';
+import {createAssistantSpeech,spokenReply} from '../src/services/assistant-speech.js';
 
 class Utterance {
  constructor(text){this.text=text;}
@@ -20,6 +20,18 @@ beforeEach(()=>vi.useFakeTimers());
 afterEach(()=>vi.useRealTimers());
 
 describe('native Turkish spoken replies',()=>{
+ it('reads a brief response and leaves the rest on screen without clipping decimal amounts',()=>{
+  const text='Harmanda için bakiye 65.000,50 TL. Bu ay üç tahsilat var. Sonuncusu bugün eklendi. Hesap özeti de hazır. Başka bir dönemi de seçebilirsin.';
+  expect(spokenReply(text)).toBe('Harmanda için bakiye 65.000,50 TL. Bu ay üç tahsilat var. Sonuncusu bugün eklendi. Ayrıntılar ekranda.');
+ });
+ it('keeps the complete financial preview and its approval instruction even when long',()=>{
+  const preview='Serkan Bingöl hesabı · Harmanda Tekstil · 1234567890. '+('Hesap bilgisi. '.repeat(30))+'65.000,50 TL, 2026-10-17 tarihine kaydedilecek. İşlem için “onaylıyorum”, vazgeçmek için “iptal” de.';
+  expect(spokenReply(preview)).toBe(preview);
+ });
+ it('returns microphone ownership within twenty seconds if speech never completes',async()=>{
+  const h=harness();const result=h.speech.speak('Kısa yanıt.');h.last().onstart();vi.advanceTimersByTime(20000);
+  expect(await result).toEqual({reason:'timeout',spoken:true});expect(h.onDone).toHaveBeenCalledOnce();h.speech.dispose();
+ });
  it('primes synchronously from the initial tap without starting the reply lifecycle',()=>{
   const h=harness();expect(h.speech.activate()).toBe(true);
   expect(h.last()).toMatchObject({lang:'tr-TR',volume:0});

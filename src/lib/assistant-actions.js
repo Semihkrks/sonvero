@@ -123,6 +123,15 @@ export function parseBusinessCommand(text,{accounts=[],draft={},remote={}}={}){
   const explicit=s.match(/(?:^|\s)([a-z]+)\s+hesab\w*/)?.[1];
   if(explicit){const patch=accountPatch(explicit,accounts);if(patch.accountIds.length)quick.accountIds=patch.accountIds;}
  }
+ if(/\b(?:iptal etme|silme|duzeltme|degistirme)\b/.test(s))return null;
+ const mutation=/\b(?:ekle|kaydet|isle|gir|olustur)(?:sene)?\b/.test(s)||/\b(?:iptal et|sil|kaldir|duzelt|degistir|guncelle)\b/.test(s);
+ const latest=/\btahsilat\w*\b/.test(s)&&!mutation&&(/\b(?:en son|son\s+(?:ekledigim|kaydettigim|girdigim|yaptigim|tahsilat\w*)|az once|demin|biraz once)\b/.test(s)||/\bhangi\b.*\b(?:ekledim|kaydettim|girdim)\b/.test(s)||remote.action==='latest_collection');
+ if(latest){
+  const useContext=/\b(?:onun|buna|bu musterinin|ayni musterinin|o musterinin)\b/.test(s);
+  const possessive=String(text).replace(/^.*hesab\p{L}*\s+/iu,'').match(/^(.+?)['’](?:nın|nin|nun|nün|ın|in|un|ün)\s+(?:en\s+)?son\s+tahsilat/iu)?.[1];
+  return {action:'latest_collection',scope:quick.scope,accountIds:quick.accountIds||[],...namedAccount,period:periodFor(s,quick),
+   customer:quick.customer||(possessive?cleanCustomer(possessive):null)||(useContext?draft.customer:null)||null,useContext};
+ }
  if(/\btahsilat\w*\b/.test(s)&&!/\b(?:iptal etme|silme|duzeltme|degistirme)\b/.test(s)){
   const cancel=/\b(?:iptal et|sil|kaldir)\b/.test(s),update=/\b(?:duzelt|degistir|guncelle)\b/.test(s);
   if(/\b(?:iptal et|sil|kaldir|duzelt|degistir|guncelle)\s+degil\b/.test(s))return null;
@@ -140,7 +149,7 @@ export function parseBusinessCommand(text,{accounts=[],draft={},remote={}}={}){
   const destination=[...assistantDestinations].sort((a,b)=>b[1].length-a[1].length).find(([,label])=>s.includes(fold(label)));
   if(destination)return {action:'navigate',route:destination[0]};
  }
- const collection=/tahsilat/.test(s)&&/\b(?:ekle|kaydet|isle|gir|olustur)\w*\b/.test(s);
+ const collection=/tahsilat/.test(s)&&/\b(?:ekle|kaydet|isle|gir|olustur)(?:sene)?\b/.test(s);
  const remoteSummary=remote.action==='summary'&&summaryMetrics.includes(remote.metric);
  const summary=!collection&&(/\b(?:toplam|ne kadar|ne topladik|ne toplamisiz|ozet|en cok borcu|net)\b/.test(s)||/satis\w*.*tahsilat\w*.*cikar/.test(s)||remoteSummary);
  if(summary){

@@ -5,7 +5,7 @@ vi.mock('../src/services/invoice-archive.js',()=>({fetchInvoicesSmart:vi.fn()}))
 vi.mock('../src/api/nilvera.js',()=>({EInvoiceWithAccount:{},EArchiveWithAccount:{}}));
 import {getSupabase} from '../src/lib/supabase.js';
 import {listCollections} from '../src/services/tahsilat-manager.js';
-import {findAssistantCollections,findAssistantCustomers,readAssistantSummary} from '../src/services/assistant-ledger.js';
+import {findAssistantCollections,findAssistantCustomers,readAssistantSummary,readLatestAssistantCollection} from '../src/services/assistant-ledger.js';
 
 const customer={account_id:'a',customer_key:'123',customer_tax_no:'123',customer_name:'Harmanda Tekstil'};
 const collection=(changes={})=>({...customer,id:'c1',version:3,amount:'0.10',currency:'TRY',date:'2026-10-17',created_at:'2026-10-17T12:00:00Z',cancelled_at:null,...changes});
@@ -16,6 +16,24 @@ beforeEach(()=>{
 });
 
 describe('account-scoped assistant reads',()=>{
+ it('reads the last inserted collection across authorized scopes even when backdated',async()=>{
+  listCollections.mockImplementation(async({accountId})=>accountId==='a'?[collection({id:'a-new',date:'2026-01-01',created_at:'2026-10-17T13:00:00Z'}),collection({id:'a-old',date:'2026-10-17',created_at:'2026-10-17T12:00:00Z'}),collection({id:'foreign',account_id:'c',created_at:'2026-10-18T12:00:00Z'})]:[collection({id:'b-last',account_id:'b',date:'2025-01-01',created_at:'2026-10-17T14:00:00Z'})]);
+  expect((await readLatestAssistantCollection({accountIds:['a','b','a']})).id).toBe('b-last');
+  expect(listCollections).toHaveBeenCalledTimes(2);expect(rpc).not.toHaveBeenCalled();
+ });
+ it('retains cancellation status in a last-added read rather than inventing a different last record',async()=>{
+  listCollections.mockResolvedValue([collection(),collection({id:'last-cancelled',created_at:'2026-10-17T13:00:00Z',cancelled_at:'2026-10-17T14:00:00Z'})]);
+  expect(await readLatestAssistantCollection({accountIds:['a']})).toMatchObject({id:'last-cancelled',cancelled_at:'2026-10-17T14:00:00Z'});
+  expect(listCollections).toHaveBeenCalledWith(expect.objectContaining({includeCancelled:true}));
+ });
+ it('fails closed when the last insertion time or amount cannot be verified',async()=>{
+  for(const changes of [{created_at:null},{created_at:'invalid'},{amount:null},{currency:'USD'}]){
+   listCollections.mockResolvedValue([collection(changes)]);
+   await expect(readLatestAssistantCollection({accountIds:['a']})).rejects.toThrow();
+  }
+  await expect(readLatestAssistantCollection({accountIds:[]})).rejects.toThrow(/hesap/);
+  listCollections.mockResolvedValue([]);expect(await readLatestAssistantCollection({accountIds:['a']})).toBeNull();
+ });
  it('uses actual exact customer identities and versioned active collections',async()=>{
   listCollections.mockResolvedValue([collection(),collection({id:'other-account',account_id:'b'}),collection({id:'other-customer',customer_key:'456',customer_tax_no:'456'}),collection({id:'cancelled',cancelled_at:'2026-10-17'}),collection({id:'old',date:'2026-10-16'})]);
   const rows=await findAssistantCollections({accountId:'a',customer,start:'2026-10-17',end:'2026-10-17'});

@@ -19,7 +19,8 @@ export function createMicrophoneLease({mediaDevices=globalThis.navigator?.mediaD
   }catch(error){users=Math.max(0,users-1);throw error;}
  }
  function release(){users=Math.max(0,users-1);if(users)return;stream?.getAudioTracks().forEach(track=>track.enabled=false);clearTimeout(timer);if(!idleMs)releaseAll();else timer=setTimeout(releaseAll,idleMs);}
- return {acquire,release,releaseAll};
+ function invalidate(value){if(stream===value)releaseAll();}
+ return {acquire,release,releaseAll,invalidate};
 }
 const sharedMicrophone=createMicrophoneLease();
 export function activateVoiceAudio(){
@@ -39,35 +40,38 @@ export function createVoiceSession({onAudio,onState,onError,onLevel,mediaDevices
  const stopLoop=()=>{cancelAnimationFrame(frame);frame=null;};
  const notifyError=error=>{if(closed)return;pause();onState('error');onError(error?.name==='NotAllowedError'?'Mikrofon izni gerekli. iPhone’da Safari site ayarlarından mikrofonu İzin Ver olarak ayarlayabilirsin.':error?.message||'Mikrofon açılamadı. Yeniden dokunarak deneyebilirsin.');};
  function disconnect(){source?.disconnect();source=null;analyser=null;}
- async function start(){
+ async function start({afterSpeech=false,refresh=false,recovering=false}={}){
   if(closed)return;
   if(opening)return opening;
   // Resume in the user's tap, before any permission/network await (important on iOS).
   let activation;
-  try{if(!Recorder||!Audio)throw new Error('Sesli asistan bu tarayıcıda desteklenmiyor.');if(!context||context.state==='closed')context=new Audio();activation=Promise.resolve(context.resume());activation.catch(()=>{});}catch(error){notifyError(error);return;}
+  try{if(!Recorder||!Audio)throw new Error('Sesli asistan bu tarayıcıda desteklenmiyor.');if(!context||context.state==='closed'){disconnect();context=new Audio();}if(afterSpeech)disconnect();activation=Promise.resolve(context.resume());activation.catch(()=>{});}catch(error){notifyError(error);return;}
   const requestedSequence=sequence;let recordingStarted=false;
   opening=(async()=>{
+   if(stream&&(refresh||stream.getAudioTracks().some(track=>track.muted===true))){disconnect();if(lease.invalidate)lease.invalidate(stream);else lease.releaseAll?.();if(leased){lease.release();leased=false;}stream=null;}
    if(!stream?.getAudioTracks().some(track=>track.readyState==='live')){
     onState('requesting');
     disconnect();if(leased){lease.release();leased=false;}
     stream=await lease.acquire();leased=true;
     if(closed){lease.release();leased=false;return;}
-    source=context.createMediaStreamSource(stream);analyser=context.createAnalyser();analyser.fftSize=1024;source.connect(analyser);
     for(const track of stream.getAudioTracks())track.onended=()=>{if(!closed&&!paused){pause();onState('idle');}};
    }
    await activation;if(closed||requestedSequence!==sequence)return;
    if(context.state==='suspended'||context.state==='interrupted')await context.resume();
-   recordingStarted=true;record();
+   if(closed||requestedSequence!==sequence)return;
+   if(context.state==='suspended'||context.state==='interrupted')throw new Error('Mikrofon ses oturumu açılamadı. Küreye dokunarak yeniden başlatabilirsin.');
+   if(!source||!analyser){source=context.createMediaStreamSource(stream);analyser=context.createAnalyser();analyser.fftSize=1024;source.connect(analyser);}
+   recordingStarted=true;record({recovering});
   })().catch(error=>{if(recordingStarted||requestedSequence===sequence)notifyError(error);}).finally(()=>{opening=null;});
   return opening;
  }
- function resume(){if(!closed)return start();}
- function record(){
+ function resume(options){if(!closed)return start(options);}
+ function record({recovering=false}={}){
   if(closed||!stream||!analyser||recorder?.state==='recording')return;
   paused=false;stream.getAudioTracks().forEach(track=>track.enabled=true);
   const mime=['audio/webm;codecs=opus','audio/mp4','audio/ogg;codecs=opus','audio/webm'].find(type=>Recorder.isTypeSupported(type));
   if(!mime)throw new Error('Ses kaydı biçimi desteklenmiyor.');
-  const current=++sequence,chunks=[];const started=performance.now();let lastSound=started,voiced=0,previous=started;
+  const current=++sequence,chunks=[];const started=performance.now();let lastSound=started,voiced=0,previous=started,mutedAt=null;
   const active=recorder=new Recorder(stream,{mimeType:mime});
   active.ondataavailable=event=>{if(event.data.size)chunks.push(event.data);};
   active.onstop=()=>{onLevel?.(0);if(closed||current!==sequence)return;if(voiced<250||!chunks.length){onState('idle');return;}onState('thinking');void onAudio(new Blob(chunks,{type:mime.split(';')[0]}));};
@@ -77,7 +81,15 @@ export function createVoiceSession({onAudio,onState,onError,onLevel,mediaDevices
   const tick=()=>{
    if(closed||paused||current!==sequence)return;
    if(context.state==='suspended'||context.state==='interrupted'){pause();onState('idle');return;}
-   const now=performance.now();analyser.getFloatTimeDomainData(samples);const rms=Math.sqrt(samples.reduce((sum,n)=>sum+n*n,0)/samples.length);
+   const now=performance.now();
+   // WebKit can leave a live track muted after speech synthesis. Silence alone is
+   // not a failure: retry only an explicit OS mute, and at most once per turn.
+   if(stream.getAudioTracks().some(track=>track.muted===true)){
+    mutedAt??=now;onLevel?.(0);
+    if(now-mutedAt>=500){if(recovering)notifyError(new Error('Mikrofon ses iletmiyor. Küreye dokunarak yeniden açabilirsin.'));else{pause();void start({refresh:true,recovering:true});}return;}
+    frame=requestAnimationFrame(tick);return;
+   }
+   mutedAt=null;analyser.getFloatTimeDomainData(samples);const rms=Math.sqrt(samples.reduce((sum,n)=>sum+n*n,0)/samples.length);
    const level=Math.min(1,rms*8),bands=[];
    if(analyser.getByteFrequencyData){
     analyser.getByteFrequencyData(frequencies);const limits=[100,300,700,1400,2600,4800],hz=(context.sampleRate||44100)/analyser.fftSize;

@@ -1,8 +1,25 @@
+/** Keep device speech brief; the complete response remains in the conversation. */
+export function spokenReply(text){
+ const value=String(text||'').replace(/Kayıt [a-f\d-]{32,36}/gi,'Kayıt kimliği ekranda').replace(/\s+/g,' ').trim();
+ // A financial preview must keep the account, customer, amount and approval instruction together.
+ // Never clip it at a character/word boundary, especially in an amount or date.
+ if(/onaylıyorum|onayla|onayına/i.test(value))return value;
+ const sentences=value.split(/(?<=[.!?])\s+/u);
+ if(sentences.length<=3&&value.length<=420)return value;
+ const selected=[];let length=0;
+ for(const sentence of sentences){
+  if(selected.length>=3||(selected.length&&length+sentence.length>420))break;
+  selected.push(sentence);length+=sentence.length+1;
+ }
+ // A single unbroken sentence stays intact: cutting it could change a financial fact.
+ return selected.length<sentences.length?selected.join(' ')+' Ayrıntılar ekranda.':value;
+}
+
 /** Device/browser speech only: no API key, paid provider, or audio request. */
 export function createAssistantSpeech({
  onSpeaking,onDone,onUnavailable,
  synthesis=globalThis.speechSynthesis,Utterance=globalThis.SpeechSynthesisUtterance,
- voiceWaitMs=200,startTimeoutMs=4000,maxSpeechMs=45000,
+ voiceWaitMs=200,startTimeoutMs=2000,maxSpeechMs=20000,
 }={}){
  let current=null,disposed=false,prime=null,primeTimer=null;
  const supported=()=>!disposed&&typeof synthesis?.speak==='function'&&typeof Utterance==='function';
@@ -40,7 +57,8 @@ export function createAssistantSpeech({
     reply.started=true;clearTimeout(reply.timer);
     reply.timer=setTimeout(()=>finish(reply,'timeout',true),maxSpeechMs);
    };
-   utterance.onend=()=>finish(reply,'ended');
+   // Explicitly release the browser's playback queue before the microphone is resumed.
+   utterance.onend=()=>finish(reply,'ended',true);
    utterance.onerror=()=>finish(reply,'error',true);
    // A refusal can be silent (including iOS without a user gesture). Never leave the mic paused.
    reply.timer=setTimeout(()=>finish(reply,'timeout',true),startTimeoutMs);

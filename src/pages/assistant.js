@@ -7,7 +7,7 @@ import {assistantContext} from '../services/assistant-context.js';
 import {parseQuickIntent,nextQuestion,monthRange,matchSpokenAccounts} from '../lib/assistant-intent.js';
 import {createBusinessAssistant} from '../services/assistant-business.js';
 import {createVoiceSession} from '../services/voice-session.js';
-import {createAssistantSpeech} from '../services/assistant-speech.js';
+import {createAssistantSpeech,spokenReply} from '../services/assistant-speech.js';
 import {dialogueCommand,requestedFormat,formatLabel} from '../lib/assistant-dialogue.js';
 import {sonaiMark} from '../components/sonai-mark.js';
 
@@ -16,7 +16,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  const accounts=await listAccounts();const page=document.createElement('div');page.className='sv-assistant';
  let disposed=false,refreshBusy=false,scanVersion=0,groups=[],snapshot=null;
  const typeTimers=new Set(),conversation=[];let awaiting=null,draft={},busy=false,preview=null,voiceActive=false,commandSeq=0,chosenGroups=null,previewVersion=0;
- let pendingSpeech='',speechTimer=null,speechTransition=false;
+ let pendingSpeech='',speechTimer=null,speechResumeTimer=null,speechTransition=false,voiceRecoveryNeeded=false;
  const speech=providedSpeech||createAssistantSpeech({onSpeaking:pauseForSpeech,onDone:resumeAfterSpeech});
  const defaults=()=>({scope:context.scope||'selected',year:new Date().getFullYear(),layout:'separate',format:'both',accountIds:context.accountIds||context.selected?.accountIds||accounts.map(a=>a.id),direction:context.direction||context.selected?.direction,withCollections:context.withCollections??context.selected?.withCollections});
  page.classList.add('sv-chat-app');if(compact)page.classList.add('sv-chat-compact');
@@ -47,9 +47,9 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  const delivery=document.createElement('div');delivery.className='sonai-delivery';delivery.setAttribute('role','status');delivery.hidden=true;formatChoices.after(delivery);
  for(const [value,label] of [['excel','Excel'],['image','Fotoğraf'],['both','İkisi de']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.format=value;button.onclick=()=>{if(!busy&&!preview?.sending)void changeFormat(value);};formatChoices.append(button);}
  const live=$('.sv-live-transcript');let liveHeard='',dictateTimer=null,targetLevel=0,displayLevel=0,levelRaf=null;
- const targetBands=Array(5).fill(0),displayBands=Array(5).fill(0);
+ let soundUntil=0;page.dataset.sound='quiet';
  const pauseButton=document.createElement('button');pauseButton.className='sonai-pause';pauseButton.type='button';pauseButton.textContent='Dinlemeyi durdur';pauseButton.hidden=true;
- pauseButton.onclick=()=>{voiceActive=false;pendingSpeech='';speech.stop();voice.pause();voiceState('idle');};orbit.append(pauseButton);
+ pauseButton.onclick=()=>{if(speech.isSpeaking()||page.dataset.voice==='speaking'){void startListening();return;}voiceActive=false;pendingSpeech='';speech.stop();voice.pause();voiceState('idle');};orbit.append(pauseButton);
  const symbol=document.createElement('span');symbol.className='sonai-orb-symbol';symbol.innerHTML=sonaiMark;mic.prepend(symbol);
  const reduceMotion=()=>window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
  function paintLive(text,{animate=true}={}){
@@ -74,34 +74,41 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   displayLevel+=(targetLevel-displayLevel)*(reduceMotion()?1:.18);
   if(Math.abs(targetLevel-displayLevel)<0.004)displayLevel=targetLevel;
   page.style.setProperty('--sv-voice-level',String(displayLevel));
-  for(let band=0;band<5;band++){displayBands[band]+=(targetBands[band]-displayBands[band])*(reduceMotion()?1:.28);if(Math.abs(displayBands[band]-targetBands[band])<.004)displayBands[band]=targetBands[band];page.style.setProperty('--sv-voice-band-'+(band+1),String(displayBands[band]));}
-  if(targetLevel>0.002||displayLevel>0.002||displayBands.some(value=>value>0.002))levelRaf=requestAnimationFrame(pumpLevel);
+  if(targetLevel>0.002||displayLevel>0.002)levelRaf=requestAnimationFrame(pumpLevel);
   else{page.style.setProperty('--sv-voice-level','0');levelRaf=null;}
  }
  function voiceState(state){
   if(disposed)return;
-  page.dataset.voice=state;mic.setAttribute('aria-pressed',String(state==='listening'));mic.querySelector('.sv-mic-label').textContent=state==='listening'?'Dinleniyor':'Dinlemeye başla';
-  mic.setAttribute('aria-label',state==='listening'?'Konuşmayı tamamla':state==='speaking'?'Yanıtı kes ve konuş':'SonAI ile konuş');pauseButton.hidden=!['listening','speaking'].includes(state);pauseButton.textContent=state==='speaking'?'Sesli yanıtı ve dinlemeyi durdur':'Dinlemeyi durdur';
+  page.dataset.voice=state;page.dataset.sound='quiet';soundUntil=0;mic.setAttribute('aria-pressed',String(state==='listening'));mic.querySelector('.sv-mic-label').textContent=state==='listening'?'Dinleniyor':'Dinlemeye başla';
+  mic.setAttribute('aria-label',state==='listening'?'Konuşmayı tamamla':state==='speaking'?'Yanıtı kes ve konuş':'SonAI ile konuş');pauseButton.hidden=!['listening','speaking'].includes(state);pauseButton.textContent=state==='speaking'?'Araya gir':'Dinlemeyi durdur';
   if(state==='listening')liveHeard='';
-  if(state!=='listening'){targetLevel=0;targetBands.fill(0);if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);}
+  if(state!=='listening'){targetLevel=0;if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);}
   if(!busy)reply.textContent={listening:'Dinliyorum · Bitirince göndermek için dokun',thinking:'Söylediklerini anlıyorum…',speaking:'Yanıtlıyorum · Araya girmek için dokun',idle:'Konuşmak için dokun',requesting:'Mikrofon iznini bekliyorum…',error:'Tekrar denemek için dokun'}[state]||'';
  }
  const voice=createVoiceSession({
   audioContext,
   onAudio:async blob=>{if(disposed||speech.isSpeaking())return;const heard=liveHeard;try{await interpret({mime:blob.type,base64:await blobBase64(blob)},{voice:true,heard});}catch(e){message(e.message,'assistant',{instant:true});}finally{continueVoice();}},
   onState:state=>{if(!disposed)voiceState(state);},onError:text=>{voiceActive=false;if(!disposed)message(text,'assistant',{instant:true});},
-  onLevel:(level,bands=[])=>{targetLevel=Math.min(1,Number(level)||0);for(let band=0;band<5;band++)targetBands[band]=Math.min(1,Math.max(0,Number(bands[band]??targetLevel)||0));if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);},
+  onLevel:level=>{targetLevel=Math.min(1,Math.max(0,Number(level)||0));const now=performance.now();if(targetLevel>=.144)soundUntil=now+180;const sound=page.dataset.voice==='listening'&&now<soundUntil?'active':'quiet';if(page.dataset.sound!==sound)page.dataset.sound=sound;if(!levelRaf)levelRaf=requestAnimationFrame(pumpLevel);},
  });
- function pauseForSpeech(){if(disposed)return;voice.pause();voiceState('speaking');}
- function resumeAfterSpeech(){if(!speechTransition)continueVoice();}
+ function clearSpeechResume(){clearTimeout(speechResumeTimer);speechResumeTimer=null;}
+ function pauseForSpeech(){if(disposed)return;clearSpeechResume();voiceRecoveryNeeded=true;voice.pause();voiceState('speaking');}
+ function resumeAfterSpeech(){
+  if(disposed||speechTransition)return;
+  clearSpeechResume();
+  // WebKit can retain its playback audio route briefly after synthesis ends. Give it
+  // time to release that route; an intentional tap still starts capture immediately.
+  speechResumeTimer=setTimeout(()=>{speechResumeTimer=null;continueVoice();},180);
+ }
+ function resumeVoice(){const afterSpeech=voiceRecoveryNeeded;voiceRecoveryNeeded=false;void voice.resume({afterSpeech});}
  function continueVoice(){
-  if(disposed||busy||speechTransition)return;
+  if(disposed||busy||speechTransition||speechResumeTimer!==null)return;
   if(pendingSpeech&&voiceActive){const text=pendingSpeech;pendingSpeech='';clearTimeout(speechTimer);speechTransition=true;
-   try{void speech.speak(text.replace(/Kayıt [a-f\d-]{32,36}/gi,'Kayıt kimliği ekranda'));}finally{speechTransition=false;}
-   if(!speech.isSpeaking()&&voiceActive)void voice.resume();return;
+   try{void speech.speak(spokenReply(text));}finally{speechTransition=false;}
+   if(!speech.isSpeaking()&&voiceActive&&speechResumeTimer===null)resumeVoice();return;
   }
   if(speech.isSpeaking())return;
-  if(voiceActive)void voice.resume();else voiceState('idle');
+  if(voiceActive)resumeVoice();else voiceState('idle');
  }
  function message(text,role='assistant',{instant=false}={}){
   if(role==='assistant'&&voiceActive){pendingSpeech=text;clearTimeout(speechTimer);speechTimer=setTimeout(continueVoice,0);}
@@ -164,7 +171,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   if(preview?.sending||preview?.formatLocked){message('Bu gönderim zaten başladı. Önce aynı gönderimin sonucunu doğrulayalım; yeni biçim için yeni bir rapor hazırlayabiliriz.');return;}
   draft.format=format;updateFormats();if(chosenGroups&&snapshot)await preparePreview(chosenGroups);
  }
- async function handleDialogue(text){
+ async function handleDialogue(text,modelReply){
   const command=dialogueCommand(text,{awaiting,candidates:!preview&&snapshot?groups:[],hasPreview:!!preview});
   if(!command)return false;
   if(command.action==='reset'){reset();return true;}
@@ -173,7 +180,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
    else{invalidate();message('Tamam, iptal ettim. Ne yapmak istersin?');}
    return true;
   }
-  if(command.action==='chat'){message(command.reply);return true;}
+  if(command.action==='chat'){message(typeof modelReply==='string'&&modelReply.trim()?modelReply.trim():command.reply);return true;}
   if(command.action==='needs_report'){if(command.format)draft.format=command.format;message(groups.length>1?'Önce müşteriyi seçelim. “İlki olsun” veya “ikincisi olsun” diyebilirsin.':'Önce raporu hazırlayalım. Hangi müşterinin, hangi aydaki carisini göndereyim?');return true;}
   if(command.action==='choose'){
    if(command.format)draft.format=command.format;
@@ -209,7 +216,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
    }
    message(transcript,'user',{instant:!audio});
    if(await business.handle(transcript,{draft,remote:result?.intent||{}}))return;
-   if(await handleDialogue(transcript))return;
+   if(await handleDialogue(transcript,result?.reply))return;
    const quick=parseQuickIntent(transcript,{awaiting,accounts,draft});
    if(!result&&!quick.handled){
     try{result=await assistantRequest('/interpret',{text:transcript,context:{draft,awaiting,business:business.getContext(),remembered:business.getMemory(),accounts:accounts.map(a=>({id:a.id,name:a.name})),route:context.route,conversation:conversation.slice(-8)}});}
@@ -233,8 +240,16 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
  $('#assistantCommand').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void interpret();}};
  function reset(){commandSeq++;speechTransition=true;speech.stop();speechTransition=false;pendingSpeech='';business.reset();invalidate();conversation.length=0;draft=defaults();sync();$('#assistantMessages').replaceChildren();$('#assistantChoices').replaceChildren();$('#assistantCommand').value='';paintLive('');awaiting=null;setBusy(false);message('Merhaba. Hesap ve müşteri adını söyle; tahsilat ekleyebilir, düzeltebilir veya iptal edebilir, bakiye ve hesap özeti sorgulayabilir, rapor hazırlayabilirim.');}
  $('#assistantReset').onclick=()=>{voice.pause();reset();continueVoice();};
- $('#assistantMic').onclick=async()=>{if(busy)return;if(page.dataset.voice==='listening'){voice.finish();return;}voiceActive=true;pendingSpeech='';speechTransition=true;speech.stop();speech.activate();speechTransition=false;await voice.start();};
- const visibility=()=>{if(document.hidden){voiceActive=false;pendingSpeech='';speech.stop();voice.pause();voiceState('idle');}};document.addEventListener('visibilitychange',visibility);
+ async function startListening({activateSpeech=false}={}){
+  if(disposed||busy)return;
+  voiceActive=true;pendingSpeech='';clearTimeout(speechTimer);clearSpeechResume();speechTransition=true;
+  try{speech.stop();if(activateSpeech)speech.activate();}finally{speechTransition=false;}
+  // start() resumes the audio context synchronously in this tap. Do not queue a silent
+  // TTS primer here: interrupting should give the audio route straight back to the mic.
+  const afterSpeech=voiceRecoveryNeeded;voiceRecoveryNeeded=false;await voice.start({afterSpeech});
+ }
+ $('#assistantMic').onclick=async()=>{if(busy)return;if(page.dataset.voice==='listening'){voice.finish();return;}await startListening({activateSpeech:!speech.isSpeaking()&&!voiceRecoveryNeeded});};
+ const visibility=()=>{if(document.hidden){voiceActive=false;pendingSpeech='';speech.stop();clearSpeechResume();voice.pause();voiceState('idle');}};document.addEventListener('visibilitychange',visibility);
  form.onsubmit=async event=>{
   event.preventDefault();if(busy)return;invalidate();const version=scanVersion;
   const selected=field('scope').value==='all'?accounts:accounts.filter(a=>[...form.querySelectorAll('[name=account]:checked')].some(cb=>cb.value===a.id));
@@ -265,5 +280,5 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   }catch(error){if(!disposed){$('#assistantStatusBadge').textContent=error.message;page.dataset.connection='error';}}finally{refreshBusy=false;}
  }
  reset();voiceState('idle');void refresh();
- return {page,title:'SonAI',pauseForSpeech,resumeAfterSpeech,cleanup(){disposed=true;business.reset();previewVersion++;voiceActive=false;speech.dispose();voice.close();clearTimeout(speechTimer);clearTimeout(dictateTimer);if(levelRaf)cancelAnimationFrame(levelRaf);document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
+ return {page,title:'SonAI',pauseForSpeech,resumeAfterSpeech,cleanup(){disposed=true;business.reset();previewVersion++;voiceActive=false;speech.dispose();voice.close();clearTimeout(speechTimer);clearTimeout(speechResumeTimer);clearTimeout(dictateTimer);if(levelRaf)cancelAnimationFrame(levelRaf);document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
 }

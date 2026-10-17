@@ -1,5 +1,13 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 17 Ekim — konuşma sırası, son tahsilat sorgusu ve küre düzeltmesi
+
+- Kullanıcı kürede M biçimi oluşturan çizgileri, sesli yanıt sonrası mikrofonun ses alamamasını ve son tahsilat sorusunun yeni kayıt isteğine dönüşmesini bildirdi; düzeltme ve doğrudan push/yayın istedi. ECC `make-interfaces-feel-better` rehberiyle çakışan eski çizgi kuralları temizlendi. Sessizlikte eşit kısa çizgiler, konuşma algılanınca frekanstan bağımsız farklı ritimler, düşünürken dönen noktalar korunur; azaltılmış hareket tercihi desteklenir.
+- TTS bittiğinde oynatma kuyruğu kapanır, 180 ms sonra sağlıklı mikrofonun ses grafiği yeniden kurulur. OS tarafından muted kalan canlı track yenilenir; sonradan oluşan mute bir kez kurtarılır, kalıcı başarısızlık açıkça gösterilir. Normal sessizlik yeniden izin istemez. Kapalı AudioContext grafiği yeniden bağlanır. Küre veya “Araya gir” konuşmayı kesip dinlemeye döner; keserken sessiz TTS yeniden başlatılmaz. Geç gelen callback ve kapanış korumaları testlidir.
+- “En son eklediğim tahsilat ne?” ve “Hangi tahsilatı ekledim?” gerçek kaydı eklenme zamanına göre okur; geçmiş zamanlar oluşturma komutu sayılmaz. Hesap/müşteri kapsamı, iptal bilgisi, belirsiz hesap seçimi ve onay bekleyen taslağın korunması testlidir. Sabit örnek tutarlar kaldırıldı; sesli sohbetin model yanıtı hazır tanıtımla değiştirilmez. Genel cevaplar kısa okunur; finansal onay ayrıntıları tam korunur.
+- Doğrulama: `npm run check` 30 dosya/229 test, typecheck ve build başarılı; 15 servis testi ve 10 gerçek Chromium senaryosu başarılı. Lint 0 hata/4 mevcut uyarı; diff kontrolü temiz. Mobil/açık/koyu ekran görüntüleri incelendi. Kod incelemesinde doğrulanmış engelleyici hata bulunmadı. iPhone donanımı ve girişli canlı finansal işlem test edilmedi; simülasyon gerçek cihazdaki düzelmeyi garanti etmez.
+- Oracle servisi `voice-turn-20261017` imajıyla güncellendi; önceki imaj/kaynaklar `before-voice-turn-20261017` olarak saklandı. Çalışan kaynak hash'leri yerelle aynı, servis active/running ve NRestarts=0; HTTPS health 200, kimliksiz status 401, WhatsApp ready. Ortam/ayarlar/oturum korundu, gerçek mesaj veya tahsilat oluşturulmadı. Frontend aynı değişikliklerle GitHub `main` üzerinden Vercel'e yayınlanıyor; kullanıcıya sonuç bildirmeden deployment durumu kontrol edilir.
+
 ## 17 Ekim — SonAI sunucusu da yayınlandı
 
 - Kullanıcının açık yayın talebiyle `864ed98` sürümünün `server.mjs` ve `validation.mjs` dosyaları Oracle asistan servisine dağıtıldı. Önceki kaynaklar `/home/opc/sonvera/releases/before-864ed98/`, önceki container imajı `localhost/sonvera-assistant:before-864ed98` olarak saklandı. Yeni imaj `localhost/sonvera-assistant:release-864ed98`; çalışan `:1` etiketi bu imaja bağlı.

@@ -22,7 +22,7 @@ it('pauses the microphone for a spoken response, ignores echoed audio, and resum
  const t=await setup();t.send('nasılsın');await vi.waitFor(()=>expect(t.utterances.filter(u=>u.text.trim())).toHaveLength(1));
  const reply=t.utterances.find(u=>u.text.trim());reply.onstart();expect(app.page.dataset.voice).toBe('speaking');expect(h.resume).not.toHaveBeenCalled();
  await h.callbacks.onAudio(new Blob(['echo'],{type:'audio/mp4'}));expect(blobBase64).not.toHaveBeenCalled();expect(assistantRequest.mock.calls.some(([url])=>url==='/interpret')).toBe(false);
- reply.onend();expect(h.resume).toHaveBeenCalled();
+ reply.onend();expect(h.resume).not.toHaveBeenCalled();await vi.waitFor(()=>expect(h.resume).toHaveBeenCalledWith({afterSpeech:true}));
 });
 it('cancels spoken audio on hide without restarting the microphone',async()=>{
  const t=await setup();t.send('nasılsın');await vi.waitFor(()=>expect(t.utterances.filter(u=>u.text.trim())).toHaveLength(1));
@@ -32,4 +32,22 @@ it('cancels spoken audio on hide without restarting the microphone',async()=>{
 it('supports tapping the orb to interrupt a reply and closes without late microphone resumption',async()=>{
  const t=await setup();t.send('nasılsın');await vi.waitFor(()=>expect(t.utterances.filter(u=>u.text.trim())).toHaveLength(1));
  app.page.querySelector('#assistantMic').click();expect(h.start).toHaveBeenCalledTimes(2);h.resume.mockClear();app.cleanup();expect(h.resume).not.toHaveBeenCalled();expect(h.close).toHaveBeenCalled();
+});
+it('offers an explicit interrupt button that stops speech and immediately gives the microphone back',async()=>{
+ const t=await setup();t.send('nasılsın');await vi.waitFor(()=>expect(t.utterances.filter(u=>u.text.trim())).toHaveLength(1));
+ const utterance=t.utterances.find(u=>u.text.trim()),lateEnd=utterance.onend;utterance.onstart();
+ const button=app.page.querySelector('.sonai-pause');expect(button.hidden).toBe(false);expect(button.textContent).toBe('Araya gir');
+ const queued=t.utterances.length;h.resume.mockClear();button.click();
+ expect(h.start).toHaveBeenCalledTimes(2);expect(h.start).toHaveBeenLastCalledWith({afterSpeech:true});expect(t.utterances).toHaveLength(queued);expect(t.synthesis.cancel).toHaveBeenCalled();
+ lateEnd();expect(h.resume).not.toHaveBeenCalled();
+});
+it('cancels the delayed automatic resume when the panel closes immediately after playback ends',async()=>{
+ const t=await setup();t.send('nasılsın');await vi.waitFor(()=>expect(t.utterances.filter(u=>u.text.trim())).toHaveLength(1));
+ const utterance=t.utterances.find(u=>u.text.trim());utterance.onstart();h.resume.mockClear();utterance.onend();app.cleanup();
+ await new Promise(resolve=>setTimeout(resolve,220));expect(h.resume).not.toHaveBeenCalled();
+});
+it('speaks the contextual model greeting instead of replacing it with a canned introduction',async()=>{
+ const t=await setup();assistantRequest.mockImplementation(async endpoint=>endpoint==='/interpret'?{transcript:'merhaba',reply:'Merhaba, kaldığımız yerden devam edebiliriz.',intent:{}}:{connection:'ready'});
+ blobBase64.mockResolvedValue('YXVkaW8=');await h.callbacks.onAudio(new Blob(['audio'],{type:'audio/mp4'}));
+ await vi.waitFor(()=>expect(t.utterances.filter(u=>u.text.trim()).map(u=>u.text)).toEqual(['Merhaba, kaldığımız yerden devam edebiliriz.']));
 });
