@@ -1,5 +1,12 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 17 Ekim — SonAI sunucusu da yayınlandı
+
+- Kullanıcının açık yayın talebiyle `864ed98` sürümünün `server.mjs` ve `validation.mjs` dosyaları Oracle asistan servisine dağıtıldı. Önceki kaynaklar `/home/opc/sonvera/releases/before-864ed98/`, önceki container imajı `localhost/sonvera-assistant:before-864ed98` olarak saklandı. Yeni imaj `localhost/sonvera-assistant:release-864ed98`; çalışan `:1` etiketi bu imaja bağlı.
+- Mevcut systemd birimi, özel ayarlar, ortam dosyaları, veri dizini ve WhatsApp oturumu korundu. Yeniden başlatmadan önce aktif gönderim sayısı 0 doğrulandı. Finansal kayıt veya gerçek mesaj oluşturulmadı.
+- 14 servis testi başarılı; yeni imajda iki dosyanın sözdizimi ve SHA256 eşitliği doğrulandı. Yayın sonrası servis active/running, NRestarts=0, HTTPS `/health` 200, kimliksiz `/status` 401, `sonvera.com.tr` CORS ön kontrolü 204 ve WhatsApp runtime `ready` doğrulandı. Frontend önceki GitHub push'uyla Vercel'de tamamlandı; canlı manifest/yeni ikonlar 200.
+- Aşağıdaki ayrı sunucunun yayın beklediği notu giderildi. Yetkili canlı müşteriyle uçtan uca işlem ve fiziksel iPhone/PWA mikrofon testi yapılmadı; bunlar hâlâ doğrulanmamış durumda.
+
 ## 17 Ekim — SonAI bağlamı ve PWA kurulumu
 
 - SonAI gerçek müşteri seçildikten sonra aynı açık sohbette hesap/müşteri/dönem bağlamını kullanır. “Harmanda müşterimiz” ardından “buna 2k daha ekle” yeni 2.000 TL tahsilat taslağıdır; tekrar kimlik sormaz, kaydetmeden onay ister. Belirsiz `2*k` tutarında yalnız tutar sorulur. Panel kapanınca/yeni sohbet komutunda bağlam temizlenir.
