@@ -145,3 +145,88 @@ it('does not turn an extra-payment command into a change to an unconfirmed draft
  const h=harness();await h.assistant.handle(create);await h.assistant.handle('buna 2 bin daha ekle');
  expect(h.assistant.getContext().amount).toBe('60000.00');expect(h.save).not.toHaveBeenCalled();expect(h.update).not.toHaveBeenCalled();
 });
+it('edits the latest persisted account record with a polite complete request',async()=>{
+ const h=harness();h.findCollections.mockResolvedValue([{...record,id:'old',created_at:'2026-10-16T12:00:00Z'},record]);
+ await h.assistant.handle('serkan bingöldeki son eklediğim tahsilatın tutarı yanlıştı onu 75 bin olarak düzeltir misin');
+ expect(h.assistant.getContext()).toMatchObject({action:'update_collection',account:'Serkan Bingöl',amount:'75000.00',phase:'confirm'});
+ expect(h.findCollections).toHaveBeenCalledWith(expect.objectContaining({accountId:'a',customer:null}));
+ expect(h.update).not.toHaveBeenCalled();await h.assistant.handle('onaylıyorum');expect(h.update).toHaveBeenCalledWith('r1','a',expect.objectContaining({amount:'75000.00',version:3}));
+});
+it('advances from edit field choice and preserves amount plus date in the same answer',async()=>{
+ const h=harness();await h.assistant.handle('Serkan Bingöl hesabındaki Harmanda tahsilatını düzelt');
+ expect(h.assistant.getContext().phase).toBe('edit');await h.assistant.handle('tutar');expect(h.assistant.getContext().phase).toBe('amount');
+ await h.assistant.handle('75bin ve dün');expect(h.assistant.getContext()).toMatchObject({amount:'75000.00',date:'2026-10-16',phase:'confirm'});
+ await h.assistant.handle('onaylıyorum');expect(h.update.mock.calls[0][2]).toMatchObject({amount:'75000.00',date:'2026-10-16'});
+});
+it('selects a generic historical collection before asking its edit field',async()=>{
+ const h=harness();h.findCollections.mockResolvedValue([record,{...record,id:'r2'}]);await h.assistant.handle('Serkan Bingöl tahsilat düzelt');
+ expect(h.assistant.getContext().phase).toBe('choose_record');await h.assistant.handle('ikincisi');await h.assistant.handle('tarih');
+ expect(h.assistant.getContext().phase).toBe('date');await h.assistant.handle('dün');await h.assistant.handle('onaylıyorum');expect(h.update.mock.calls[0]).toMatchObject(['r2','a',expect.objectContaining({date:'2026-10-16',amount:record.amount})]);
+});
+it('keeps early edit values supplied alongside a record choice',async()=>{
+ const h=harness();h.findCollections.mockResolvedValue([record,{...record,id:'r2'}]);await h.assistant.handle('Serkan Bingöl tahsilat düzelt');await h.assistant.handle('ikincisi tutarı 75 bin tarihi dün olsun');
+ expect(h.assistant.getContext()).toMatchObject({amount:'75000.00',date:'2026-10-16',phase:'confirm'});await h.assistant.handle('onaylıyorum');expect(h.update.mock.calls[0][0]).toBe('r2');
+});
+it('does not consume a new report as pending customer or amount text',async()=>{
+ const h=harness();await h.assistant.handle('Serkan Bingöl tahsilat ekle');
+ expect(await h.assistant.handle('Ayşe Karabulut hesabından 9. ay satış alış tahsilat dahil Harmanda müşterisinin excelini ver')).toBe(false);
+ expect(h.assistant.getContext()).toBeNull();expect(h.save).not.toHaveBeenCalled();
+});
+it('preserves amount and date supplied while answering the account question',async()=>{
+ const h=harness();await h.assistant.handle('Harmanda tahsilatını düzelt');await h.assistant.handle('Serkan Bingöl tutarı 75 bin tarihi dün olsun');
+ expect(h.assistant.getContext()).toMatchObject({account:'Serkan Bingöl',amount:'75000.00',date:'2026-10-16',phase:'confirm'});
+});
+it('does not redirect an explicit other-account edit to the last session record',async()=>{
+ const h=harness();await h.assistant.handle(create);await h.assistant.handle('onaylıyorum');h.findCollections.mockResolvedValue([{...record,id:'b1',account_id:'b'}]);
+ await h.assistant.handle('Mustafa Yılmaz hesabındaki son eklediğim tahsilatı 75 bin olarak düzeltir misin');
+ expect(h.assistant.getContext()).toMatchObject({account:'Mustafa Yılmaz',amount:'75000.00',phase:'confirm'});await h.assistant.handle('onaylıyorum');expect(h.update.mock.calls[0].slice(0,2)).toEqual(['b1','b']);
+});
+it('retains an early field selection while a historical record is being chosen',async()=>{
+ const h=harness();h.findCollections.mockResolvedValue([record,{...record,id:'r2'}]);await h.assistant.handle('Serkan Bingöl tahsilat düzelt');await h.assistant.handle('tutar');
+ expect(h.assistant.getContext().phase).toBe('choose_record');await h.assistant.handle('ikinci 75bin dün');expect(h.assistant.getContext()).toMatchObject({amount:'75000.00',date:'2026-10-16',phase:'confirm'});
+});
+it('does not clear an invalid amount just because the same answer contains a valid date',async()=>{
+ const h=harness();await h.assistant.handle('Serkan Bingöl hesabındaki Harmanda tahsilatını düzelt');await h.assistant.handle('tutarı 60.50 tarihi dün olsun');
+ expect(h.assistant.getContext().phase).toBe('amount');await h.assistant.handle('onaylıyorum');expect(h.update).not.toHaveBeenCalled();await h.assistant.handle('75bin.');
+ expect(h.assistant.getContext()).toMatchObject({amount:'75000.00',date:'2026-10-16',phase:'confirm'});
+});
+it('uses only explicit latest order, keeping a generic edit ambiguous',async()=>{
+ const h=harness();h.findCollections.mockResolvedValue([{...record,id:'backdated',date:'2026-01-01',created_at:'2026-10-17T11:00:00Z'},record]);
+ await h.assistant.handle('Serkan Bingöl son tahsilatı 75 bin olarak günceller misin');await h.assistant.handle('onaylıyorum');expect(h.update.mock.calls[0][0]).toBe('backdated');
+});
+it('applies account and amount corrections together before an unsaved collection',async()=>{
+ const h=harness();await h.assistant.handle(create);await h.assistant.handle('Mustafa Yılmaz hesabı olsun tutarı 75 bin tarihi dün olsun');
+ expect(h.assistant.getContext()).toMatchObject({account:'Mustafa Yılmaz',amount:'75000.00',date:'2026-10-16',phase:'confirm'});await h.assistant.handle('onaylıyorum');expect(h.save.mock.calls[0][0]).toMatchObject({account_id:'b',amount:'75000.00'});
+});
+it('preserves all values when correcting a customer and its collection fields',async()=>{
+ const h=harness();await h.assistant.handle(create);await h.assistant.handle('müşteri Harmanda değil Cihan olsun tutarı 75 bin tarihi dün olsun');
+ expect(h.findCustomers).toHaveBeenLastCalledWith('a','cihan');expect(h.assistant.getContext()).toMatchObject({amount:'75000.00',date:'2026-10-16',phase:'confirm'});
+});
+it('never previews an invalid initial edit amount as the old persisted value',async()=>{
+ const h=harness();await h.assistant.handle('Serkan Bingöl hesabındaki son tahsilatı 60.50 ve dün olarak düzeltir misin');
+ expect(h.assistant.getContext().phase).toBe('amount');await h.assistant.handle('onaylıyorum');expect(h.update).not.toHaveBeenCalled();
+});
+it('scopes latest edits to an explicitly named customer instead of the whole account',async()=>{
+ const h=harness();await h.assistant.handle('Serkan Bingöl hesabındaki Harmanda müşterisinin son tahsilatını 75 bin olarak düzeltir misin');
+ expect(h.findCustomers).toHaveBeenCalledWith('a','harmanda');expect(h.findCollections).toHaveBeenCalledWith(expect.objectContaining({customer:expect.objectContaining({tax:customer.tax})}));
+});
+it('does not turn a bare numeric record choice into an edit amount',async()=>{
+ const h=harness();h.findCollections.mockResolvedValue([record,{...record,id:'r2'}]);await h.assistant.handle('Serkan Bingöl tahsilat düzelt');await h.assistant.handle('2');
+ expect(h.assistant.getContext()).toMatchObject({phase:'edit'});expect(h.assistant.getContext().amount).toBeUndefined();expect(h.update).not.toHaveBeenCalled();
+});
+it('does not turn a customer VKN choice into the collection amount',async()=>{
+ const h=harness();h.findCustomers.mockResolvedValue([customer,{name:'Harmanda İplik',tax:'9876543210'}]);await h.assistant.handle('bugün Serkan Bingöl hesabındaki Harmanda müşterisine 60 bin tahsilat ekle');await h.assistant.handle(customer.tax);
+ expect(h.assistant.getContext()).toMatchObject({amount:'60000.00',phase:'confirm'});await h.assistant.handle('onaylıyorum');expect(h.save.mock.calls[0][0].amount).toBe('60000.00');
+});
+it('does not interpret a numbered-month summary query as a pending draft amount',async()=>{
+ const h=harness();await h.assistant.handle(create);await h.assistant.handle('9. ay toplam tahsilat ne kadar?');
+ expect(h.assistant.getContext()).toMatchObject({amount:'60000.00',phase:'confirm'});expect(h.save).not.toHaveBeenCalled();
+});
+it('resolves persisted latest from the current account context instead of an older session write',async()=>{
+ const h=harness();await h.assistant.handle(create);await h.assistant.handle('onaylıyorum');await h.assistant.handle('Mustafa Yılmaz hesabındaki Harmanda bakiyesi ne?');h.findCollections.mockResolvedValue([{...record,id:'b1',account_id:'b'}]);
+ await h.assistant.handle('son eklediğim tahsilatı 75 bin olarak düzeltir misin');expect(h.findCollections).toHaveBeenLastCalledWith(expect.objectContaining({accountId:'b',customer:null}));expect(h.assistant.getContext()).toMatchObject({account:'Mustafa Yılmaz',phase:'confirm'});
+});
+it('refuses a cancelled latest record instead of editing an older active collection',async()=>{
+ const h=harness();h.findCollections.mockResolvedValue([{...record,id:'cancelled',created_at:'2026-10-17T12:00:00Z',cancelled_at:'2026-10-17T13:00:00Z'},record]);
+ await h.assistant.handle('Serkan Bingöl son tahsilatı 75 bin olarak düzelt');expect(h.findCollections).toHaveBeenCalledWith(expect.objectContaining({includeCancelled:true}));expect(h.assistant.getContext()).toBeNull();expect(h.message.mock.calls.at(-1)[0]).toContain('iptal');expect(h.update).not.toHaveBeenCalled();
+});

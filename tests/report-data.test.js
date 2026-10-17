@@ -46,6 +46,20 @@ it('prefers an exact customer identity over a longer substring match',()=>{
  expect(matchReportGroups(groups,'harmanda')).toEqual([groups[0]]);
  expect(matchReportGroups(groups,'1234')).toEqual([]);
 });
+it('matches unique word aliases and inflections without matching a different embedded name',()=>{
+ const groups=[{name:'Harmanda Tekstil Sanayi Ticaret Ltd. Şti.',tax:'1234567890'},{name:'Mustafa Harmanda',tax:'3333333333'},{name:'Halil Kumaş',tax:'4444444444'}];
+ expect(matchReportGroups(groups,"Harmanda'nın")).toEqual(groups.slice(0,2));
+ expect(matchReportGroups(groups,'harmanda tekstilin')).toEqual([groups[0]]);
+ expect(matchReportGroups(groups,'Harman da Tekstil')).toEqual([groups[0]]);
+ expect(matchReportGroups(groups,'ali')).toEqual([]);
+ expect(matchReportGroups(groups,'123456789')).toEqual([]);
+});
+it('allows a small spoken typo only when matching an actual full customer word and retains ambiguity',()=>{
+ const groups=[{name:'Harmanda Tekstil',tax:'1234567890'},{name:'Harmando Kumaş',tax:'3333333333'}];
+ expect(matchReportGroups([groups[0]],'harmnda')).toEqual([groups[0]]);
+ expect(matchReportGroups(groups,'harmand')).toEqual(groups);
+ expect(matchReportGroups(groups,'hara')).toEqual([]);
+});
 it('rebuilds a shared tax identity name and movements inside the requested account',()=>{
  const groups=groupReportItems([invoice({ReceiverName:'Mustafa Harmanda'}),invoice({_accountId:'b',ReceiverName:'Harmanda Tekstil'})],accounts);
  const [matched]=matchReportGroups(groups,'harmanda',{accountIds:['b']});
@@ -53,6 +67,11 @@ it('rebuilds a shared tax identity name and movements inside the requested accou
  expect(matched.rows[0].accountId).toBe('b');
  expect(matchReportGroups(groups,'mustafa',{accountIds:['b']})).toEqual([]);
  expect(matchReportGroups(groups,'harmanda',{accountIds:[]})).toEqual([]);
+});
+it('recognizes actual alternative trading names within the selected account only',()=>{
+ const groups=groupReportItems([invoice({ReceiverName:'Harmanda Eski Unvan'}),invoice({ReceiverName:'Harmanda Tekstil'}),invoice({_accountId:'b',ReceiverName:'Mustafa Harmanda'})],accounts);
+ expect(matchReportGroups(groups,'Harmanda Tekstil',{accountIds:['a']})).toHaveLength(1);
+ expect(matchReportGroups(groups,'Mustafa',{accountIds:['a']})).toEqual([]);
 });
 it('reuses the selected screen template and excludes non-TRY data',()=>{
  const [group]=groupReportItems([invoice(),invoice({CurrencyCode:'USD'})],accounts);

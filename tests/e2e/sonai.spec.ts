@@ -147,3 +147,28 @@ test('a remembered customer supports a short extra-payment command without repea
  await send('onaylıyorum');const writes=await page.evaluate(()=> (window as any).businessWrites);
  expect(writes).toHaveLength(1);expect(writes[0].p_record).toMatchObject({customer_name:'Harmanda Tekstil',customer_tax_no:'9876543210',amount:'2000.00'});
 });
+test('a short customer name and all report filters in one sentence produce a downloadable Excel',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/tests/assistant-preview.html');await page.waitForFunction(()=>typeof (window as any).testPanel==='function');await page.evaluate(()=> (window as any).testPanel());
+ const panel=page.getByRole('dialog',{name:'SonAI',exact:true});
+ await panel.evaluate(p=>{(p.querySelector('#assistantCommand') as HTMLTextAreaElement).value='ayşe karabut hesabından 9.ay satışalış tahsilatdahil harmanda müşterisinin excelini ver';(p.querySelector('#assistantInterpret') as HTMLButtonElement).click();});
+ await expect(panel.locator('.sv-chat-assistant').last()).toContainText('Excel hazır');
+ await expect(panel.locator('#assistantResults')).toContainText('Harmanda Tekstil');
+ const download=page.waitForEvent('download');await panel.getByRole('link',{name:'Excel’i incele ↗'}).click();
+ expect((await download).suggestedFilename()).toMatch(/\.xlsx$/);
+ expect(await page.evaluate(()=> (window as any).businessWrites.length)).toBe(0);
+ expect(await page.evaluate(()=> (window as any).sentRequests.length)).toBe(0);expect(errors).toEqual([]);
+});
+test('a persisted latest collection can be edited after reopening and a field answer advances to the value',async({page})=>{
+ await page.goto('/tests/assistant-preview.html');await page.waitForFunction(()=>typeof (window as any).testPanel==='function');
+ await page.evaluate(()=>{(window as any).seedCollection({id:'saved-before-conversation',customer_name:'Harmanda Tekstil',customer_tax_no:'9876543210',customer_key:'9876543210',amount:'60000.00',date:'2026-09-01',created_at:'2026-10-17T08:00:00Z'});(window as any).testPanel();});
+ const panel=page.getByRole('dialog',{name:'SonAI',exact:true});
+ const send=async(text:string)=>{await expect(panel.locator('#assistantInterpret')).toBeEnabled();await panel.evaluate((p,text)=>{(p.querySelector('#assistantCommand') as HTMLTextAreaElement).value=text;(p.querySelector('#assistantInterpret') as HTMLButtonElement).click();},text);await expect(panel.locator('#assistantInterpret')).toBeEnabled();};
+ await send('Ayşe Karabuttaki son eklediğim tahsilatın tutarı yanlıştı onu 75 bin olarak düzeltir misin');
+ await expect(panel.getByRole('button',{name:'Düzeltmeyi onayla'})).toBeVisible();expect(await page.evaluate(()=> (window as any).businessWrites.length)).toBe(0);
+ await send('onaylıyorum');expect(await page.evaluate(()=> (window as any).businessWrites[0].p_record)).toMatchObject({id:'saved-before-conversation',amount:'75000.00',version:1});
+ await send('tahsilat düzelt');await send('tutar');
+ await expect(panel.locator('.sv-chat-assistant').last()).toContainText('Yeni tutar');
+ await send('80 bin tarihi de dün olsun');await expect(panel.getByRole('button',{name:'Düzeltmeyi onayla'})).toBeVisible();
+ await send('onaylıyorum');expect(await page.evaluate(()=> (window as any).businessWrites[1].p_record)).toMatchObject({id:'saved-before-conversation',amount:'80000.00',version:2});
+});

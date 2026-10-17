@@ -4,10 +4,10 @@ const voiceHarness=vi.hoisted(()=>({callbacks:null,resume:vi.fn()}));
 vi.mock('../src/services/voice-session.js',()=>({createVoiceSession:options=>{voiceHarness.callbacks=options;return {pause:vi.fn(),resume:voiceHarness.resume,start:vi.fn(),close:vi.fn()};}}));
 vi.mock('../src/services/account-manager.js',()=>({listAccounts:async()=>[{id:'a',name:'Ayşe Karabut'},{id:'b',name:'Mert Sarısoy'}],getActiveAccountId:()=> 'a'}));
 vi.mock('../src/services/assistant-client.js',()=>({assistantRequest:vi.fn(async()=>({connection:'ready',recipient:'905000000000',aiConfigured:true,jobs:[]})),blobBase64:vi.fn()}));
-vi.mock('../src/services/report-data.js',()=>({fold:s=>String(s).toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').trim(),summarizeRows:()=>({net:1}),matchReportGroups:groups=>groups,scanReport:vi.fn(async()=>[{name:'Harmanda',tax:'1234',rows:[]}])}));
+vi.mock('../src/services/report-data.js',()=>({fold:s=>String(s).toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').trim(),summarizeRows:()=>({net:1}),matchReportGroups:vi.fn(groups=>groups),scanReport:vi.fn(async()=>[{name:'Harmanda',tax:'1234',rows:[]}])}));
 vi.mock('../src/components/report-send.js',()=>({previewReport:vi.fn(async()=>({close:vi.fn()}))}));
 import {mountAssistant} from '../src/pages/assistant.js';
-import {scanReport} from '../src/services/report-data.js';
+import {scanReport,matchReportGroups} from '../src/services/report-data.js';
 import {assistantRequest} from '../src/services/assistant-client.js';
 import {previewReport} from '../src/components/report-send.js';
 let app;
@@ -16,6 +16,7 @@ beforeEach(()=>{
  assistantRequest.mockImplementation(async()=>({connection:'ready',recipient:'905000000000',jobs:[]}));
  scanReport.mockImplementation(async()=>[{name:'Harmanda',tax:'1234',rows:[]}]);
  previewReport.mockImplementation(async()=>({close:vi.fn()}));
+ matchReportGroups.mockImplementation(groups=>groups);
 });
 afterEach(()=>{app?.cleanup();document.body.replaceChildren();vi.clearAllMocks();});
 it('continues the requested conversation locally and opens the single customer preview inline',async()=>{
@@ -99,4 +100,40 @@ it('uses the current account selection for all customers when no account name is
  app.page.querySelector('#assistantCommand').value='9.ayın tüm müşterilerinin excelini ver';app.page.querySelector('#assistantInterpret').click();
  await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledOnce());
  expect(scanReport.mock.calls[0][0].accounts.map(a=>a.id)).toEqual(['b']);expect(previewReport.mock.calls[0][0].options).toMatchObject({allCustomers:true,format:'excel'});
+});
+it('prepares the spoken compound report with the short customer name scoped to the named account',async()=>{
+ const real=await vi.importActual('../src/services/report-data.js');matchReportGroups.mockImplementation(real.matchReportGroups);
+ scanReport.mockResolvedValue([{name:'Mustafa Harmanda',tax:'9876',rows:[{accountId:'b',name:'Mustafa Harmanda'}]},{name:'Harmanda Tekstil',tax:'1234',rows:[{accountId:'a',name:'Harmanda Tekstil'}]}]);
+ assistantRequest.mockImplementation(async url=>url==='/interpret'?{transcript:'ayşe karabut hesabından 9.ay satışalış tahsilatdahil harmanda müşterisinin excelini ver',intent:{customer:'satışalış tahsilatdahil harmanda'}}:{connection:'ready',jobs:[]});
+ app=await mountAssistant();document.body.append(app.page);
+ await voiceHarness.callbacks.onAudio(new Blob(['report'],{type:'audio/mp4'}));
+ expect(scanReport).toHaveBeenCalledOnce();expect(scanReport.mock.calls[0][0]).toMatchObject({accounts:[{id:'a',name:'Ayşe Karabut'}],direction:'both',withCollections:true,start:'2026-09-01',format:'excel'});
+ expect(previewReport.mock.calls[0][0].groups.map(g=>g.name)).toEqual(['Harmanda Tekstil']);
+ expect(app.page.querySelectorAll('.sv-assistant-customer')).toHaveLength(0);
+});
+it('keeps report filters after a failed lookup and treats the short retry as the report customer',async()=>{
+ scanReport.mockResolvedValueOnce([]).mockResolvedValue([{name:'Harmanda Tekstil',tax:'1234',rows:[]}]);
+ app=await mountAssistant();document.body.append(app.page);
+ const send=text=>{app.page.querySelector('#assistantCommand').value=text;app.page.querySelector('#assistantInterpret').click();};
+ send('Ayşe hesabından 9.ay satış alış tahsilat dahil yanlışisim müşterisinin excelini ver');
+ await vi.waitFor(()=>expect(app.page.querySelector('#assistantMessages').textContent).toContain('kısa adını tekrar'));
+ send('Harmanda');await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledOnce());
+ expect(matchReportGroups.mock.calls.at(-1)[1]).toBe('harmanda');
+ expect(scanReport.mock.calls.at(-1)[0]).toMatchObject({direction:'both',withCollections:true,start:'2026-09-01',format:'excel',accounts:[{id:'a',name:'Ayşe Karabut'}]});
+});
+it('accepts customer and all remaining report answers together instead of starting customer selection',async()=>{
+ app=await mountAssistant();document.body.append(app.page);
+ const send=text=>{app.page.querySelector('#assistantCommand').value=text;app.page.querySelector('#assistantInterpret').click();};
+ send('Ayşe hesabından excel hazırla');
+ await vi.waitFor(()=>expect(app.page.querySelector('#assistantChoices').childElementCount).toBe(0));
+ await vi.waitFor(()=>expect(app.page.querySelector('#assistantInterpret').disabled).toBe(false));
+ send('Harmanda eylül satış alış tahsilat dahil');
+ await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledOnce());
+ expect(matchReportGroups.mock.calls.at(-1)[1]).toBe('harmanda');expect(scanReport.mock.calls[0][0]).toMatchObject({direction:'both',withCollections:true,start:'2026-09-01',format:'excel'});
+});
+it('preserves an explicit date window instead of replacing it with a whole month',async()=>{
+ assistantRequest.mockImplementation(async url=>url==='/interpret'?{transcript:'Ayşe hesabından Harmanda satış alış tahsilat dahil 5 Eylül ile 20 Eylül arası excel',intent:{start:'2026-09-05',end:'2026-09-20',year:2026,month:9}}:{connection:'ready',jobs:[]});
+ app=await mountAssistant();document.body.append(app.page);
+ await voiceHarness.callbacks.onAudio(new Blob(['dates'],{type:'audio/mp4'}));
+ expect(scanReport.mock.calls[0][0]).toMatchObject({start:'2026-09-05',end:'2026-09-20'});
 });

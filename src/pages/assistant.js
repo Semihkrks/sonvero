@@ -6,6 +6,7 @@ import {previewReport} from '../components/report-send.js';
 import {assistantContext} from '../services/assistant-context.js';
 import {parseQuickIntent,nextQuestion,monthRange,matchSpokenAccounts} from '../lib/assistant-intent.js';
 import {createBusinessAssistant} from '../services/assistant-business.js';
+import {parseBusinessCommand} from '../lib/assistant-actions.js';
 import {createVoiceSession} from '../services/voice-session.js';
 import {createAssistantSpeech,spokenReply} from '../services/assistant-speech.js';
 import {dialogueCommand,requestedFormat,formatLabel} from '../lib/assistant-dialogue.js';
@@ -132,8 +133,8 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   for(const [key,value] of Object.entries(intent))if(value!==null&&value!==undefined&&key!=='account')draft[key]=value;
   if(intent.account){const matches=matchSpokenAccounts(intent.account,accounts);draft.accountIds=matches.length===1?[matches[0].id]:[];draft.scope='cari';}
   if(intent.start&&!intent.year)draft.year=Number(intent.start.slice(0,4));
-  if(intent.month){draft.start=null;draft.end=null;Object.assign(draft,monthRange(draft.month,draft.year));}
-  if(intent.year&&draft.month)Object.assign(draft,monthRange(draft.month,draft.year));
+  if(intent.month&&!intent.start&&!intent.end){draft.start=null;draft.end=null;Object.assign(draft,monthRange(draft.month,draft.year));}
+  if(intent.year&&draft.month&&!intent.start&&!intent.end)Object.assign(draft,monthRange(draft.month,draft.year));
   if(draft.start){draft.year=Number(draft.start.slice(0,4));draft.month=Number(draft.start.slice(5,7));}sync();
  }
  async function advance(){
@@ -215,19 +216,21 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
     paintLive(transcript,{animate:!liveHeard||fold(liveHeard)!==fold(transcript)});
    }
    message(transcript,'user',{instant:!audio});
-   if(await business.handle(transcript,{draft,remote:result?.intent||{}}))return;
-   if(await handleDialogue(transcript,result?.reply))return;
    const quick=parseQuickIntent(transcript,{awaiting,accounts,draft});
+   const businessCommand=parseBusinessCommand(transcript,{accounts,draft});
+   const reportAnswer=!!awaiting&&(!businessCommand||businessCommand.action==='select_customer');
+   if(!reportAnswer&&await business.handle(transcript,{draft,remote:result?.intent||{}})){awaiting=null;return;}
+   if(await handleDialogue(transcript,result?.reply))return;
    if(!result&&!quick.handled){
     try{result=await assistantRequest('/interpret',{text:transcript,context:{draft,awaiting,business:business.getContext(),remembered:business.getMemory(),accounts:accounts.map(a=>({id:a.id,name:a.name})),route:context.route,conversation:conversation.slice(-8)}});}
     catch(error){if(!Object.keys(quick.intent).length)throw error;}
    }
    if(disposed||version!==scanVersion||requestSeq!==commandSeq)return;
-   if(result?.intent?.action&&await business.handle(transcript,{draft,remote:result.intent}))return;
+   if(!reportAnswer&&result?.intent?.action&&await business.handle(transcript,{draft,remote:result.intent})){awaiting=null;return;}
    const remote=Object.fromEntries(Object.entries(result?.intent||{}).filter(([,value])=>value!=null));
    if(result?.reply&&!Object.keys(remote).length&&!quick.handled){message(result.reply);return;}
    const intent={...remote,...quick.intent};
-   if(quick.intent.accountIds?.length)delete intent.account;
+   if(Object.hasOwn(quick.intent,'accountIds'))delete intent.account;
    const explicit=requestedFormat(transcript);if(explicit)intent.format=explicit;
    if(!Object.keys(intent).length){message(result?.reply||'Cari rapor, satış, alış, tahsilat ve WhatsApp gönderiminde yardımcı olabilirim. Ne yapmak istersin?');return;}
    if(Object.keys(intent).every(key=>key==='format')){await changeFormat(intent.format);message(formatLabel(intent.format)+' olarak hazırlayacağım. Hangi müşteri için olsun?');return;}
@@ -262,10 +265,10 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
    if(disposed||version!==scanVersion)return;
    groups=options.allCustomers?scanned:matchReportGroups(scanned,query,{accountIds:selected.map(a=>a.id)});snapshot={options,accounts:selected};
    const results=$('#assistantResults');results.replaceChildren();
-   if(!groups.length){progress.textContent='Bu dönem ve filtrelerde müşteri bulunamadı. Adı, VKN’yi veya tarih aralığını kontrol edin.';return;}
+   if(!groups.length){awaiting='customer';progress.remove();message('Seçtiğin hesap ve dönemde bu adla hareket bulamadım. Müşterinin kısa adını tekrar söyleyebilir veya dönemi değiştirebilirsin; diğer seçimlerini koruyorum.','assistant',{instant:true});return;}
    if(options.allCustomers){progress.textContent=groups.length+' müşterinin kayıtlarını tek Excel’de topluyorum…';await preparePreview(groups);return;}
-   progress.textContent=groups.length+' müşteri buldum. “İlki olsun”, “ikincisi olsun” diyebilir veya aşağıdan seçebilirsin.';
    if(groups.length===1){progress.textContent=groups[0].name+' bulundu.';await preparePreview(groups);return;}
+   progress.remove();message(groups.length+' müşteri buldum. “İlki olsun”, “ikincisi olsun” diyebilir veya aşağıdan seçebilirsin.','assistant',{instant:true});
    groups.forEach((g,index)=>{const label=document.createElement('label');label.className='sv-assistant-customer';label.innerHTML=`<input type="checkbox" value="${index}" ${groups.length===1?'checked':''}><span><strong>${index+1}. ${escapeHtml(g.name)}</strong><small>${escapeHtml(g.tax||'VKN yok')} · ${g.rows.length} hareket · Dönem neti ${escapeHtml(summarizeRows(g.rows).net)} TL</small></span>`;results.append(label);});
    const send=document.createElement('button');send.className='btn btn-primary';send.type='button';send.textContent='Seçilen müşteriyi hazırla';results.append(send);
    send.onclick=async()=>{send.disabled=true;try{const chosen=[...results.querySelectorAll('input:checked')].map(cb=>groups[Number(cb.value)]);if(!chosen.length){message('Bir müşteri seç veya “ilki olsun” de.');return;}await preparePreview(chosen);}catch(error){message(error.message,'assistant',{instant:true});}finally{send.disabled=false;}};

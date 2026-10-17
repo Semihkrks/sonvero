@@ -1,4 +1,4 @@
-import {parseBusinessCommand,parseBusinessCorrection,parseBusinessBatch,businessConfirmation} from '../lib/assistant-actions.js';
+import {parseBusinessCommand,parseBusinessCorrection,parseBusinessBatch,parseBusinessSlots,businessConfirmation} from '../lib/assistant-actions.js';
 import {matchSpokenAccounts} from '../lib/assistant-intent.js';
 import {istanbulDate,Decimal} from '../lib/money.js';
 import {findAssistantCustomers,findAssistantCollections,readAssistantSummary,readLatestAssistantCollection} from './assistant-ledger.js';
@@ -25,26 +25,28 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
  function resolveAccount(command){
   if(command.accountIds?.length)return accounts.filter(a=>command.accountIds.includes(a.id));
   if(command.account)return matchSpokenAccounts(command.account,accounts);
-  if(command.referLast&&lastRecord)return accounts.filter(a=>a.id===lastRecord.account_id);
+  if(command.referLast&&!command.latestPersisted&&lastRecord)return accounts.filter(a=>a.id===lastRecord.account_id);
   return accounts.filter(a=>memory?.accountIds?.includes(a.id));
  }
  function start(command,{draft={}}={}){
   const found=resolveAccount(command),explicit=!!(command.explicitAccount||command.accountIds?.length||command.account);
   plan={...command,account:found.length===1?found[0]:null,accountIds:found.map(a=>a.id),phase:'start',attempted:false};generation++;
+  if(command.action==='update_collection')plan.invalidField=['amount','date'].find(key=>Object.hasOwn(command,key)&&!command[key])||null;
   if(command.action==='summary'||command.action==='latest_collection'){
    const fallback=command.action==='latest_collection'?(draft.accountIds?.length?draft.accountIds:accounts.length===1?[accounts[0].id]:[]):draft.accountIds||accounts.map(a=>a.id);
    const selectedScope=command.action==='latest_collection'&&command.scope==='selected'&&!explicit;
    plan.accountIds=(command.scope==='all'?accounts.map(a=>a.id):selectedScope?draft.accountIds||[]:found.length?found.map(a=>a.id):explicit?[]:fallback).filter(id=>accounts.some(a=>a.id===id));
    if(command.customer)plan.customerQuery=command.customer;
    else if(!explicit&&memory?.customer&&command.scope!=='all'&&!command.allCustomers&&(command.action!=='latest_collection'||command.useContext))plan.selected=memory.customer;
-  }else if(command.referLast&&lastRecord&&found.length===1&&found[0].id===lastRecord.account_id){plan.recordId=lastRecord.id;plan.customer=lastRecord.customer_name;plan.selected={name:lastRecord.customer_name,tax:lastRecord.customer_tax_no||'',key:lastRecord.customer_key};}
-  else if(!command.customer&&!explicit&&memory?.customer){plan.customer=memory.customer.name;plan.selected=memory.customer;}
+  }else if(command.referLast&&!command.latestPersisted&&lastRecord&&found.length===1&&found[0].id===lastRecord.account_id){plan.recordId=lastRecord.id;plan.customer=lastRecord.customer_name;plan.selected={name:lastRecord.customer_name,tax:lastRecord.customer_tax_no||'',key:lastRecord.customer_key};}
+  else if(!command.customer&&!explicit&&memory?.customer&&!command.latestPersisted){plan.customer=memory.customer.name;plan.selected=memory.customer;}
   if(command.action==='balance')plan.selected=null;
  }
  async function advance(){
   const p=plan;if(!p)return;
   if(p.action==='summary'||p.action==='latest_collection'){await summarize(p);return;}
   if(!p.account){p.phase='account';message('Hangi hesapta işlem yapayım? Hesap adını söyle veya seç.');buttons(accounts.map(a=>[a.name,async()=>{p.account=a;p.accountIds=[a.id];p.selected=null;p.recordId=null;await advance();}]));return;}
+  if(['update_collection','cancel_collection'].includes(p.action)&&!p.customer&&!p.record){await selectCollection(p);return;}
   if(!p.customer){p.phase='customer';message(p.account.name+' hesabındaki müşteri adını veya VKN’sini söyle.');choices.replaceChildren();return;}
   if(p.invalidField){p.phase=p.invalidField;message(p.invalidField==='amount'?'Yeni tutarı net anlayamadım. Kaç lira olarak düzelteyim?':'Yeni tarihi anlayamadım. Hangi güne yazayım?');choices.replaceChildren();return;}
   if(p.action==='collection'&&!p.amount){p.phase='amount';message((p.selected?.name||p.customer)+' için kaç lira tahsilat kaydedeyim?');choices.replaceChildren();return;}
@@ -64,16 +66,28 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
    message(p.account.name+' · '+c.name+': arşivdeki TL bakiyesi '+money(c.balance)+'.'+(Number(c.excluded)?' '+c.excluded+' hareket tutar veya para birimi nedeniyle dahil değil.':'')+' Bu bilgi kayıtlı geçmişe dayanır.');return;
   }
   if(p.action!=='collection'&&!p.record){await selectCollection(p);return;}
+  if(p.action==='update_collection'&&p.editField&&!p[p.editField]){p.phase=p.editField;message(p.editField==='amount'?'Yeni tutar kaç lira olsun?':'Tahsilat tarihini hangi güne düzelteyim?');choices.replaceChildren();return;}
   if(p.action==='update_collection'&&!p.amount&&!p.date){p.phase='edit';message(p.selected.name+' tahsilatında neyi düzelteyim: tutarı mı, tarihi mi?');choices.replaceChildren();return;}
   await preview(p);
  }
  async function selectCollection(p){
-  const version=generation;p.phase='search';choices.replaceChildren();let found=await findCollections({accountId:p.account.id,customer:p.selected,start:p.period?.start,end:p.period?.end});
+  const version=generation;p.phase='search';choices.replaceChildren();let found=await findCollections({accountId:p.account.id,customer:p.selected||null,start:p.period?.start,end:p.period?.end,...(p.latestPersisted?{includeCancelled:true}:{})});
   if(!current(p,version))return;
-  found=found.filter(r=>r.account_id===p.account.id&&r.id&&!r.cancelled_at&&Number.isInteger(r.version));if(p.recordId)found=found.filter(r=>r.id===p.recordId);
+  found=found.filter(r=>r.account_id===p.account.id&&(p.latestPersisted||!r.cancelled_at));if(p.recordId)found=found.filter(r=>r.id===p.recordId);
+  if(p.latestPersisted){
+   if(found.some(r=>!r.id||!Number.isInteger(r.version)||!r.created_at||!Number.isFinite(Date.parse(r.created_at))))throw new Error('Tahsilatın kimliği veya eklenme zamanı doğrulanamadı.');
+   found.sort((a,b)=>Date.parse(b.created_at)-Date.parse(a.created_at)||String(b.created_at).localeCompare(String(a.created_at))||String(b.id).localeCompare(String(a.id)));found=found.slice(0,1);
+   if(found[0]?.cancelled_at){message('Son eklenen tahsilat iptal edilmiş. Daha eski bir kayıt için müşteriyi veya tahsilatı ayrıca seçelim.');clearPlan();return;}
+  }
+  found=found.filter(r=>r.id&&Number.isInteger(r.version));
   if(!found.length){message('Bu hesap ve müşteri için işlem yapılabilecek tahsilat bulunamadı. Kayıt değiştirilmiş veya iptal edilmiş olabilir.');clearPlan();return;}
-  if(found.length>1){p.phase='choose_record';p.candidates=found;message('Hangi tahsilat? Tarih ve tutarı kontrol edip sıra numarasını söyle.');buttons(found.map((r,i)=>[(i+1)+'. '+r.date+' · '+money(r.amount)+' · '+r.customer_name,async()=>{p.record=r;await advance();}]));return;}
-  p.record=found[0];await advance();
+  if(found.length>1){p.phase='choose_record';p.candidates=found;message('Hangi tahsilat? Tarih ve tutarı kontrol edip sıra numarasını söyle.');buttons(found.map((r,i)=>[(i+1)+'. '+r.date+' · '+money(r.amount)+' · '+r.customer_name,async()=>{chooseRecord(p,r);await advance();}]));return;}
+  chooseRecord(p,found[0]);await advance();
+ }
+ function chooseRecord(p,record){p.record=record;p.customer=record.customer_name;p.selected={name:record.customer_name,tax:record.customer_tax_no||'',key:record.customer_key};}
+ function applySlots(p,patch){
+  for(const key of ['amount','date'])if(Object.hasOwn(patch,key))p[key]=patch[key];
+  p.invalidField=['amount','date'].find(key=>Object.hasOwn(patch,key)&&!patch[key])||(p.invalidField&&!p[p.invalidField]?p.invalidField:null);
  }
  async function summarize(p){
   if(p.selected&&!p.selected.tax&&!p.selected.customer_tax_no&&!p.selected.key&&!p.selected.customer_key){p.customerQuery=p.selected.name;p.selected=null;}
@@ -146,19 +160,49 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
    const ids=patch.accountReference==='other'?accounts.filter(a=>a.id!==p.account?.id).map(a=>a.id):patch.accountIds;p.account=ids?.length===1?accounts.find(a=>a.id===ids[0]):null;p.accountIds=p.account?[p.account.id]:[];p.selected=null;p.record=null;
   }
   if(patch.customer){p.customer=patch.customer;p.selected=null;p.record=null;}
-  for(const key of ['amount','date'])if(Object.hasOwn(patch,key)){p[key]=patch[key];p.invalidField=patch[key]?null:key;}generation++;p.payload=null;await advance();return true;
+  applySlots(p,patch);generation++;p.payload=null;await advance();return true;
  }
  function selectCandidate(text,candidates){
-  const s=fold(text).replace(/[.!?]/g,'').replace(/^kanka\s+/,'').replace(/\s+(?:olsun|sec)$/,'');let index=['ilki','ikincisi','ucuncusu','dorduncusu','besincisi'].indexOf(s);
+  const full=fold(text).replace(/[.!?]/g,'').replace(/^kanka\s+/,'').replace(/\s+(?:olsun|sec)$/,'');
+  const first=full.split(/\s+/)[0];
+  const s=/^(?:\d{1,2}|ilki|ikincisi|ucuncusu|dorduncusu|besincisi|birinci|ikinci|ucuncu|dorduncu|besinci)$/.test(first)?first:full.split(/\s+(?:tutar\w*|tarih\w*|miktar\w*)\b/)[0];let index=['ilki','ikincisi','ucuncusu','dorduncusu','besincisi'].indexOf(s);
   if(index<0)index=['birinci','ikinci','ucuncu','dorduncu','besinci'].indexOf(s);if(/^\d+$/.test(s)&&s.length<3)index=Number(s)-1;if(index>=0)return candidates[index];
   const found=candidates.filter(c=>fold(c.name||c.customer_name)===s||c.tax&&c.tax===s||c.customer_tax_no&&c.customer_tax_no===s||c.id===s);return found.length===1?found[0]:null;
+ }
+ function candidateAnswerSlots(text,candidate){
+  const s=fold(text).replace(/[.!?]+$/,'').replace(/^kanka\s+/,'');
+  const field=s.search(/\s+(?:tutar\w*|tarih\w*|miktar\w*)\b/);
+  if(field>=0)return parseBusinessSlots(s.slice(field));
+  if([candidate.name,candidate.customer_name,candidate.tax,candidate.customer_tax_no,candidate.id].some(value=>value&&fold(value)===s))return null;
+  return parseBusinessSlots(s.replace(/^(?:\d+|ilki|ikincisi|ucuncusu|dorduncusu|besincisi|birinci|ikinci|ucuncu|dorduncu|besinci)(?:\s+|$)/,''));
  }
  async function handle(text,{draft={},remote={}}={}){
   if(plan?.phase==='saving')return true;const confirmation=businessConfirmation(text);
   if(plan&&confirmation==='cancel'){const attempted=plan.attempted;clearPlan();message(attempted?'Bekleyen işlemler durduruldu. Sonucu belirsiz kaydı Cari ekranından kontrol et.':'Taslak ve sıradaki işlemler iptal edildi.');return true;}
   if(plan?.phase==='confirm'&&confirmation==='confirm'){await confirm();return true;}
-  const patch=parseBusinessCorrection(text,{accounts});if(patch&&plan&&isMutation(plan.action))return correct(patch);
-  if(patch&&!plan&&lastRecord){
+  // A complete report request changes the conversation topic. Never use it as a financial field.
+  if(/\b(?:excel\w*|ekstre\w*|rapor\w*|pdf|fotograf\w*|gorsel\w*)\b/.test(fold(text))&&!/\b(?:duzelt\w*|degistir\w*|guncelle\w*|ekle|kaydet|isle|gir)\b/.test(fold(text))){
+   if(plan?.attempted){message('Önce sonucu belirsiz tahsilatı kontrol edelim veya bekleyen işlemi iptal et.');return true;}clearPlan();return false;
+  }
+  if(plan&&isMutation(plan.action)&&!plan.attempted){
+   if(plan.phase==='account'){
+    const found=matchSpokenAccounts(text,accounts);if(found.length===1){plan.account=found[0];plan.accountIds=[found[0].id];const slots=parseBusinessSlots(text);if(slots)applySlots(plan,slots);await advance();return true;}
+   }
+   const candidate=['choose_record','choose_customer'].includes(plan.phase)?selectCandidate(text,plan.candidates||[]):null;
+   if(candidate){if(plan.phase==='choose_record')chooseRecord(plan,candidate);else {plan.selected=candidate;plan.customer=candidate.name;}const slots=candidateAnswerSlots(text,candidate);if(slots)applySlots(plan,slots);await advance();return true;}
+   const field=fold(text).replace(/[.!?]/g,'').replace(/^(?:kanka|peki)\s+/,'');
+   if(plan.action==='update_collection'&&['edit','amount','date','choose_record'].includes(plan.phase)&&/^(?:tutar\w*|miktar\w*|tarih\w*)(?:\s+(?:olsun|duzelt|degistir))?$/.test(field)){
+    plan.editField=/^(?:tutar|miktar)/.test(field)?'amount':'date';await advance();return true;
+   }
+   const slots=parseBusinessSlots(text);
+   const freshCommand=parseBusinessCommand(text,{accounts,draft,remote});
+   const fieldAnswer=!freshCommand||freshCommand.action==='collection'&&!/\btahsilat\w*\b/.test(fold(text));
+   if(slots&&fieldAnswer&&['amount','date','edit','confirm'].includes(plan.phase)&&!/(?:tahsilat\w*\s+(?:ekle|kaydet|isle|gir)|\b(?:buna|ona|ayni musteriye)\b)/.test(fold(text))){
+    return correct(parseBusinessCorrection(text,{accounts})||slots);
+   }
+  }
+  const patch=parseBusinessCorrection(text,{accounts}),standaloneCorrection=!/\btahsilat\w*\b/.test(fold(text));if(patch&&standaloneCorrection&&plan&&isMutation(plan.action))return correct(patch);
+  if(patch&&standaloneCorrection&&!plan&&lastRecord){
    if(patch.accountIds||patch.accountReference||patch.customer){message('Kaydedilmiş tahsilatın hesabı veya müşterisi taşınamaz. İptal edip yeni bir kayıt oluşturabilirsin.');return true;}
    start({action:'update_collection',referLast:true,...patch});await advance();return true;
   }
@@ -177,11 +221,11 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
   if(!plan)return false;const p=plan;
   if(p.phase==='account'){const found=matchSpokenAccounts(text,accounts);if(found.length===1){p.account=found[0];p.accountIds=[found[0].id];}}
   else if(p.phase==='customer'){p.customer=text.trim();p.selected=null;}
-  else if(p.phase==='amount'||p.phase==='edit'){const value=parseBusinessCorrection(text+' olsun',{accounts})||parseBusinessCommand(text+' tahsilat ekle',{accounts,draft});if(value){if(value.amount){p.amount=value.amount;p.invalidField=null;}if(value.date){p.date=value.date;p.invalidField=null;}}}
+  else if(p.phase==='amount'||p.phase==='edit'){const value=parseBusinessSlots(text);if(value){if(value.amount){p.amount=value.amount;p.invalidField=null;}if(value.date){p.date=value.date;p.invalidField=null;}}}
   else if(p.phase==='date'){p.date=parseBusinessCommand(text+' tahsilat ekle',{accounts,draft})?.date;if(p.date)p.invalidField=null;}
   else if(['choose_customer','choose_record','summary_customer'].includes(p.phase)){
    const candidate=selectCandidate(text,p.candidates||[]);if(!candidate){if(p.phase==='summary_customer'&&!p.candidates?.length){p.customerQuery=text.trim();await summarize(p);}else message('Listedeki sıra numarasını, tam adı veya VKN’yi söyle.');return true;}
-   if(p.phase==='choose_record')p.record=candidate;else p.selected=candidate;
+   if(p.phase==='choose_record')chooseRecord(p,candidate);else p.selected=candidate;
   }else if(p.phase==='confirm'){message('İşlem için “onaylıyorum”, değişiklik için yeni tutar veya tarihi, vazgeçmek için “iptal” de.');return true;}
   await advance();return true;
  }

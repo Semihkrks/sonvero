@@ -4,6 +4,9 @@ SonAI düğmesine dokunmak mikrofonu başlatır. Dinleme, düşünme ve yanıt v
 
 ## Örnekler
 
+- “Ayşe Karabut hesabından 9.ay satışalış tahsilatdahil Harmanda müşterisinin Excelini ver.” Hesap, dönem, yön, tahsilat ve dosya türü aynı cümleden alınır. Kısa ad gerçek hesap kayıtlarında çözülür; tam unvan/VKN zorunlu değildir. Birden fazla gerçek eşleşme varsa seçim sorulur.
+- “Serkan Bingöldeki son eklediğim tahsilatın tutarı yanlıştı, onu 75 bin olarak düzeltir misin?” Seçili hesabın gerçek kayıtları eklenme zamanına göre okunur; sohbetin başında oluşturulmuş olması gerekmez. Son kayıt iptal edilmişse eski kayda sessizce geçilmez. Değişiklik onaya sunulur.
+- “Tahsilat düzelt” → kayıt seçimi → “tutar” → yeni miktar. “75 bin, tarihi de dün olsun” her iki bilgiyi tek yanıtta verir; sonraki soru için söylenen bilgiler korunur. Sıra numarası ve VKN tutar olarak yorumlanmaz.
 - “Bugün Serkan Bingöl hesabındaki Harmanda müşterisine 60 bin tahsilat ekle.”
 - “Harmanda müşterimiz.” Gerçek müşteri seçildikten sonra “buna 2k daha ekle” veya “aynı müşteriye iki bin daha tahsilat ekle”: kimlik yeniden sorulmadan bugün için yeni bir tahsilat hazırlanır ve onay istenir. “2*k” gibi belirsiz tutarlarda yalnız tutar tekrar sorulur.
 - Onaydan önce: “60 değil 65 bin olsun”, “bugüne değil düne yaz”, “Serkan değil Mustafa Yılmaz olsun.”
@@ -35,5 +38,8 @@ Küredeki beş çizgi sessizlikte eşit ve kısadır. Konuşma algılanınca far
 - `npm run lint`: mevcut ESLint kapsamı.
 - `npx playwright test tests/e2e/sonai.spec.ts`: sahte dış servislerle gerçek tarayıcıda mikrofon başlangıcı, responsive arayüz, düzeltme/özet/iptal, sıra ve belirsiz sonuçta aynı işlem kimliği.
 - `services/assistant` içinde `npm test`: servis doğrulama testleri.
+- İsteğe bağlı `SONAI_SETTINGS_PATH` ile `node test/interpretation-live.mjs`: mevcut modelde yalnız sentetik komutların yorumunu sınar; kayıt/gönderim oluşturmaz. Normal test paketinde çalışmaz ve API anahtarını çıktıya yazmaz.
+
+Yorumlayıcı Gemini 3.5 Flash-Lite üzerinde `medium` düşünme düzeyi ve 4096 token yanıt bütçesi kullanır. Ücretli alternatif veya yeni sağlayıcıya otomatik geçiş yoktur. Kota dolduğunda açık hata verir. [Modelin düşünme düzeyleri](https://ai.google.dev/gemini-api/docs/thinking) ve [API fiyatlandırması](https://ai.google.dev/gemini-api/docs/pricing) 17 Ekim 2026 tarihinde kontrol edildi; ücretsiz katman kotasına tabidir.
 
 Bu değişiklikler yeni veritabanı migration’ı gerektirmez; mevcut güvenli kayıt/RPC katmanını kullanır. Canlıya alınırken hem frontend hem `services/assistant` sunucusu güncellenmelidir. Yayın durumu ve gerçek test sonuçları `DEVIR-TESLIM.md` dosyasındadır. Testler gerçek finansal kayıt değiştirmez. Dekont işleme, fatura oluşturma/gönderme ve ödeme yapma eklenmedi.

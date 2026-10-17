@@ -7,15 +7,35 @@ import {EInvoiceWithAccount,EArchiveWithAccount} from '../api/nilvera.js';
 import {forEachLimited} from '../lib/concurrency.js';
 
 export const fold=value=>String(value||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').trim();
+const customerWords=value=>fold(value).replace(/['’]/g,'').replace(/[^a-z0-9]+/g,' ').trim().split(/\s+/).filter(Boolean);
+function oneSpokenEdit(left,right){
+ if(left.length<6||right.length<6||Math.abs(left.length-right.length)>1)return false;
+ let i=0,j=0,edits=0;
+ while(i<left.length&&j<right.length){if(left[i]===right[j]){i++;j++;continue;}if(++edits>1)return false;if(left.length>=right.length)i++;if(right.length>=left.length)j++;}
+ return edits+Number(i<left.length||j<right.length)<=1;
+}
 export function matchReportGroups(groups,query,{accountIds}={}){
  const key=fold(query).replace(/[^a-z0-9]/g,'');if(!key)return [];
  const scoped=accountIds?groups.map(g=>({...g,rows:(g.rows||[]).filter(row=>accountIds.includes(row.accountId))})).filter(g=>g.rows.length):groups;
  // Rebuild names after scoping: one tax identity can have different trading names across accounts.
  const candidates=accountIds?scoped.map(g=>({...g,name:g.rows[0].name||g.name})):scoped;
  if(/^\d+$/.test(key))return candidates.filter(g=>String(g.tax||'')===key);
- const nameKey=g=>fold(g.name).replace(/[^a-z0-9]/g,'');
- const exact=candidates.filter(g=>nameKey(g)===key);
- return exact.length?exact:candidates.filter(g=>nameKey(g).includes(key));
+ const names=g=>[...new Set([g.name,...(g.rows||[]).map(row=>row.name)].filter(Boolean))];
+ const exact=candidates.filter(g=>names(g).some(name=>fold(name).replace(/[^a-z0-9]/g,'')===key));
+ if(exact.length)return exact;
+ const keys=new Set([key]);
+ // Strip only a known grammatical ending, after checking a literal real name first.
+ for(const suffix of ['nin','nun','in','un'])if(key.endsWith(suffix)&&key.length-suffix.length>=3)keys.add(key.slice(0,-suffix.length));
+ const aliases=candidates.filter(g=>names(g).some(name=>{
+  const words=customerWords(name);
+  for(let start=0;start<words.length;start++){let span='';for(let end=start;end<words.length;end++){span+=words[end];if(keys.has(span))return true;}}
+  return false;
+ }));
+ if(aliases.length)return aliases;
+ // A one-character transcription error is allowed only for a complete long word.
+ // Return every possible identity so the caller asks when the speech is ambiguous.
+ const spoken=customerWords(query);
+ return spoken.length===1?candidates.filter(g=>names(g).some(name=>customerWords(name).some(word=>oneSpokenEdit(spoken[0],word)))):[];
 }
 export function normalizeReportItem(item,account){
  const raw=item.raw||item;

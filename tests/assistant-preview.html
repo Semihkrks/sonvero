@@ -6,6 +6,7 @@ const account={id:'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',name:'Ayşe Karabut',us
 const token=['eyJhbGciOiJIUzI1NiJ9',btoa(JSON.stringify({sub:user.id,role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})),'test'].join('.');
 localStorage.setItem('sb-sonvera-test-auth-token',JSON.stringify({access_token:token,refresh_token:'test-refresh',expires_at:Math.floor(Date.now()/1000)+3600,expires_in:3600,token_type:'bearer',user}));
 const nativeFetch=window.fetch.bind(window);window.sentRequests=[];window.loseSendResponse=false;window.businessWrites=[];window.loseCollectionResponse=false;const collections=new Map(),commands=new Map();
+window.seedCollection=row=>collections.set(row.id,{account_id:account.id,user_id:user.id,currency:'TRY',version:1,...row});
 window.fetch=async(input,init)=>{
  const url=new URL(typeof input==='string'?input:input.url,location.href);
  const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}});
@@ -17,6 +18,10 @@ window.fetch=async(input,init)=>{
   return json({ok:true});
  }
  if(url.hostname==='sonvera-test.supabase.co'){
+  if(url.pathname.endsWith('/functions/v1/nilvera')){
+   const request=JSON.parse(init.body);const sale=request.path==='/einvoice/Sale';
+   return json({success:true,data:{Content:sale?[{UUID:'report-sale-1',ReceiverName:'Harmanda Tekstil',ReceiverTaxNumber:'9876543210',CurrencyCode:'TRY',PayableAmount:'1200.00',TaxExclusiveAmount:'1000.00',TaxTotalAmount:'200.00',IssueDate:'2026-09-01',InvoiceNumber:'REPORT0001'}]:[],TotalCount:sale?1:0}});
+  }
   if(url.pathname.includes('/auth/'))return json(user);
   if(url.pathname.endsWith('/accounts'))return json([account]);
   if(url.pathname.endsWith('/rpc/customer_ledger_page'))return json({count:2,rows:[{account_id:account.id,customer_key:'1234567890',customer_tax_no:'1234567890',customer_name:'Cihan Tekstil',opening:'250.00',balance:'1250.00',excluded:0},{account_id:account.id,customer_key:'9876543210',customer_tax_no:'9876543210',customer_name:'Harmanda Tekstil',opening:'0.00',balance:'2500.00',excluded:0}]});

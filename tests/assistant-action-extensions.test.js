@@ -1,5 +1,5 @@
 import {it,expect} from 'vitest';
-import {parseBusinessCommand,parseBusinessCorrection,parseBusinessBatch} from '../src/lib/assistant-actions.js';
+import {parseBusinessCommand,parseBusinessCorrection,parseBusinessBatch,parseBusinessSlots} from '../src/lib/assistant-actions.js';
 import {istanbulDate} from '../src/lib/money.js';
 
 const accounts=[{id:'a',name:'Serkan Bingöl'},{id:'b',name:'Mustafa Yılmaz'}];
@@ -79,4 +79,16 @@ it('recognizes record mutation separately from draft cancellation',()=>{
  expect(parseBusinessCommand('Son tahsilatı iptal etme',{accounts})).toBeNull();
  expect(parseBusinessCommand('Son tahsilatı iptal et değil 65 bin olarak düzelt',{accounts})).toBeNull();
  expect(parseBusinessCommand('Son tahsilatı iptal et değil bekle',{accounts})).toBeNull();
+});
+it('understands polite collection requests and amounts after the collection noun',()=>{
+ for(const ending of ['ekler misin','ekleyebilir misin','eklesene','ekle lütfen']){
+  expect(parseBusinessCommand(`Serkan Bingöl hesabındaki Harmanda müşterisine bugün 75bin tahsilat ${ending}`,{accounts})).toMatchObject({action:'collection',accountIds:['a'],customer:'harmanda',amount:'75000.00',date:istanbulDate()});
+ }
+ expect(parseBusinessCommand('Serkan Bingöl hesabındaki Harmanda müşterisine tahsilat olarak 75 bin ekler misin',{accounts})).toMatchObject({action:'collection',customer:'harmanda',amount:'75000.00'});
+});
+it('preserves amount magnitude across transcript punctuation between fields',()=>{
+ for(const text of ['75 bin, tarihi de dün olsun','75bin, tarihi dün olsun','75 bin. Tarihi dün olsun','75 bin; tarihi dün olsun']){
+  expect(parseBusinessSlots(text)).toMatchObject({amount:'75000.00',date:expect.stringMatching(/^20\d{2}-\d{2}-\d{2}$/)});
+ }
+ for(const text of ['60.50, tarihi dün olsun','60.50; tarihi dün olsun'])expect(parseBusinessSlots(text).amount).toBeNull();
 });
