@@ -152,6 +152,36 @@ export async function readAssistantSummary({accountIds,metric='net',start=null,e
   completeness:{complete:metric==='collections',lastSync,note:metric==='collections'?'Uygulamada kayıtlı, iptal edilmemiş TRY tahsilatları.':ARCHIVE_NOTE}};
 }
 
+/** Archived TRY sales/purchase invoices for counts, latest and largest. Read only. */
+export async function readAssistantInvoices({accountIds,direction='both',start=null,end=null,customer=null,order='latest',limit=3}={}){
+ const ids=[...new Set((accountIds||[]).filter(id=>typeof id==='string'&&id))];
+ if(!ids.length)throw new Error('Faturalar için en az bir hesap gerekli.');
+ if(!['satis','alis','both'].includes(direction))throw new Error('Fatura yönü desteklenmiyor.');
+ if(!['latest','largest'].includes(order))throw new Error('Fatura sıralaması desteklenmiyor.');
+ if(customer&&!customerKey(customer))throw new Error('Önce hesabın gerçek müşteri kaydını seçmelisin.');
+ checkPeriod(start,end);
+ const rows=[];let excluded=0,sales=new Decimal(0),purchases=new Decimal(0);
+ for(const accountId of ids){
+  for(let offset=0;;offset+=PAGE_SIZE){
+   const data=await ledgerRpc('ledger_page',{p_account_id:accountId,p_search:'',p_start:start,p_end:end,p_customer:customerKey(customer),p_offset:offset,p_limit:PAGE_SIZE});
+   if(offset===0)excluded+=Number(data.excluded||0);
+   for(const row of data.rows){
+    if(row.account_id!==accountId||row.source!=='invoice'||row.currency!=='TRY'||!row.date||!matchesCustomer(row,customer)||(start&&row.date<start)||(end&&row.date>end))continue;
+    const sale=decimal(row.debit).abs().gt(0)||row.type==='Satış Faturası';
+    if(direction==='satis'&&!sale||direction==='alis'&&sale)continue;
+    const amount=sale?decimal(row.debit):decimal(row.credit);
+    if(sale)sales=sales.plus(amount);else purchases=purchases.plus(amount);
+    rows.push({accountId,number:String(row.description||''),date:row.date,customer:row.customer_name,tax:row.customer_tax_no||'',kind:sale?'satis':'alis',amount:amount.toFixed(2)});
+   }
+   if(offset+PAGE_SIZE>=Number(data.totals?.count||0))break;
+   if(offset+PAGE_SIZE>=MAX_ROWS)throw new Error('Çok fazla hareket var. Tarih aralığını daraltabilirsin.');
+  }
+ }
+ rows.sort(order==='largest'?(a,b)=>new Decimal(b.amount).comparedTo(a.amount)||b.date.localeCompare(a.date):(a,b)=>b.date.localeCompare(a.date)||b.number.localeCompare(a.number));
+ return {count:rows.length,salesCount:rows.filter(row=>row.kind==='satis').length,purchaseCount:rows.filter(row=>row.kind==='alis').length,
+  totals:{sales:sales.toFixed(2),purchases:purchases.toFixed(2)},rows:rows.slice(0,Math.min(10,Math.max(1,Math.trunc(Number(limit)||3)))),excluded,note:ARCHIVE_NOTE};
+}
+
 /** Search only the chosen account's real ledger identities, independently of report dates. */
 export async function findAssistantCustomers(accountId,query){
  const rows=[];

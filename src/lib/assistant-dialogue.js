@@ -1,16 +1,23 @@
 const normalize=value=>String(value||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/[’']/g,'').replace(/[.!?,]/g,' ').replace(/\s+/g,' ').trim();
 
-export function requestedFormat(text){
+const excelWords='(?:excel|eksel|xlsx)(?:ini|in|i|e|den)?';
+const imageWords='(?:fotograf(?:ini|inin|i|a|tan)?|gorsel(?:ini|inin|i|e|den)?|resim(?:ini|inin|i|e|den)?|resm(?:ini|inin|i)|png)';
+export function requestedFormat(text,{currentFormat}={}){
  const value=normalize(text);
- let excel=/excel|eksel|xlsx/.test(value),image=/fotograf|gorsel|resim|resm|png/.test(value);
- if(/(?:excel|eksel)\w*\s+(?:degil|olmasin|istemi\w*|haric)/.test(value))excel=false;
- if(/(?:fotograf|gorsel|resim|resm)\w*\s+(?:degil|olmasin|istemi\w*|haric)/.test(value))image=false;
+ const negative='(?:degil|olmasin|istemiyorum|isteme|haric|yerine|cikar|kaldir|gonderme|yollama|dahil etme)';
+ const hasExcel=new RegExp('\\b'+excelWords+'\\b').test(value),hasImage=new RegExp('\\b'+imageWords+'\\b').test(value);
+ const excludeExcel=new RegExp('\\b'+excelWords+'\\s+(?:de\\s+|da\\s+)?'+negative+'\\b').test(value);
+ const excludeImage=new RegExp('\\b'+imageWords+'\\s+(?:de\\s+|da\\s+)?'+negative+'\\b').test(value);
+ let excel=hasExcel&&!excludeExcel,image=hasImage&&!excludeImage;
+ const additive=/\b(?:de|da)\s+(?:olsun|ekle|hazirla)|\bekle\b/.test(value)&&!/\b(?:sadece|yalnizca|yerine)\b/.test(value);
+ if(additive&&(hasExcel||hasImage)){excel ||= currentFormat==='excel'||currentFormat==='both';image ||= currentFormat==='image'||currentFormat==='both';}
+ if(!excel&&!image&&currentFormat==='both'&&(excludeExcel!==excludeImage)){excel=excludeImage;image=excludeExcel;}
  return excel&&image?'both':excel?'excel':image?'image':null;
 }
 export const formatLabel=format=>({excel:'Excel',image:'fotoğraf',both:'Excel ve fotoğraf'}[format]||'Excel ve fotoğraf');
 
-export function dialogueCommand(text,{candidates=[],awaiting,hasPreview=false}={}){
- const value=normalize(text),format=requestedFormat(text);
+export function dialogueCommand(text,{candidates=[],awaiting,hasPreview=false,currentFormat}={}){
+ const value=normalize(text),format=requestedFormat(text,{currentFormat});
  if(/^(?:kanka )?(?:yeni sohbet|yeni istek|yeni rapor|bastan basla|sifirla)$/.test(value))return {action:'reset'};
  if(/^(?:iptal(?: et)?|vazgec|gonderme|hayir gonderme)$/.test(value))return {action:'cancel'};
  if(candidates.length){
@@ -20,11 +27,20 @@ export function dialogueCommand(text,{candidates=[],awaiting,hasPreview=false}={
    const index=/^ilk/.test(word)?0:/^son/.test(word)?candidates.length-1:/^\d$/.test(word)?Number(word)-1:names.findIndex(name=>word.startsWith(name));
    if(candidates[index])return {action:'choose',index,format};
   }
-  const matches=candidates.map((candidate,index)=>({candidate,index})).filter(({candidate})=>normalize(candidate.name)===value||candidate.tax&&value.includes(candidate.tax));
+  const nameQuery=value.replace(new RegExp('\\b(?:'+excelWords+'|'+imageWords+')\\b','g'),'').replace(/\b(?:kanka|lutfen|olan|olsun|sec|secelim|musteri|musterisi|vkn|tckn|de|da|ve)\b/g,'').replace(/\s+/g,' ').trim();
+  const taxes=value.match(/\b\d+\b/g)||[];
+  const matches=candidates.map((candidate,index)=>({candidate,index})).filter(({candidate})=>{
+   if(candidate.tax&&taxes.includes(String(candidate.tax)))return true;
+   if(!nameQuery||/\d/.test(nameQuery))return false;
+   return (' '+normalize(candidate.name)+' ').includes(' '+nameQuery+' ');
+  });
   if(matches.length===1)return {action:'choose',index:matches[0].index,format};
  }
- const confirmation=value.split(' ').every(word=>/^(?:kanka|lutfen|bana|benim|whatsapp\w*|watsap\w*|gonder\w*|yolla\w*|ilet|onayliyorum|evet|tamam|olur|sadece|yalnizca|excel\w*|eksel\w*|fotograf\w*|gorsel\w*|resim\w*|resm\w*|ve|ikisini|de|olsun|bu|bunu|raporu|raporunu|dosyayi|dosyalari|degil|olmasin)$/.test(word));
- const send=confirmation&&(/\b(?:gonder\w*|yolla\w*|ilet|onayliyorum)\b/.test(value)||/^(evet|tamam|olur)$/.test(value));
+ const confirmation=value.split(' ').every(word=>/^(?:kanka|lutfen|bana|benim|whatsapp\w*|watsap\w*|gonder\w*|yolla\w*|ilet|onayliyorum|evet|tamam|olur|sadece|yalnizca|excel\w*|eksel\w*|xlsx|fotograf\w*|gorsel\w*|resim\w*|resm\w*|png|ve|ikisini|de|da|olsun|bu|bunu|raporu|raporunu|dosyayi|dosyalari|degil|olmasin|yerine|ekle|cikar|kaldir|misin|misiniz)$/.test(word));
+ const positiveSend=/\b(?:gonder(?:in|ir|ebilir)?|yolla(?:yin|r|yabilir)?|ilet|onayliyorum)\b/.test(value);
+ const negativeSend=/\b(?:gonderme|yollama|iletme)\b/.test(value);
+ if(confirmation&&negativeSend&&!positiveSend)return {action:'cancel'};
+ const send=confirmation&&(positiveSend||/^(evet|tamam|olur)$/.test(value));
  if(hasPreview&&send)return {action:'send',format};
  if(hasPreview&&format&&confirmation)return {action:'format',format};
  if(!hasPreview&&send&&/gonder|yolla|ilet/.test(value))return {action:'needs_report',format};

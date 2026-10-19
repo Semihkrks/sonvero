@@ -14,6 +14,10 @@ const cases=[
  {name:'latest persisted edit',text:'serkan bingöldeki son eklediğim tahsilatın tutarı yanlıştı onu 75 bin olarak düzeltir misin',expected:{action:'update_collection',account:'Serkan Bingöl',customer:null}},
  {name:'latest read is not create',text:'en son eklediğim tahsilat ne',expected:{action:'latest_collection'}},
  {name:'report customer continuation',text:'Harmanda eylül satış alış tahsilat dahil',context:{awaiting:'customer',draft:{accountIds:['a'],scope:'cari',format:'excel',year:2026}},expected:{action:null,customer:'Harmanda',month:9,direction:'both',withCollections:true}},
+ {name:'natural collection summary',text:'Ayşe hesabında bu ay kaç para topladık',expected:{action:'summary',metric:'collections',account:'Ayşe Karabut'}},
+ {name:'natural customer debt',text:'Serkan hesabındaki Harmanda bize ne kadar borçlu',expected:{action:'balance',account:'Serkan Bingöl',customer:'Harmanda'}},
+ {name:'report inclusion is not a write',text:'tahsilatları da ekle',context:{draft:{accountIds:['a'],scope:'cari',customer:'Harmanda',start:'2026-09-01',end:'2026-09-30',withCollections:false,format:'excel'}},expected:{action:null,withCollections:true}},
+ {name:'bank balance is unsupported',text:'Banka hesabımda şu an kaç para var',expected:{action:null}},
 ];
 for(const example of cases){
  const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{

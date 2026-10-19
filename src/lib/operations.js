@@ -51,7 +51,7 @@ export function clearPrivateStorage() {
   intents.clear();
   for (const storage of [localStorage, sessionStorage]) {
     for (const key of Object.keys(storage)) {
-      if (/^(sonvera:(intent|draft):|nilfatura_(invoice_edit_context|accounts|active_account|seen|push)|sb_)/.test(key)) storage.removeItem(key);
+      if (/^(sonvera:(intent|draft|sonai-session):|nilfatura_(invoice_edit_context|accounts|active_account|seen|push)|sb_)/.test(key)) storage.removeItem(key);
     }
   }
 }

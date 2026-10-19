@@ -10,6 +10,7 @@ const movementWords='(?:satis|alis|tahsilat)(?:lar(?:i|in|ini|inin|la|yla|dan|da
 const requestWords='(?:hazirla(?:yin|r|yabilir)?|gonder(?:in|ir|ebilir)?|yolla(?:yin|r|yabilir)?|getir(?:in|ir|ebilir)?|ver(?:in|ir|ebilir)?|cikar(?:in|ir|abilir)?|olustur(?:un|ur|abilir)?)(?:misin|misiniz)?';
 const accountWords='(?:hesap(?:lar(?:inda(?:ki)?|indan|inin|ina|ini|in|i|da(?:ki)?|dan)?|ta(?:ki)?|tan)?|hesab(?:inda(?:ki)?|indan|inin|ina|ini|in|i|im(?:da|dan)?|imiz(?:da|dan)?)?)';
 const reportWords='(?:(?:excel|eksel)(?:ini|in|i|e|den)?|xlsx|(?:ekstre|cari)(?:sini|sinin|si|yi|ye|nin|ni|i)?|rapor(?:unu|unun|u|a|dan)?|fotograf(?:ini|inin|i|a|tan)?|gorsel(?:ini|inin|i|e|den)?|resim(?:ini|inin|i|e|den)?|resm(?:ini|inin|i))';
+const reportReferences='(?:aynis(?:i|ini)|ayni\\s+(?:rapor(?:u|unu)?|musteri(?:nin|si)?|musterinin)|bu\\s+musterinin|o\\s+musterinin|bunu|onu)';
 function reportPeriod(text,now){
  const spans=[],intent={};let uncertain=false;
  const consume=match=>spans.push({start:match.index,end:match.index+match[0].length});
@@ -22,7 +23,7 @@ function reportPeriod(text,now){
  const monthNames='('+months.join('|')+')';
  const spoken=text.match(new RegExp('\\b(\\d{1,2})\\s+'+monthNames+'(?:\\s+(20\\d{2}))?\\s*(?:ile|ve|[-–])\\s*(\\d{1,2})\\s+'+monthNames+'(?:\\s+(20\\d{2}))?(?:\\s+arasi\\w*)?'));
  if(spoken){const year=spoken[3]||spoken[6]||now.getFullYear();range(spoken,calendar(year,months.indexOf(spoken[2])+1,spoken[1]),calendar(spoken[6]||year,months.indexOf(spoken[5])+1,spoken[4]));return {intent,spans,uncertain};}
- const relative=text.match(/\b(bu|gecen|onceki|bir onceki)\s+ay(?:da|in|inin|i|inda)?\b/);
+ const relative=text.match(/\b(bu|gecen|onceki|bir onceki)\s+ay(?:daki|da|inki|indaki|in|inin|i|inda|ki)?\b/);
  if(relative){const date=new Date(now.getFullYear(),now.getMonth()-(relative[1]==='bu'?0:1),1);consume(relative);Object.assign(intent,{month:date.getMonth()+1,year:date.getFullYear(),...monthRange(date.getMonth()+1,date.getFullYear())});return {intent,spans,uncertain};}
  // Defer unfamiliar temporal language rather than overwriting the model's customer
  // with fragments such as "gecen hafta Harmanda" or treating a day as a full month.
@@ -43,7 +44,7 @@ function spokenAccountReferences(text){
   for(const token of tokens.reverse()){
    if(count>=4||!/^\s*$/.test(text.slice(token.index+token[0].length,cursor)))break;
    const periodWord=new RegExp('^(?:'+months.join('|')+")(?:['’]?(?:de|da|ki|un|in|nin|nun))?$").test(token[0]);
-   if(periodWord||Object.hasOwn(ordinals,token[0])||new RegExp('^'+movementWords+'$').test(token[0])||new RegExp('^'+requestWords+'$').test(token[0])||/^(?:kanka|bana|lutfen|bugun|dun|icin|ay(?:da|inda|i|in|inin|daki)?|hesa[bp]\w*|musteri\w*|excel\w*|rapor\w*|secili|tum|butun|bu|o|tek|dahil|haric)$/.test(token[0]))break;
+   if(periodWord||Object.hasOwn(ordinals,token[0])||new RegExp('^'+movementWords+'$').test(token[0])||new RegExp('^'+requestWords+'$').test(token[0])||/^(?:kanka|bana|lutfen|bugun|dun|icin|ay(?:da|inda|i|in|inin|daki)?|hesa[bp]\w*|musteri\w*|excel\w*|rapor\w*|secili|tum|butun|bu|o|tek|dahil|haric|degil|sadece|yalnizca)$/.test(token[0]))break;
    start=token.index;cursor=start;count++;
   }
   if(count)references.push({start,end:marker.index+marker[0].length});
@@ -95,13 +96,36 @@ export function monthRange(month,year){
  if(!Number.isInteger(month)||month<1||month>12||!Number.isInteger(year)||year<2000||year>2100)return {};
  return {start:`${year}-${String(month).padStart(2,'0')}-01`,end:`${year}-${String(month).padStart(2,'0')}-${new Date(year,month,0).getDate()}`};
 }
+/** Shared calendar parsing. Spans refer to normalized Turkish text, never a model guess. */
+export function parseAssistantPeriod(text,{now=new Date(),draft={}}={}){
+ const s=normalizeSpeech(text);
+ const numericMonths=[...s.matchAll(/\b(1[0-2]|0?[1-9])\s*\.?\s*ay(?:da|daki|in|inin|indaki|inki|i|inda|ki|a)?\b/g)].map(match=>Number(match[1]));
+ const textualMonths=months.flatMap((word,index)=>[...s.matchAll(new RegExp('\\b'+word+"(?:['’]?(?:de|da|ki|un|in|nin|nun))?\\b",'g'))].map(()=>index+1));
+ const ordinalMonths=Object.entries(ordinals).flatMap(([word,month])=>[...s.matchAll(new RegExp('\\b'+word+'\\s+ay\\w*\\b','g'))].map(()=>month));
+ const years=new Set([...s.matchAll(/\b20\d{2}\b/g)].map(match=>match[0]));
+ const isoDates=new Set([...s.matchAll(/\b20\d{2}-\d{2}-\d{2}\b/g)].map(match=>match[0]));
+ const period=reportPeriod(s,now);
+ if(isoDates.size>2||!period.intent.start&&(new Set([...numericMonths,...textualMonths,...ordinalMonths]).size>1||years.size>1))return {intent:{},spans:[],uncertain:true};
+ if(period.intent.start||period.uncertain)return period;
+ const numbered=s.match(/\b(1[0-2]|0?[1-9])\s*\.?\s*ay(?:da|daki|in|inin|indaki|inki|i|inda|ki|a)?\b/);
+ const ordinal=Object.entries(ordinals).map(([word,month])=>({match:s.match(new RegExp('\\b'+word+'\\s+ay\\w*\\b')),month})).find(({match})=>match);
+ const named=months.map((word,index)=>({match:s.match(new RegExp('\\b'+word+"(?:['’]?(?:de|da|ki|un|in|nin|nun))?\\b")),month:index+1})).find(({match})=>match);
+ const month=numbered?Number(numbered[1]):ordinal?.month||named?.month;
+ const yearMatch=s.match(/\b20\d{2}\b/),year=yearMatch?Number(yearMatch[0]):null;
+ if(month)period.intent.month=month;if(year)period.intent.year=year;
+ if(month||year&&draft.month)Object.assign(period.intent,monthRange(month||draft.month,year||draft.year||now.getFullYear()));
+ for(const match of [numbered,ordinal?.match,named?.match,yearMatch].filter(Boolean))period.spans.push({start:match.index,end:match.index+match[0].length});
+ return period;
+}
 /** Fast path only for explicit fields; unknown language still goes to the model. */
 export function parseQuickIntent(text,{awaiting,accounts=[],draft={},now=new Date()}={}){
  const s=normalizeSpeech(text),intent={};
- const format=requestedFormat(text);if(format)intent.format=format;
+ const format=requestedFormat(text,{currentFormat:draft.format});if(format)intent.format=format;
  const allCustomers=/\b(?:(?:tum|butun)\s+musteri\w*|musteriler(?:in|inin|i|ini|e|den)?)\b/.test(s);
  if(allCustomers){intent.allCustomers=true;intent.customer='';if(!format)intent.format='excel';}
- if(/tum hesap/.test(s))intent.scope='all';else if(/secili hesap/.test(s))intent.scope='selected';else if(/cari ekrani|tek hesap/.test(s))intent.scope='cari';
+ const rejectsAll=/\b(?:tum|butun)\s+hesap\w*\s+(?:degil|haric|olmasin|istemiyorum|kullanma|arama|tarama)\b/.test(s);
+ if(rejectsAll){intent.scope='cari';intent.accountIds=[];}
+ else if(/\b(?:tum|butun) hesap/.test(s))intent.scope='all';else if(/secili hesap/.test(s))intent.scope='selected';else if(/cari ekrani|tek hesap/.test(s))intent.scope='cari';
  const references=spokenAccountReferences(s),accountMatches=spokenAccountMatches(s,accounts);
  const named=[...new Map(accountMatches.map(({account})=>[account.id,account])).values()];
  const unresolvedAccount=references.some(reference=>{
@@ -114,22 +138,19 @@ export function parseQuickIntent(text,{awaiting,accounts=[],draft={},now=new Dat
  });
  if(unresolvedAccount){intent.accountIds=[];intent.scope='cari';}
  else if(named.length){intent.accountIds=named.map(a=>a.id);if(!intent.scope)intent.scope=named.length===1?'cari':'selected';}
+ const otherAccount=/\bdiger\s+hesa[bp]/.test(s);
+ if(otherAccount){const other=Array.isArray(draft.accountIds)&&draft.accountIds.length?accounts.filter(account=>!draft.accountIds.includes(account.id)):[];intent.accountIds=other.length===1?[other[0].id]:[];intent.scope='cari';}
  const sales=/\bsatis(?:lar\w*|in\w*|i\w*)?\b/.test(s),purchases=/\balis(?:lar\w*|in\w*|i\w*)?\b/.test(s);
  if(sales&&purchases||awaiting==='direction'&&/her ikisi|ikisi de/.test(s))intent.direction='both';else if(sales)intent.direction='satis';else if(purchases)intent.direction='alis';
  if(/\bcari(?:si\w*)?\b|ekstre/.test(s)&&!intent.direction&&!draft.direction)intent.direction='both';
  if(awaiting==='format'&&/^(ikisi de|her ikisi|hepsi)$/.test(s))intent.format='both';
- if(/tahsilat/.test(s))intent.withCollections=!/haric|olmasin|istemiyorum|dahil etme/.test(s);
+ if(/\btahsilatsiz\b/.test(s))intent.withCollections=false;
+ else if(/\btahsilat(?:lar(?:i)?|i)?\b/.test(s))intent.withCollections=!/\btahsilat(?:lar(?:i)?|i)?\s+(?:(?:da|de|rapordan)\s+)?(?:dahil\s+(?:etme|olmasin)|haric|olmasin|olmadan|istemiyorum|cikar|kaldir)\b/.test(s);
  if(awaiting==='collections'&&/^(evet|dahil|olsun|hayir|haric|olmasin)[.! ]*$/.test(s))intent.withCollections=/evet|dahil|olsun/.test(s)&&!s.includes('olmasin');
  if(allCustomers){intent.direction??=draft.direction||'both';intent.withCollections??=draft.withCollections??true;}
  if(/hesaplar ayri|ayri sayfa/.test(s))intent.layout='separate';
- const period=reportPeriod(s,now);
- const numbered=s.match(/\b(1[0-2]|0?[1-9])\s*\.?\s*ay(?:da|daki|in|inin|indaki|inki|i|inda|ki|a)?\b/);
- const spoken=Object.entries(ordinals).find(([name])=>new RegExp('\\b'+name+'\\s+ay').test(s));
- const namedMonth=months.findIndex(m=>new RegExp('\\b'+m+"(?:['’]?(?:de|da|ki|un|in|nin|nun))?\\b").test(s))+1;
- const month=numbered?Number(numbered[1]):spoken?spoken[1]:namedMonth;
- const year=Number(s.match(/\b20\d{2}\b/)?.[0])||null;
- if(period.intent.start)Object.assign(intent,period.intent);
- else if(!period.uncertain){if(month)intent.month=month;if(year)intent.year=year;if(month||(year&&draft.month))Object.assign(intent,monthRange(month||draft.month,year||draft.year||now.getFullYear()));}
+ const period=parseAssistantPeriod(s,{now,draft});Object.assign(intent,period.intent);
+ let remainder='';
  if(!allCustomers){
   // Strip independently recognized slots before extracting the remaining identity.
   // This also handles modifiers after the customer and dictated words joined together.
@@ -137,6 +158,7 @@ export function parseQuickIntent(text,{awaiting,accounts=[],draft={},now=new Dat
   const accountSpans=unresolvedAccount?references:accountMatches;
   for(const match of [...accountSpans,...period.spans].sort((a,b)=>b.start-a.start))remaining=remaining.slice(0,match.start)+' '.repeat(match.end-match.start)+remaining.slice(match.end);
   remaining=remaining.replace(new RegExp('\\b'+accountWords+'\\b','g'),' ')
+   .replace(new RegExp('\\b'+reportReferences+'\\b','g'),' ')
    .replace(/\b(?:1[0-2]|0?[1-9])\s*\.?\s*ay\w*\b/g,' ')
    .replace(new RegExp('\\b(?:'+Object.keys(ordinals).join('|')+')\\s+ay\\w*\\b','g'),' ')
    .replace(new RegExp('\\b(?:'+months.join('|')+")(?:['’]?(?:de|da|ki|un|in|nin|nun))?\\b",'g'),' ')
@@ -149,15 +171,19 @@ export function parseQuickIntent(text,{awaiting,accounts=[],draft={},now=new Dat
   else remaining=remaining.replace(/\bmusteri\w*\b/g,' ');
   remaining=remaining.replace(new RegExp('\\b'+reportWords+'\\b','g'),' ')
    .replace(new RegExp('\\b'+requestWords+'\\b','g'),' ')
-   .replace(/\b(?:kanka|bana|lutfen|bugun|dun|icin|ve|ile|olarak|da|de|adli|isimli|kisinin|kisi|vkn|tckn|vergi numarasi|istiyorum|misin|misiniz)\b/g,' ')
+   .replace(/\b(?:kanka|bana|lutfen|bugun|dun|icin|ve|ile|olarak|da|de|adli|isimli|kisinin|kisi|vkn|tckn|vergi numarasi|istiyorum|misin|misiniz|sadece|yalnizca|olsun|birlikte|goster|etme|tut|ekle|kaldir|degil|yerine)\b/g,' ')
    .replace(/[.,!?;:]/g,' ').replace(/\s+/g,' ').trim();
   const namedCustomer=awaiting==='customer'||!!beforeCustomer||/\b(?:excel\w*|eksel\w*|xlsx|ekstre\w*|cari\w*|rapor\w*|fotograf\w*|gorsel\w*|resim\w*|icin)\b/.test(s);
+  remainder=remaining;
   if(remaining&&namedCustomer&&!period.uncertain&&!/^(?:onun|bu|o|secilen|evet|hayir|tamam|olur|onayliyorum|iptal)$/.test(remaining)){intent.customer=remaining;intent.allCustomers=false;}
  }
  if(awaiting==='accounts'&&/^(hepsi|tum hesaplar|tumunu)$/.test(s))intent.accountIds=accounts.map(a=>a.id);
- const simpleAnswer=!!awaiting&&(intent[awaiting]!==undefined||awaiting==='collections'&&typeof intent.withCollections==='boolean'||awaiting==='accounts'&&intent.accountIds?.length||awaiting==='period'&&(month||year));
- const completeCommand=!!(intent.customer||intent.allCustomers)&&!!(intent.scope||intent.accountIds?.length||draft.scope)&&(month||intent.start||draft.start);
- return {intent,handled:!!(simpleAnswer||completeCommand)&&!period.uncertain&&!s.includes('degil')};
+ const simpleAnswer=!!awaiting&&(intent[awaiting]!==undefined||awaiting==='collections'&&typeof intent.withCollections==='boolean'||awaiting==='accounts'&&intent.accountIds?.length||awaiting==='period'&&(intent.start||intent.year));
+ const completeCommand=!!(intent.customer||intent.allCustomers)&&!!(intent.scope||intent.accountIds?.length||draft.scope)&&(intent.start||draft.start);
+ const financialMutation=/\b(?:kaydet|isle|gir|iptal|sil|duzelt|degistir|guncelle)\b/.test(s)||/\bekle\b/.test(s)&&/\btahsilat(?:i)?\b/.test(s);
+ const financialRead=/\b(?:toplam\w*|net\w*|bakiye\w*|borc\w*|ozet\w*)\b|\bne kadar\b/.test(s)||/\b(?:satis|alis)\w*(?:tan|dan)\b.*\btahsilat\w*\b.*\bcikar\b/.test(s);
+ const contextual=!!(draft.customer||draft.allCustomers)&&!remainder&&!financialMutation&&!financialRead&&Object.keys(intent).length>0;
+ return {intent,contextual,handled:!!(simpleAnswer||completeCommand||contextual)&&!period.uncertain&&!s.includes('degil')};
 }
 export function nextQuestion(draft){
  if(!draft.scope)return {key:'scope',text:'Hangi ekrandaki raporu hazırlayayım?',choices:[['Seçili Hesaplar',{scope:'selected'}],['Tüm Hesaplar',{scope:'all'}],['Cari',{scope:'cari'}]]};

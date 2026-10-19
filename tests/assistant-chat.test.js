@@ -12,6 +12,7 @@ import {assistantRequest} from '../src/services/assistant-client.js';
 import {previewReport} from '../src/components/report-send.js';
 let app;
 beforeEach(()=>{
+ sessionStorage.clear();
  HTMLElement.prototype.scrollIntoView=vi.fn();
  assistantRequest.mockImplementation(async()=>({connection:'ready',recipient:'905000000000',jobs:[]}));
  scanReport.mockImplementation(async()=>[{name:'Harmanda',tax:'1234',rows:[]}]);
@@ -136,4 +137,51 @@ it('preserves an explicit date window instead of replacing it with a whole month
  app=await mountAssistant();document.body.append(app.page);
  await voiceHarness.callbacks.onAudio(new Blob(['dates'],{type:'audio/mp4'}));
  expect(scanReport.mock.calls[0][0]).toMatchObject({start:'2026-09-05',end:'2026-09-20'});
+});
+it('answers capability questions locally without treating examples as commands or changing a pending report',async()=>{
+ app=await mountAssistant();document.body.append(app.page);
+ const send=async text=>{app.page.querySelector('#assistantCommand').value=text;app.page.querySelector('#assistantInterpret').click();await vi.waitFor(()=>expect(app.page.querySelector('#assistantInterpret').disabled).toBe(false));};
+ await send('Ayşe hesabından Harmanda eylül Excel hazırla');
+ expect(scanReport).not.toHaveBeenCalled();
+ await send('tahsilatla ilgili ne sorabilirim');
+ await vi.waitFor(()=>expect(app.page.querySelector('#assistantMessages').textContent).toContain('açık onay'));
+ expect(assistantRequest.mock.calls.every(([url])=>url==='/status')).toBe(true);
+ await send('satış alış tahsilat dahil');
+ await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledOnce());
+ expect(scanReport.mock.calls[0][0]).toMatchObject({start:'2026-09-01',direction:'both',withCollections:true,format:'excel'});
+});
+it('applies short report filter followups without creating or forgetting the customer',async()=>{
+ app=await mountAssistant();document.body.append(app.page);
+ const send=async text=>{app.page.querySelector('#assistantCommand').value=text;app.page.querySelector('#assistantInterpret').click();await vi.waitFor(()=>expect(app.page.querySelector('#assistantInterpret').disabled).toBe(false));};
+ await send('Ayşe hesabından Harmanda eylül satış alış tahsilat dahil Excel hazırla');
+ await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledTimes(1));
+ await send('tahsilatları çıkar');await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledTimes(2));
+ expect(scanReport.mock.calls.at(-1)[0]).toMatchObject({withCollections:false,direction:'both'});
+ await send('sadece satışlar olsun');await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledTimes(3));
+ expect(scanReport.mock.calls.at(-1)[0]).toMatchObject({withCollections:false,direction:'satis'});
+ expect(matchReportGroups.mock.calls.at(-1)[1]).toBe('harmanda');
+ await send('tahsilatları da ekle');await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledTimes(4));
+ expect(scanReport.mock.calls.at(-1)[0].withCollections).toBe(true);
+});
+it('declines an unsupported numeric query while waiting for a report customer without consuming it as the name',async()=>{
+ app=await mountAssistant();document.body.append(app.page);
+ const send=async text=>{app.page.querySelector('#assistantCommand').value=text;app.page.querySelector('#assistantInterpret').click();await vi.waitFor(()=>expect(app.page.querySelector('#assistantInterpret').disabled).toBe(false));};
+ await send('Ayşe hesabından eylül satış alış tahsilat dahil Excel hazırla');
+ await send('Bankada 80 bin var mı?');expect(scanReport).not.toHaveBeenCalled();expect(app.page.querySelector('[name=customer]').value).toBe('');
+ await send('Harmanda');await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledOnce());
+ expect(matchReportGroups.mock.calls.at(-1)[1]).toBe('harmanda');
+});
+it('explains how to edit instead of reading a latest record for a tutorial question',async()=>{
+ app=await mountAssistant();document.body.append(app.page);
+ app.page.querySelector('#assistantCommand').value='Son tahsilatı nasıl düzeltebilirim';app.page.querySelector('#assistantInterpret').click();
+ await vi.waitFor(()=>expect(app.page.querySelector('#assistantMessages').textContent).toContain('açık onay iste'));
+ expect(scanReport).not.toHaveBeenCalled();expect(assistantRequest.mock.calls.every(([url])=>url==='/status')).toBe(true);
+});
+it('keeps the customer when changing file format before the remaining report filters are answered',async()=>{
+ app=await mountAssistant();document.body.append(app.page);
+ const send=async text=>{app.page.querySelector('#assistantCommand').value=text;app.page.querySelector('#assistantInterpret').click();await vi.waitFor(()=>expect(app.page.querySelector('#assistantInterpret').disabled).toBe(false));};
+ await send('Ayşe hesabından Harmanda eylül Excel hazırla');await send('Excel yerine görsel olsun');
+ expect(app.page.querySelector('[name=customer]').value).toBe('harmanda');
+ await send('satış alış tahsilat dahil');await vi.waitFor(()=>expect(previewReport).toHaveBeenCalledOnce());
+ expect(previewReport.mock.calls[0][0].options.format).toBe('image');
 });

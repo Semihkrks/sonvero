@@ -6,6 +6,13 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173
+    },
+    {
+      "name": "sonai-fixture",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "--port", "5180", "--strictPort"],
+      "port": 5180,
+      "env": {"VITE_SUPABASE_URL": "https://sonvera-test.supabase.co", "VITE_SUPABASE_ANON_KEY": "test-anon-key"}
     }
   ]
 }

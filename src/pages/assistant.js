@@ -6,17 +6,20 @@ import {previewReport} from '../components/report-send.js';
 import {assistantContext} from '../services/assistant-context.js';
 import {parseQuickIntent,nextQuestion,monthRange,matchSpokenAccounts} from '../lib/assistant-intent.js';
 import {createBusinessAssistant} from '../services/assistant-business.js';
-import {parseBusinessCommand} from '../lib/assistant-actions.js';
+import {parseBusinessCommand,isUnsupportedBusinessQuery} from '../lib/assistant-actions.js';
 import {createVoiceSession} from '../services/voice-session.js';
 import {createAssistantSpeech,spokenReply} from '../services/assistant-speech.js';
 import {dialogueCommand,requestedFormat,formatLabel} from '../lib/assistant-dialogue.js';
 import {sonaiMark} from '../components/sonai-mark.js';
+import {capabilityReply} from '../../services/assistant/capabilities.mjs';
+import {createConversationMemory,resolveFollowUp,describeTopic,topicForModel,normalizeTopic} from '../lib/assistant-memory.js';
 
+const draftKeys=['scope','accountIds','customer','allCustomers','start','end','month','year','direction','withCollections','layout','format'];
 const statusLabel={disconnected:'WhatsApp bağlı değil',connecting:'WhatsApp bağlanıyor…',qr:'QR kodunu okutun',authenticated:'Hesap bağlandı, hazırlanıyor…',syncing:'WhatsApp eşitleniyor…',ready:'WhatsApp hazır · Gönderim yapılabilir',auth_failure:'Yeniden bağlantı gerekli',error:'Bağlantı kurulamadı'};
 export async function mountAssistant({context=assistantContext(),compact=false,audioContext,speech:providedSpeech}={}){
  const accounts=await listAccounts();const page=document.createElement('div');page.className='sv-assistant';
  let disposed=false,refreshBusy=false,scanVersion=0,groups=[],snapshot=null;
- const typeTimers=new Set(),conversation=[];let awaiting=null,draft={},busy=false,preview=null,voiceActive=false,commandSeq=0,chosenGroups=null,previewVersion=0;
+ const typeTimers=new Set(),session=createConversationMemory();let awaiting=null,draft={},busy=false,preview=null,voiceActive=false,commandSeq=0,chosenGroups=null,previewVersion=0;
  let pendingSpeech='',speechTimer=null,speechResumeTimer=null,speechTransition=false,voiceRecoveryNeeded=false;
  const speech=providedSpeech||createAssistantSpeech({onSpeaking:pauseForSpeech,onDone:resumeAfterSpeech});
  const defaults=()=>({scope:context.scope||'selected',year:new Date().getFullYear(),layout:'separate',format:'both',accountIds:context.accountIds||context.selected?.accountIds||accounts.map(a=>a.id),direction:context.direction||context.selected?.direction,withCollections:context.withCollections??context.selected?.withCollections});
@@ -37,13 +40,15 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
 </details>
  <div class="sv-chat-composer"><label class="sr-only" for="assistantCommand">Asistana mesajın</label><textarea id="assistantCommand" rows="2" maxlength="2500" placeholder="Konuş veya yaz. Örn. seçili hesaplarda eylül Harmanda"></textarea><div class="sv-composer-actions"><button class="sv-mic-button" id="assistantMic" type="button" aria-pressed="false"><span class="sv-mic-label">Konuş</span></button><span id="assistantReply" role="status"></span><button class="btn btn-primary" id="assistantInterpret" type="button">Gönder</button></div></div>`;
  const $=selector=>page.querySelector(selector),form=$('#assistantFilters'),reply=$('#assistantReply');
- const business=createBusinessAssistant({accounts,message,choices:$('#assistantChoices'),isCurrent:()=>!disposed,run:async callback=>{if(busy||disposed)return;setBusy(true,'İşlemi hazırlıyorum…');try{await callback();}catch(error){message(error.message,'assistant',{instant:true});}finally{if(!disposed){setBusy(false);continueVoice();}}}});
+ const business=createBusinessAssistant({accounts,message,choices:$('#assistantChoices'),isCurrent:()=>!disposed,onTopic:value=>setTopic(value),run:async callback=>{if(busy||disposed)return;setBusy(true,'İşlemi hazırlıyorum…');try{await callback();}catch(error){message(error.message,'assistant',{instant:true});}finally{if(!disposed){setBusy(false);continueVoice();}}}});
  const field=name=>form.elements.namedItem(name);
  page.classList.add('sv-voice-app');
  for(const selector of ['.sv-chat-heading','.sv-chat-status','.sv-chat-filters'])$(selector).hidden=true;
  const orbit=document.createElement('div');orbit.className='sv-voice-stage';orbit.innerHTML='<div class="sv-voice-caption">SONAI</div><div class="sv-voice-orbit"><span class="sv-voice-aura" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span><span class="sv-voice-ring" aria-hidden="true"></span></div><p class="sv-live-transcript" aria-live="polite"></p>';
- const mic=$('#assistantMic');mic.classList.add('sv-voice-orb');mic.innerHTML='<span class="sv-orb-glow" aria-hidden="true"></span><span class="sv-orb-core" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="sr-only sv-mic-label">Dinlemeye başla</span>';mic.setAttribute('aria-label','Dinlemeyi başlat veya duraklat');orbit.querySelector('.sv-voice-orbit').append(mic);orbit.append(reply);$('.sv-chat-heading').after(orbit);$('.sv-chat-composer').hidden=true;
+ const mic=$('#assistantMic');mic.classList.add('sv-voice-orb');mic.innerHTML='<span class="sonai-orb-fluid" aria-hidden="true"><i></i><i></i></span><span class="sv-orb-glow" aria-hidden="true"></span><span class="sonai-orb-shine" aria-hidden="true"></span><span class="sv-orb-core" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="sr-only sv-mic-label">Dinlemeye başla</span>';mic.setAttribute('aria-label','Dinlemeyi başlat veya duraklat');orbit.querySelector('.sv-voice-orbit').append(mic);orbit.append(reply);$('.sv-chat-heading').after(orbit);$('.sv-chat-composer').hidden=true;
  const thinking=document.createElement('div');thinking.className='sonai-thinking';thinking.setAttribute('aria-hidden','true');thinking.innerHTML='<i></i><i></i><i></i>';reply.before(thinking);
+ const topicChip=document.createElement('div');topicChip.className='sonai-context';topicChip.hidden=true;topicChip.setAttribute('role','group');topicChip.innerHTML='<span class="sonai-context-dot" aria-hidden="true"></span><span class="sonai-context-text" role="status"></span><button type="button" class="sonai-context-reset">Yeni sohbet</button>';$('#assistantMessages').before(topicChip);
+ topicChip.querySelector('.sonai-context-reset').onclick=()=>{if(busy)return;voice.pause();reset();continueVoice();};
  const formatChoices=document.createElement('div');formatChoices.className='sonai-formats';formatChoices.setAttribute('aria-label','Gönderim biçimi');formatChoices.hidden=true;$('#assistantResults').before(formatChoices);
  const delivery=document.createElement('div');delivery.className='sonai-delivery';delivery.setAttribute('role','status');delivery.hidden=true;formatChoices.after(delivery);
  for(const [value,label] of [['excel','Excel'],['image','Fotoğraf'],['both','İkisi de']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.format=value;button.onclick=()=>{if(!busy&&!preview?.sending)void changeFormat(value);};formatChoices.append(button);}
@@ -111,9 +116,31 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   if(speech.isSpeaking())return;
   if(voiceActive)resumeVoice();else voiceState('idle');
  }
- function message(text,role='assistant',{instant=false}={}){
+ function storableDraft(){const value={};for(const key of draftKeys)if(draft[key]!==undefined&&draft[key]!==null)value[key]=key==='accountIds'?draft.accountIds.filter(id=>accounts.some(a=>a.id===id)):draft[key];return value;}
+ function persist(){if(disposed)return;try{session.save({draft:storableDraft(),business:business.snapshot()});}catch{/* persistence is optional */}}
+ function renderTopic(){const text=describeTopic(session.topic,accounts);topicChip.hidden=!text;const label=topicChip.querySelector('.sonai-context-text');label.textContent=text;label.title=text;topicChip.setAttribute('aria-label',text?'Sohbet bağlamı: '+text:'');}
+ function setTopic(value){session.setTopic(normalizeTopic(value,accounts));renderTopic();persist();}
+ function modelContext(current=''){
+  const history=session.modelHistory(),turns=[...history.conversation];
+  if(current&&turns.at(-1)?.role==='user'&&turns.at(-1).text===current)turns.pop();
+  const value={draft,awaiting,business:business.getContext(),remembered:business.getMemory(),topic:topicForModel(session.topic,accounts),accounts:accounts.map(a=>({id:a.id,name:a.name})),route:context.route,conversation:turns,earlier:history.earlier};
+  while(value.conversation.length>2&&JSON.stringify(value).length>15000)value.conversation.shift();
+  return value;
+ }
+ function offer(options){
+  const box=$('#assistantChoices');box.replaceChildren();
+  options.forEach(([label,text],index)=>{const b=document.createElement('button');b.type='button';b.className='sv-choice';b.textContent=label;b.style.setProperty('--sv-choice-i',String(index));b.onclick=()=>{if(busy)return;box.replaceChildren();$('#assistantCommand').value=text;void interpret();};box.append(b);});
+ }
+ function contextualHelp(){
+  const text=describeTopic(session.topic,accounts);
+  return text?'Bunu tam çıkaramadım. En son '+text+' üzerine konuşuyorduk; dönemi, hesabı veya metriği değiştirebilir, Excel hazırlayabilir ya da tahsilat ekleyebilirim. Nasıl devam edelim?':'Cari rapor, satış, alış, tahsilat ve WhatsApp gönderiminde yardımcı olabilirim. Ne yapmak istersin?';
+ }
+ function message(text,role='assistant',{instant=false,remember=true}={}){
   if(role==='assistant'&&voiceActive){pendingSpeech=text;clearTimeout(speechTimer);speechTimer=setTimeout(continueVoice,0);}
-  const node=document.createElement('div');node.className='sv-chat-message sv-chat-'+role;$('#assistantMessages').append(node);conversation.push({role,text});if(conversation.length>16)conversation.shift();
+  const node=document.createElement('div');node.className='sv-chat-message sv-chat-'+role;$('#assistantMessages').append(node);
+  // A closed panel must not write its old conversation back after sign-out.
+  // Messages shown while a write awaits confirmation stay in memory only (never stored).
+  if(remember&&!disposed){const pending=business.getContext(),pendingWrite=role==='assistant'&&['collection','update_collection','cancel_collection'].includes(pending?.action)&&pending.phase!=='saving';session.add(role,text,{transient:pendingWrite});persist();}
   const done=()=>requestAnimationFrame(()=>{if(node.isConnected)node.scrollIntoView({block:'nearest',behavior:'smooth'});});
   if(instant||reduceMotion()){node.textContent=text;done();return node;}
   const parts=Array.from(text);let index=0;node.classList.add('sv-typing');
@@ -165,15 +192,15 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
     if(['sent','failed','unknown'].includes(status))message(text,'assistant',{instant:true});
    }});
    if(disposed||version!==previewVersion||scan!==scanVersion){result?.close();return;}
-   preview=result;if(result?.ready===false)return;message((snapshot.options.allCustomers&&draft.format==='excel'?chosen.length+' müşterinin Excel’i':formatLabel(draft.format))+' hazır. Dosyayı önizlemeden alabilir veya “WhatsApp’a gönder” diyebilirsin.');
+   preview=result;if(result?.ready===false)return;setTopic({action:'report',accountIds:snapshot.accounts.map(a=>a.id),customer:chosen.length===1?{name:chosen[0].name,tax:chosen[0].tax||''}:null,allCustomers:!!snapshot.options.allCustomers||chosen.length>1,period:{start:snapshot.options.start,end:snapshot.options.end},direction:snapshot.options.direction,withCollections:snapshot.options.withCollections,format:draft.format,scope:snapshot.options.scope});message((snapshot.options.allCustomers&&draft.format==='excel'?chosen.length+' müşterinin Excel’i':formatLabel(draft.format))+' hazır. Dosyayı önizlemeden alabilir veya “WhatsApp’a gönder” diyebilirsin.');
   }finally{if(!disposed&&version===previewVersion){setBusy(false);updateFormats();}}
  }
  async function changeFormat(format){
   if(preview?.sending||preview?.formatLocked){message('Bu gönderim zaten başladı. Önce aynı gönderimin sonucunu doğrulayalım; yeni biçim için yeni bir rapor hazırlayabiliriz.');return;}
   draft.format=format;updateFormats();if(chosenGroups&&snapshot)await preparePreview(chosenGroups);
  }
- async function handleDialogue(text,modelReply){
-  const command=dialogueCommand(text,{awaiting,candidates:!preview&&snapshot?groups:[],hasPreview:!!preview});
+ async function handleDialogue(text,modelReply,patch={}){
+  const command=dialogueCommand(text,{awaiting,candidates:!preview&&snapshot?groups:[],hasPreview:!!preview,currentFormat:draft.format});
   if(!command)return false;
   if(command.action==='reset'){reset();return true;}
   if(command.action==='cancel'){
@@ -185,8 +212,9 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   if(command.action==='needs_report'){if(command.format)draft.format=command.format;message(groups.length>1?'Önce müşteriyi seçelim. “İlki olsun” veya “ikincisi olsun” diyebilirsin.':'Önce raporu hazırlayalım. Hangi müşterinin, hangi aydaki carisini göndereyim?');return true;}
   if(command.action==='choose'){
    if(command.format)draft.format=command.format;
-   message((command.index+1)+'. müşteriyi seçtim: '+groups[command.index].name);
-   await preparePreview([groups[command.index]]);return true;
+   const selected=groups[command.index];message((command.index+1)+'. müşteriyi seçtim: '+selected.name);
+   if(['start','end','month','year','direction','withCollections','accountIds','scope'].some(key=>Object.hasOwn(patch,key))){invalidate();merge({...patch,customer:selected.name,allCustomers:false});setBusy(false);await advance();}
+   else await preparePreview([selected]);return true;
   }
   if(command.action==='format'){await changeFormat(command.format);return true;}
   if(command.action==='send'){
@@ -202,27 +230,39 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   }
   return false;
  }
+ async function runFollowUp(follow){
+  if(follow.kind==='summary'||follow.kind==='latest'||follow.kind==='invoices')return business.execute(follow.command,{draft});
+  if(follow.kind==='report'){invalidate();draft=defaults();merge(follow.intent);setBusy(false);await advance();return true;}
+  if(follow.kind==='clarify'){message(follow.text);offer(follow.options);return true;}
+  return false;
+ }
  async function interpret(audio,{voice:spokenInput=false,heard=''}={}){
   if(audio instanceof Event)audio=undefined;if(busy||disposed)return;
   voice.pause();speechTransition=true;speech.stop();speechTransition=false;pendingSpeech='';const text=$('#assistantCommand').value.trim()||String(heard||'').trim();if(!text&&!audio)return;
+  // After a long pause old customers and periods must not silently carry over.
+  if(session.expired()&&!business.getContext()){reset();}
   const version=scanVersion,requestSeq=++commandSeq;setBusy(true,'Söylediklerini anlıyorum…');$('#assistantCommand').value='';
   try{
    let transcript=text,result;
    if(audio){
-    result=await assistantRequest('/interpret',{text,context:{draft,awaiting,business:business.getContext(),remembered:business.getMemory(),accounts:accounts.map(a=>({id:a.id,name:a.name})),route:context.route,conversation:conversation.slice(-8)},audio});
+    result=await assistantRequest('/interpret',{text,context:modelContext(),audio});
     if(disposed||version!==scanVersion||requestSeq!==commandSeq)return;
     transcript=result.transcript?.trim()||text;
     if(!transcript){message('Söylediklerini seçemedim. Biraz daha yakından konuşup tekrar söyleyebilir misin?');return;}
     paintLive(transcript,{animate:!liveHeard||fold(liveHeard)!==fold(transcript)});
    }
    message(transcript,'user',{instant:!audio});
+   const help=capabilityReply(transcript);if(help){message(help);return;}
+   if(isUnsupportedBusinessQuery(transcript)){message('Banka, kasa, stok, kâr veya vade bilgisine doğrudan erişimim yok. Kayıtlı müşteri bakiyesini ya da satış, alış ve tahsilat toplamlarını sorgulayabilirim; mevcut seçimlerini koruyorum.');return;}
+   if(!awaiting&&!business.getContext()){const follow=resolveFollowUp(transcript,{topic:session.topic,accounts,now:new Date()});if(follow&&await runFollowUp(follow))return;}
    const quick=parseQuickIntent(transcript,{awaiting,accounts,draft});
    const businessCommand=parseBusinessCommand(transcript,{accounts,draft});
-   const reportAnswer=!!awaiting&&(!businessCommand||businessCommand.action==='select_customer');
+   const reportInclusion=businessCommand?.action==='collection'&&/^(?:kanka\s+)?tahsilatlar\w*\s+(?:da\s+)?(?:ekle|dahil)/.test(fold(transcript));
+   const reportAnswer=(!!awaiting||!!quick.contextual&&!business.getContext())&&(!businessCommand||businessCommand.action==='select_customer'||reportInclusion);
    if(!reportAnswer&&await business.handle(transcript,{draft,remote:result?.intent||{}})){awaiting=null;return;}
-   if(await handleDialogue(transcript,result?.reply))return;
+   if(await handleDialogue(transcript,result?.reply,quick.intent))return;
    if(!result&&!quick.handled){
-    try{result=await assistantRequest('/interpret',{text:transcript,context:{draft,awaiting,business:business.getContext(),remembered:business.getMemory(),accounts:accounts.map(a=>({id:a.id,name:a.name})),route:context.route,conversation:conversation.slice(-8)}});}
+    try{result=await assistantRequest('/interpret',{text:transcript,context:modelContext(transcript)});}
     catch(error){if(!Object.keys(quick.intent).length)throw error;}
    }
    if(disposed||version!==scanVersion||requestSeq!==commandSeq)return;
@@ -231,9 +271,9 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
    if(result?.reply&&!Object.keys(remote).length&&!quick.handled){message(result.reply);return;}
    const intent={...remote,...quick.intent};
    if(Object.hasOwn(quick.intent,'accountIds'))delete intent.account;
-   const explicit=requestedFormat(transcript);if(explicit)intent.format=explicit;
-   if(!Object.keys(intent).length){message(result?.reply||'Cari rapor, satış, alış, tahsilat ve WhatsApp gönderiminde yardımcı olabilirim. Ne yapmak istersin?');return;}
-   if(Object.keys(intent).every(key=>key==='format')){await changeFormat(intent.format);message(formatLabel(intent.format)+' olarak hazırlayacağım. Hangi müşteri için olsun?');return;}
+   const explicit=requestedFormat(transcript,{currentFormat:draft.format});if(explicit)intent.format=explicit;
+   if(!Object.keys(intent).length){message(result?.reply||contextualHelp());return;}
+   if(Object.keys(intent).every(key=>key==='format')){await changeFormat(intent.format);if(!chosenGroups){setBusy(false);await advance();}return;}
    invalidate();merge(intent);setBusy(false);await advance();
   }catch(error){if(!disposed&&version===scanVersion)message(error.message,'assistant',{instant:true});}
   finally{if(!disposed&&requestSeq===commandSeq){setBusy(false);updateFormats();continueVoice();}}
@@ -241,7 +281,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
 
  $('#assistantInterpret').onclick=interpret;
  $('#assistantCommand').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();void interpret();}};
- function reset(){commandSeq++;speechTransition=true;speech.stop();speechTransition=false;pendingSpeech='';business.reset();invalidate();conversation.length=0;draft=defaults();sync();$('#assistantMessages').replaceChildren();$('#assistantChoices').replaceChildren();$('#assistantCommand').value='';paintLive('');awaiting=null;setBusy(false);message('Merhaba. Hesap ve müşteri adını söyle; tahsilat ekleyebilir, düzeltebilir veya iptal edebilir, bakiye ve hesap özeti sorgulayabilir, rapor hazırlayabilirim.');}
+ function reset(){commandSeq++;speechTransition=true;speech.stop();speechTransition=false;pendingSpeech='';business.reset();invalidate();session.clear();renderTopic();draft=defaults();sync();$('#assistantMessages').replaceChildren();$('#assistantChoices').replaceChildren();$('#assistantCommand').value='';paintLive('');awaiting=null;setBusy(false);message('Merhaba. Hesap ve müşteri adını söyle; tahsilat ekleyebilir, düzeltebilir veya iptal edebilir, bakiye ve hesap özeti sorgulayabilir, rapor hazırlayabilirim.');}
  $('#assistantReset').onclick=()=>{voice.pause();reset();continueVoice();};
  async function startListening({activateSpeech=false}={}){
   if(disposed||busy)return;
@@ -259,7 +299,7 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
   const options={allCustomers:!!draft.allCustomers,format:draft.format,scope:field('scope').value,start:field('start').value,end:field('end').value,direction:field('direction').value,withCollections:field('collections').value==='yes',layout:field('layout').value};
   if(options.scope==='cari'&&selected.length!==1){reply.textContent='Cari şablonu için tek hesap seçin.';return;}
   const button=$('#assistantScan');setBusy(true,'Hesaplar taranıyor…');
-  const progress=message(`${selected.length} hesapta ${draft.allCustomers?'tüm müşteriler':field('customer').value} için ${options.start} – ${options.end} dönemini tarıyorum.`,'assistant',{instant:true});
+  const progress=message(`${selected.length} hesapta ${draft.allCustomers?'tüm müşteriler':field('customer').value} için ${options.start} – ${options.end} dönemini tarıyorum.`,'assistant',{instant:true,remember:false});
   try{
    const query=fold(field('customer').value);const scanned=await scanReport({...options,accounts:selected,onProgress:(done,total)=>reply.textContent=`${done}/${total} hesap tarandı…`});
    if(disposed||version!==scanVersion)return;
@@ -282,6 +322,17 @@ export async function mountAssistant({context=assistantContext(),compact=false,a
    $('#assistantStatusBadge').textContent=label;page.dataset.connection=state.connection;
   }catch(error){if(!disposed){$('#assistantStatusBadge').textContent=error.message;page.dataset.connection='error';}}finally{refreshBusy=false;}
  }
- reset();voiceState('idle');void refresh();
+ const draftTypes={scope:'string',customer:'string',start:'string',end:'string',direction:'string',layout:'string',format:'string',allCustomers:'boolean',withCollections:'boolean',month:'number',year:'number'};
+ function restoreSession(){
+  try{
+   const saved=session.restore(accounts);if(!saved||!session.turns.length)return false;
+   const stored=saved.draft&&typeof saved.draft==='object'?saved.draft:{},next=defaults();
+   for(const key of draftKeys){if(!Object.hasOwn(stored,key))continue;if(key==='accountIds'){if(Array.isArray(stored.accountIds))next.accountIds=stored.accountIds.filter(id=>accounts.some(a=>a.id===id));}else if(typeof stored[key]===draftTypes[key])next[key]=stored[key];}
+   draft=next;sync();business.restore(saved.business);
+   for(const turn of session.turns){const node=document.createElement('div');node.className='sv-chat-message sv-chat-'+turn.role;node.textContent=turn.text;$('#assistantMessages').append(node);}
+   renderTopic();persist();return true;
+  }catch{session.clear();business.reset();$('#assistantMessages').replaceChildren();return false;}
+ }
+ if(!restoreSession())reset();voiceState('idle');void refresh();
  return {page,title:'SonAI',pauseForSpeech,resumeAfterSpeech,cleanup(){disposed=true;business.reset();previewVersion++;voiceActive=false;speech.dispose();voice.close();clearTimeout(speechTimer);clearTimeout(speechResumeTimer);clearTimeout(dictateTimer);if(levelRaf)cancelAnimationFrame(levelRaf);document.removeEventListener('visibilitychange',visibility);scanVersion++;typeTimers.forEach(clearTimeout);preview?.close();}};
 }

@@ -7,7 +7,7 @@ import QRCode from 'qrcode';
 import { validateIntent, validatePackage } from './validation.mjs';
 import { findSentMessage, nextDeliveryStep } from './delivery.mjs';
 import {installMediaCompatibility} from './wa-compat.mjs';
-import {buildInterpretPrompt,interpretationConfig,interpretationSchema} from './interpretation.mjs';
+import {buildInterpretRequest} from './interpretation.mjs';
 
 const { Client, LocalAuth, MessageMedia } = whatsapp;
 const root = process.env.DATA_DIR || './data';
@@ -229,10 +229,9 @@ const server = http.createServer(async (req, res) => {
       if(context.length>18000)throw new Error('Konuşma bağlamı çok uzun. Yeni sohbet başlatın.');
       if(body.audio&&(!['audio/webm','audio/mp4','audio/ogg','audio/wav'].includes(body.audio.mime)||typeof body.audio.base64!=='string'||body.audio.base64.length>12*1024*1024||!/^[A-Za-z0-9+/]*={0,2}$/.test(body.audio.base64)))throw new Error('Ses kaydı biçimi veya boyutu desteklenmiyor.');
       const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Istanbul'}).format(new Date());
-      const prompt=buildInterpretPrompt({today,context,text:body.text});
       const response=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent',{
         method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':settings.geminiKey},
-        body:JSON.stringify({contents:[{parts:[{text:prompt},...(body.audio?[{inlineData:{mimeType:body.audio.mime,data:body.audio.base64}}]:[])]}],generationConfig:{responseMimeType:'application/json',responseJsonSchema:interpretationSchema,...interpretationConfig}}),signal:AbortSignal.timeout(30000),
+        body:JSON.stringify(buildInterpretRequest({today,context,text:body.text,audio:body.audio})),signal:AbortSignal.timeout(30000),
       });
       if(!response.ok)return respond(res,response.status===429?429:502,{error:response.status===429?'Ücretsiz yapay zekâ kotası doldu. Ücretli modele geçilmedi; manuel filtreleri kullanabilirsiniz.':response.status===503?'Gemini şu anda geçici olarak kullanılamıyor. Biraz sonra tekrar deneyin veya manuel filtreleri kullanın.':'Yapay zekâ yanıt vermedi. API anahtarını ve model erişimini kontrol edin.'});
       const answer=await response.json();

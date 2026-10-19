@@ -92,3 +92,69 @@ it('preserves amount magnitude across transcript punctuation between fields',()=
  }
  for(const text of ['60.50, tarihi dün olsun','60.50; tarihi dün olsun'])expect(parseBusinessSlots(text).amount).toBeNull();
 });
+it.each([
+ ['ne kadar alacağımız var',{action:'summary',metric:'debtors',view:'receivables',customer:null}],
+ ['Serkan hesabında toplam alacağımız kaç para',{action:'summary',metric:'debtors',view:'receivables',accountIds:['a'],customer:null}],
+ ['tüm müşterilerden toplam ne kadar alacağımız var',{action:'summary',metric:'debtors',view:'receivables',customer:null}],
+ ['Harmanda bize ne borçlu',{action:'balance',customer:'harmanda'}],
+ ['Harmanda bize kaç para borçlu',{action:'balance',customer:'harmanda'}],
+ ["Harmanda'nın borcu kaç para",{action:'balance',customer:'harmanda'}],
+ ["Harmanda'dan ne kadar alacağımız var",{action:'balance',customer:'harmanda'}],
+ ['Serkan hesabındaki Harmanda bize ne kadar borçlu',{action:'balance',accountIds:['a'],customer:'harmanda'}],
+ ["Serkan'daki Harmanda bize ne borçlu",{action:'balance',accountIds:['a'],customer:'harmanda'}],
+ ['Serkan Bingöldeki Harmanda bize ne borçlu',{action:'balance',accountIds:['a'],customer:'harmanda'}],
+ ['bu ay kaç para topladık',{action:'summary',metric:'collections'}],
+ ['bugün ne kadar para topladık',{action:'summary',metric:'collections'}],
+ ['geçen ay müşterilerden ne kadar para geldi',{action:'summary',metric:'collections',customer:null}],
+ ['bu ay tahsil ettiğimiz toplam tutar nedir',{action:'summary',metric:'collections'}],
+ ['satış toplamı',{action:'summary',metric:'sales'}],
+ ['bu ay toplam satışımız kaç para',{action:'summary',metric:'sales'}],
+ ['alış toplamı',{action:'summary',metric:'purchases'}],
+ ['geçen ay toplam alışımızı söyle',{action:'summary',metric:'purchases'}],
+ ['en borçlu müşteriler kim',{action:'summary',metric:'debtors',customer:null}],
+ ['bize en çok borcu olan müşterileri göster',{action:'summary',metric:'debtors',customer:null}],
+ ['en fazla borcu olan üç müşteri kim',{action:'summary',metric:'debtors',limit:3,customer:null}],
+ ['son tahsilatı söyler misin',{action:'latest_collection'}],
+ ['en son kaydettiğimiz tahsilat hangisi',{action:'latest_collection'}],
+ ['tahsilat olarak en son ne ekledik',{action:'latest_collection'}],
+ ['Serkan hesabındaki Harmanda için son tahsilatı gösterir misin',{action:'latest_collection',customer:'harmanda',accountIds:['a']}],
+ ['Serkan hesabındaki Harmanda son tahsilatını 75 bin yapar mısın',{action:'update_collection',customer:'harmanda',amount:'75000.00'}],
+ ['son tahsilatın tutarını 75 bin yap',{action:'update_collection',amount:'75000.00'}],
+ ['son tahsilatı iptal eder misin',{action:'cancel_collection'}],
+])('maps supported financial phrasing: %s',(text,expected)=>{
+ expect(parseBusinessCommand(text,{accounts})).toMatchObject(expected);
+});
+it('does not reuse one customer for an explicitly selected multi-account receivable scope',()=>{
+ expect(parseBusinessCommand('seçili hesaplarda ne kadar alacağımız var',{accounts,draft:{accountIds:['a','b'],customer:'Harmanda'}})).toMatchObject({action:'summary',metric:'debtors',view:'receivables',customer:null,scope:'selected'});
+});
+it.each([
+ 'tahsilat ekleme',
+ 'son tahsilatı 75 bin olarak düzeltme',
+ 'son tahsilatı düzeltme lütfen 75 bin yapma',
+ 'son tahsilatı iptal etme',
+ 'son tahsilatı iptal etmeyelim',
+ 'Harmanda müşterisine 75 bin tahsilat eklemek istemiyorum',
+ 'Harmanda müşterisine 75 bin tahsilat ekleyebilir misin hayır ekleme',
+ 'son tahsilatı 75 bin yapmanı istemiyorum',
+ 'son tahsilatı 75 bin olarak düzeltmek istemiyorum',
+ 'fatura oluştur', 'Harmanda müşterisine ödeme yap', 'dekont oluştur',
+])('never derives a financial mutation from negated or unsupported requests: %s',text=>{
+ const command=parseBusinessCommand(text,{accounts,remote:{action:'collection',amount:75000}});
+ expect(command==null||!['collection','update_collection','cancel_collection'].includes(command.action)).toBe(true);
+});
+it.each(['net kârımız ne kadar','bu ay satıştan ne kadar kâr ettik','hangi müşterinin vadesi geçti','bankada ne kadar para var','kasa bakiyesini söyle','stok toplamı kaç para','Bu ay kârımızın net toplamı ne kadar','Bankalarımızdaki tahsilat toplamı ne kadar','Kasamızın satış toplamı ne kadar'])('does not approximate unsupported financial data: %s',text=>{
+  expect(parseBusinessCommand(text,{accounts,remote:{action:'summary',metric:'net'}})).toBeNull();
+ });
+it('opens the actual customer balances screen before interpreting müşteri as a customer selection',()=>{
+ expect(parseBusinessCommand('Müşteri bakiyelerini aç',{accounts})).toEqual({action:'navigate',route:'/cari-ozet'});
+});
+it('does not reject real account names sharing the beginning of a financial keyword',()=>{
+ expect(parseBusinessCommand('Ayşe Karabulut hesabındaki Harmanda müşterisine bugün 75 bin tahsilat ekle',{accounts:[...accounts,{id:'c',name:'Ayşe Karabulut'}]})).toMatchObject({action:'collection',accountIds:['c'],amount:'75000.00'});
+});
+it.each([
+ ['2026-09-01 ile 2026-09-30 arasında satış toplamı',{start:'2026-09-01',end:'2026-09-30'}],
+ ['01.09.2026 ile 30.09.2026 arasında tahsilat toplamı',{start:'2026-09-01',end:'2026-09-30'}],
+ ['1 eylül 2026 ile 30 eylül 2026 arasında alış toplamı',{start:'2026-09-01',end:'2026-09-30'}],
+])('uses the whole validated date range in summaries: %s',(text,period)=>{
+ expect(parseBusinessCommand(text,{accounts})).toMatchObject({action:'summary',period,customer:null});
+});

@@ -26,7 +26,7 @@ export function validatePackage(body) {
 export function validateIntent(value) {
   const nullableText = key => value[key] == null ? null : String(value[key]).slice(0, 200);
   const result = {
-    action:['collection','select_customer','balance','summary','latest_collection','update_collection','cancel_collection','navigate'].includes(value.action)?value.action:null,
+    action:['collection','select_customer','balance','summary','latest_collection','update_collection','cancel_collection','navigate','invoices'].includes(value.action)?value.action:null,
     metric:['collections','sales','purchases','net','sales_collections','debtors'].includes(value.metric)?value.metric:null,
     route:nullableText('route'),
     account: nullableText('account'), customer: nullableText('customer'),

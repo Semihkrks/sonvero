@@ -1,5 +1,8 @@
 // @vitest-environment jsdom
-import {it,expect,vi} from 'vitest';
+import {it,expect,vi,beforeEach,afterEach} from 'vitest';
+// Relative dates such as "dün" are asserted against 17 Oct 2026.
+beforeEach(()=>{vi.useFakeTimers({toFake:['Date']});vi.setSystemTime(new Date('2026-10-17T12:00:00+03:00'));});
+afterEach(()=>vi.useRealTimers());
 import {createBusinessAssistant} from '../src/services/assistant-business.js';
 const accounts=[{id:'a',name:'Serkan Bingöl'},{id:'b',name:'Mustafa Yılmaz'}];
 const customer={name:'Harmanda Tekstil',tax:'1234567890',balance:'125000.00'};
@@ -229,4 +232,25 @@ it('resolves persisted latest from the current account context instead of an old
 it('refuses a cancelled latest record instead of editing an older active collection',async()=>{
  const h=harness();h.findCollections.mockResolvedValue([{...record,id:'cancelled',created_at:'2026-10-17T12:00:00Z',cancelled_at:'2026-10-17T13:00:00Z'},record]);
  await h.assistant.handle('Serkan Bingöl son tahsilatı 75 bin olarak düzelt');expect(h.findCollections).toHaveBeenCalledWith(expect.objectContaining({includeCancelled:true}));expect(h.assistant.getContext()).toBeNull();expect(h.message.mock.calls.at(-1)[0]).toContain('iptal');expect(h.update).not.toHaveBeenCalled();
+});
+it.each(['Harmanda bize ne borçlu','Harmanda bize kaç para borçlu',"Harmanda'dan ne kadar alacağımız var"])('reads real customer balance for a natural receivable question: %s',async text=>{
+  const h=harness();await h.assistant.handle('Serkan Bingöl hesabındaki '+text);expect(h.findCustomers).toHaveBeenCalledWith('a','harmanda');expect(h.message.mock.calls.at(-1)[0]).toContain('125.000,00 TL');expect(h.save).not.toHaveBeenCalled();
+ });
+it('uses full positive balance totals for receivables instead of adding the visible debtor rows',async()=>{
+ const h=harness();h.readSummary.mockResolvedValue({totals:{balance:'999000.00'},count:23,rows:[{name:'Harmanda',accountId:'a',balance:'100.00'}],excluded:0,complete:false});
+ await h.assistant.handle('Serkan hesabında toplam ne kadar alacağımız var');expect(h.readSummary).toHaveBeenCalledWith(expect.objectContaining({metric:'debtors',accountIds:['a'],customer:null}));expect(h.message.mock.calls.at(-1)[0]).toContain('999.000,00 TL');expect(h.message.mock.calls.at(-1)[0]).not.toContain('100,00 TL');
+});
+it('keeps current customer for a conversational receivable followup and clears it for explicit total',async()=>{
+ const h=harness();await h.assistant.handle('Serkan hesabındaki Harmanda bakiyesi ne?');await h.assistant.handle('peki ne kadar alacağımız var');expect(h.findCustomers).toHaveBeenLastCalledWith('a','Harmanda Tekstil');expect(h.readSummary).not.toHaveBeenCalled();
+ h.readSummary.mockResolvedValue({totals:{balance:'50000.00'},rows:[],excluded:0});await h.assistant.handle('toplam ne kadar alacağımız var');expect(h.readSummary).toHaveBeenLastCalledWith(expect.objectContaining({customer:null,metric:'debtors'}));
+});
+it.each(['75 bin yapma','75 bin olarak düzeltmek istemiyorum','tahsilatı 75 bin ekleme'])('keeps a pending amount unchanged when the user negates a mutation: %s',async text=>{
+  const h=harness();await h.assistant.handle(create);await h.assistant.handle(text);expect(h.assistant.getContext()).toMatchObject({amount:'60000.00',phase:'confirm'});expect(h.save).not.toHaveBeenCalled();
+ });
+it.each(['Bu ay kârımız 90 bin miydi?','Bankada 80 bin var mı?','Vadesi 10 gün olanları göster'])('preserves pending financial slots for unsupported numeric queries: %s',async text=>{
+  const h=harness();await h.assistant.handle(create);await h.assistant.handle(text);expect(h.assistant.getContext()).toMatchObject({amount:'60000.00',phase:'confirm'});expect(h.message.mock.calls.at(-1)[0]).toContain('bağlı değil');expect(h.save).not.toHaveBeenCalled();
+ });
+it('honors the explicitly selected accounts when asking total receivables after a customer conversation',async()=>{
+ const h=harness();await h.assistant.handle('Serkan hesabındaki Harmanda bakiyesi ne?');h.readSummary.mockResolvedValue({totals:{balance:'50000.00'},rows:[],excluded:0});
+ await h.assistant.handle('seçili hesaplarda ne kadar alacağımız var',{draft:{accountIds:['a','b']}});expect(h.readSummary).toHaveBeenCalledWith(expect.objectContaining({accountIds:['a','b'],customer:null,metric:'debtors'}));
 });

@@ -1,4 +1,4 @@
-import {parseQuickIntent,matchSpokenAccounts,monthRange} from './assistant-intent.js';
+import {parseQuickIntent,matchSpokenAccounts,monthRange,parseAssistantPeriod} from './assistant-intent.js';
 import {istanbulDate,parseTurkishAmount,positiveMoney,Decimal} from './money.js';
 
 const fold=value=>String(value||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/[’']/g,'').trim();
@@ -45,6 +45,8 @@ function explicitDate(text){
 }
 function periodFor(text,quick){
  const s=fold(text),today=istanbulDate();
+ const parsed=parseAssistantPeriod(text).intent;
+ if(parsed.start&&parsed.end)return {start:parsed.start,end:parsed.end};
  const day=explicitDate(s);if(day)return {start:day,end:day};
  const y=Number(today.slice(0,4)),m=Number(today.slice(5,7));
  if(/\bgecen ay\b/.test(s))return monthRange(m===1?12:m-1,m===1?y-1:y);
@@ -73,6 +75,34 @@ function remotePeriod(remote){
 }
 const editVerb=String.raw`(?:duzelt|degistir|guncelle)(?:ir|r|tir|sene|sen|in|iniz|y?ebilir)?(?:\s*mi(?:sin|siniz))?`;
 const hasEdit=text=>new RegExp('\\b'+editVerb+'\\b').test(text);
+const negatedMutation=text=>/\b(?:ekleme\w*|kaydetme\w*|isleme\w*|girme\w*|olusturma\w*|duzeltme\w*|degistirme\w*|guncelleme\w*|silme\w*|kaldirma\w*|yapma\w*|iptal etme\w*|istemiyorum)\b/.test(text);
+export const isNegatedBusinessMutation=text=>negatedMutation(fold(text));
+const unsupportedFinancialRead=text=>/\b(?:(?:kar|zarar)(?:i(?:miz)?(?:in|dan|da|daki|ni|na)?|imiz(?:in|dan|da|daki)?)?|stok(?:lar)?(?:imiz|umuz|u)?(?:in|un|da|dan|taki)?|vade(?:si|leri)?(?:nin|ni|ne|nden)?|banka(?:lar)?(?:imiz|miz)?(?:nin|in|da|daki|dan|ni|na)?|kasa(?:lar)?(?:imiz|miz)?(?:nin|in|da|daki|dan|ni|na)?)\b/.test(text);
+export const isUnsupportedBusinessQuery=text=>unsupportedFinancialRead(fold(text));
+const debtorRanking=text=>/\ben\s+(?:(?:cok|fazla|yuksek)\s+)?borc(?:lu|u)\b/.test(text);
+const collectionRead=text=>/\b(?:tahsilat\w*|tahsil\s+et\w*|topladik|toplamisiz|topladigimiz)\b/.test(text)||/\bmusterilerden\b.*\bpara\s+geldi\b/.test(text);
+/** Names come from the phrase before a financial predicate, never its filler words. */
+function readSubject(text,accounts){
+ let value=String(text).replace(/^.*hesab\p{L}*\s+/iu,'').trim()
+  .replace(/^(?:(?:kanka|peki|bana|lütfen|bugün|dün|bu ay|geçen ay|bu yıl)\s+)+/iu,'');
+ const account=matchSpokenAccounts(value,accounts);
+ if(account.length===1){
+  const normalized=value.toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i');
+  const names=[fold(account[0].name),...fold(account[0].name).split(/\s+/).filter(word=>accounts.filter(a=>fold(a.name).split(/\s+/).includes(word)).length===1)].sort((a,b)=>b.length-a.length);
+  for(const name of names){
+   const escaped=name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+   const prefix=normalized.match(new RegExp('^'+escaped+"(?:['’]?(?:deki|daki|teki|taki|den|dan|nin|nun|in|un))?(?:\\s+|$)"));
+   if(prefix){value=value.slice(prefix[0].length);break;}
+  }
+ }
+ for(const span of parseAssistantPeriod(value).spans.sort((a,b)=>b.start-a.start))value=value.slice(0,span.start)+' '+value.slice(span.end);
+ value=value.replace(/\s+/g,' ').trim();
+ value=value.split(/\s+(?:bize|için|bu ay|geçen ay|bu yıl|bugün|dün|ne kadar|kaç para|ne borçlu|borç\p{L}*|bakiye\p{L}*|alacağ\p{L}*|satış\p{L}*|alış\p{L}*|tahsilat\p{L}*|(?:en\s+)?son)\b/iu)[0];
+ value=value.replace(/['’](?:dan|den|tan|ten)$/iu,'');
+ const candidate=cleanCustomer(value);
+ if(!candidate||/^(?:ne|kac|toplam\w*|tum|butun|secili|son|az|demin|biraz|musteriler\w*|bize|bizim|onun|onlardan|bu|o|ayni|en|satis\w*|alis\w*|tahsilat\w*|tahsil|bakiye\w*|borc\w*|alacag\w*)(?:\s|$)/.test(candidate)||matchSpokenAccounts(value,accounts).length)return null;
+ return candidate;
+}
 /** Parse all spoken financial slots together; never import model supplied money. */
 export function parseBusinessSlots(text){
  const s=fold(text).replace(/[.!?]+$/,'').replace(/\bdegil(?=\d)/g,'degil ').split(/\bdegil\b/).at(-1).replace(/(\d)(bin|milyon|k)\b/g,'$1 $2');
@@ -87,6 +117,7 @@ export function parseBusinessSlots(text){
 /** Only explicit user corrections change a pending operation; models never provide money. */
 export function parseBusinessCorrection(text,{accounts=[]}={}){
  const s=fold(text).replace(/\bdegil(?=\d)/g,'degil ').replace(/[!?]$/,'').replace(/^kanka\s+/,'');
+ if(negatedMutation(s))return null;
  if(!/\b(?:degil|olsun|yaz)\b/.test(s)&&!hasEdit(s))return null;
  const target=s.includes('degil')?s.split(/\bdegil\b/).at(-1).trim():s;
  if(/\bdiger hesap\b/.test(target))return {accountReference:'other'};
@@ -103,7 +134,7 @@ export function parseBusinessCorrection(text,{accounts=[]}={}){
 export function parseBusinessBatch(text,{accounts=[],draft={},remote={}}={}){
  text=normalizeRequest(text);
  const s=fold(text);
- if(!/tahsilat/.test(s)||!/\b(?:ekle|kaydet|isle|gir)\b/.test(s)||/\b(?:ekleme|kaydetme|isleme|girme|iptal|vazgec)\b/.test(s))return null;
+ if(!/tahsilat/.test(s)||!/\b(?:ekle|kaydet|isle|gir)\b/.test(s)||negatedMutation(s)||/\b(?:iptal|vazgec)\b/.test(s))return null;
  const clauses=String(text).split(/\s*[,;]\s+(?=\p{L})|\s+ve\s+/iu,11).map(clause=>clause.replace(/\s+tahsilat\w*\s+(?:ekle|kaydet|işle|isle|gir).*$/iu,''));
  // Keep an eleventh item as an overflow signal; the controller rejects the whole batch.
  if(clauses.length<2)return null;
@@ -127,11 +158,14 @@ function normalizeRequest(text){
  return String(text).replace(/\b(?:ekler|ekleyebilir)\s+mi(?:sin|siniz)\b/giu,'ekle')
   .replace(/\b(?:kaydeder|kaydedebilir)\s+mi(?:sin|siniz)\b/giu,'kaydet')
   .replace(/\b(?:girer|girebilir)\s+mi(?:sin|siniz)\b/giu,'gir')
-  .replace(/\b(?:işler|işleyebilir|isler|isleyebilir)\s+mi(?:sin|siniz)\b/giu,'isle');
+  .replace(/\b(?:işler|işleyebilir|isler|isleyebilir)\s+mi(?:sin|siniz)\b/giu,'isle')
+  .replace(/\biptal\s+(?:eder|edebilir)\s+mi(?:sin|siniz)\b/giu,'iptal et')
+  .replace(/\b(?:yapar|yapabilir)\s+m[ıi](?:s[ıi]n|s[ıi]n[ıi]z)\b/giu,'yap');
 }
 export function parseBusinessCommand(text,{accounts=[],draft={},remote={}}={}){
  text=normalizeRequest(text);
  const s=fold(text),quick=parseQuickIntent(text,{accounts,draft}).intent;
+ if(negatedMutation(s)||unsupportedFinancialRead(s))return null;
  if(/\b(?:excel\w*|ekstre\w*|rapor\w*|pdf|fotograf\w*|gorsel\w*)\b/.test(s)&&!hasEdit(s)&&!/\b(?:ekle|kaydet|isle|gir)\b/.test(s))return null;
  const additional=s.replace(/^(?:(?:kanka|peki|tamam|simdi)\s+)+/,'').match(/^(?:(?:bugun|dun)\s+)?(?:buna|ona|ayni musteriye|bu musteriye|o musteriye)\s+(.+?)\s+(?:ekle|kaydet|isle)(?:\s+(?:kanka|lutfen))?[.!?]*$/);
  if(additional){
@@ -140,6 +174,7 @@ export function parseBusinessCommand(text,{accounts=[],draft={},remote={}}={}){
  }
  const namedAccount=explicitAccount(text,accounts);
  if(namedAccount)quick.accountIds=namedAccount.accountIds;
+ if(/^(?:(?:kanka|bana|lutfen)\s+)*musteri(?:ler)?\s+bakiyeler\w*\s+(?:ac|goster|getir|gotur)\b/.test(s))return {action:'navigate',route:'/cari-ozet'};
  const selection=s.replace(/[.!?]+$/,'').match(/^(?:kanka\s+)?(?:musteri(?:miz)?\s+(.+?)|(.+?)\s+musteri(?:miz|si))$/);
  if(selection)return {action:'select_customer',accountIds:quick.accountIds||[],...namedAccount,customer:cleanCustomer(selection[1]||selection[2]).replace(/^.*hesab\w*\s+/,'')};
  if(!quick.accountIds?.length){
@@ -147,16 +182,17 @@ export function parseBusinessCommand(text,{accounts=[],draft={},remote={}}={}){
   if(explicit){const patch=accountPatch(explicit,accounts);if(patch.accountIds.length)quick.accountIds=patch.accountIds;}
  }
  if(/\b(?:iptal etme|silme|duzeltme|degistirme)\b/.test(s))return null;
- const mutation=/\b(?:ekle|kaydet|isle|gir|olustur)(?:sene)?\b/.test(s)||/\b(?:iptal et|sil|kaldir)\b/.test(s)||hasEdit(s);
+ const changeAmount=/\btahsilat\w*\b/.test(s)&&/\byap\b/.test(s)&&!!parseBusinessSlots(s);
+ const mutation=/\b(?:ekle|kaydet|isle|gir|olustur)(?:sene)?\b/.test(s)||/\b(?:iptal et|sil|kaldir)\b/.test(s)||hasEdit(s)||changeAmount;
  const latest=/\btahsilat\w*\b/.test(s)&&!mutation&&(/\b(?:en son|son\s+(?:ekledigim|kaydettigim|girdigim|yaptigim|tahsilat\w*)|az once|demin|biraz once)\b/.test(s)||/\bhangi\b.*\b(?:ekledim|kaydettim|girdim)\b/.test(s)||remote.action==='latest_collection');
  if(latest){
   const useContext=/\b(?:onun|buna|bu musterinin|ayni musterinin|o musterinin)\b/.test(s);
   const possessive=String(text).replace(/^.*hesab\p{L}*\s+/iu,'').match(/^(.+?)['’](?:nın|nin|nun|nün|ın|in|un|ün)\s+(?:en\s+)?son\s+tahsilat/iu)?.[1];
   return {action:'latest_collection',scope:quick.scope,accountIds:quick.accountIds||[],...namedAccount,period:periodFor(s,quick),
-   customer:quick.customer||(possessive?cleanCustomer(possessive):null)||(useContext?draft.customer:null)||null,useContext};
+   customer:readSubject(text,accounts)||(possessive?cleanCustomer(possessive):null)||(useContext?draft.customer:null)||null,useContext};
  }
  if(/\btahsilat\w*\b/.test(s)&&!/\b(?:iptal etme|silme|duzeltme|degistirme)\b/.test(s)){
-  const cancel=/\b(?:iptal et|sil|kaldir)\b/.test(s),update=hasEdit(s);
+  const cancel=/\b(?:iptal et|sil|kaldir)\b/.test(s),update=hasEdit(s)||changeAmount;
   if(/\b(?:iptal et|sil|kaldir|duzelt|degistir|guncelle)\s+degil\b/.test(s))return null;
   if(cancel||update){
    const correction=update?parseBusinessSlots(s.replace(/^.*?tahsilat\w*\s+/,'')):null;
@@ -171,15 +207,20 @@ export function parseBusinessCommand(text,{accounts=[],draft={},remote={}}={}){
  }
  if(/\b(?:ekleme|kaydetme|isleme|girme|olusturma|iptal|vazgec)\b/.test(s))return null;
  if(/\b(?:iptal etme|silme|duzeltme|degistirme)\b/.test(s))return null;
- if(/\b(?:ac|git|goster|gotur)\b/.test(s)){
+ const ranking=debtorRanking(s),receivable=/\balacag(?:imiz|imizdan|i|imiz\w*)\b/.test(s);
+ const subject=readSubject(text,accounts);
+ const customerDebt=!ranking&&(/\bborclu\b/.test(s)||receivable)&&!!(subject||draft.customer&&!namedAccount&&!quick.scope&&!quick.accountIds?.length&&!quick.allCustomers&&!/\b(?:toplam\w*|tum|butun|musteriler\w*)\b/.test(s));
+ if(customerDebt)return {action:'balance',accountIds:quick.accountIds||[],...namedAccount,customer:subject||draft.customer,useContext:!subject};
+ const totalReceivables=receivable&&!customerDebt;
+ if(/\b(?:ac|git|goster|gotur)\b/.test(s)&&!ranking&&!totalReceivables){
   const destination=[...assistantDestinations].sort((a,b)=>b[1].length-a[1].length).find(([,label])=>s.includes(fold(label)));
   if(destination)return {action:'navigate',route:destination[0]};
  }
  const collection=/tahsilat/.test(s)&&/\b(?:ekle|kaydet|isle|gir|olustur)(?:sene)?\b/.test(s);
  const remoteSummary=remote.action==='summary'&&summaryMetrics.includes(remote.metric);
- const summary=!collection&&(/\b(?:toplam|ne kadar|ne topladik|ne toplamisiz|ozet|en cok borcu|net)\b/.test(s)||/satis\w*.*tahsilat\w*.*cikar/.test(s)||remoteSummary);
+ const summary=!collection&&(ranking||totalReceivables||/\b(?:toplam\w*|ne kadar|kac para|ne topladik|ne toplamisiz|ozet|net)\b/.test(s)||/satis\w*.*tahsilat\w*.*cikar/.test(s)||remoteSummary);
  if(summary){
-  const metric=/en cok borcu/.test(s)?'debtors':/satis\w*.*tahsilat\w*.*cikar/.test(s)?'sales_collections':/\bnet\b/.test(s)?'net':/tahsilat|topladik|toplamisiz/.test(s)?'collections':/satis/.test(s)?'sales':/alis/.test(s)?'purchases':remoteSummary?remote.metric:null;
+  const metric=ranking||totalReceivables?'debtors':/satis\w*.*tahsilat\w*.*cikar/.test(s)?'sales_collections':/\bnet\b/.test(s)?'net':collectionRead(s)?'collections':/satis/.test(s)?'sales':/alis/.test(s)?'purchases':remoteSummary?remote.metric:null;
   if(metric){
    if(!quick.accountIds?.length){
     const aliases=accounts.filter(account=>{
@@ -190,8 +231,10 @@ export function parseBusinessCommand(text,{accounts=[],draft={},remote={}}={}){
    }
    const limitMatch=s.match(/\b(\d+|bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz|on|yirmi)\s+musteri/),limit=limitMatch?Math.min(50,Math.max(1,Number(limitMatch[1])||spokenNumbers[limitMatch[1]])):5;
    const hasContext=/^(?:peki|onun|bu musterinin|ayni musterinin)\b/.test(s);
-   const explicitCustomer=String(text).match(/hesab\p{L}*\s+(.+?)(?:\s+(?:bu ay|bugün|dün|geçen ay|ne kadar|tahsilat\p{L}*|satış\p{L}*|alış\p{L}*))\b/iu)?.[1];
-   return {action:'summary',metric,period:periodFor(s,quick)||remotePeriod(remote),limit,scope:quick.scope,allCustomers:quick.allCustomers||metric==='debtors',accountIds:quick.accountIds||(hasContext?draft.accountIds:[])||[],account:remote.account||null,...namedAccount,customer:quick.allCustomers||metric==='debtors'?null:quick.customer||(explicitCustomer?cleanCustomer(explicitCustomer):null)||(hasContext?draft.customer:null)||remote.customer||null};
+   let explicitCustomer=String(text).match(/hesab\p{L}*\s+(.+?)(?:\s+(?:bu ay|bugün|dün|geçen ay|ne kadar|tahsilat\p{L}*|satış\p{L}*|alış\p{L}*))\b/iu)?.[1];
+   // "hesabında bu ay tahsilat" names a period, not a customer.
+   if(explicitCustomer){for(const span of parseAssistantPeriod(explicitCustomer).spans.sort((a,b)=>b.start-a.start))explicitCustomer=explicitCustomer.slice(0,span.start)+' '+explicitCustomer.slice(span.end);explicitCustomer=explicitCustomer.replace(/(?:^|\s)(?:bu|geçen|önceki|o)\s+ay\p{L}*|(?:^|\s)(?:bugün|dün|kanka|peki|lütfen|bize|bizim)(?=\s|$)/giu,' ').trim()||null;}
+   return {action:'summary',metric,...(totalReceivables?{view:'receivables'}:{}),period:periodFor(s,quick)||remotePeriod(remote),limit,scope:quick.scope,allCustomers:quick.allCustomers||metric==='debtors',accountIds:quick.accountIds||(hasContext?draft.accountIds:[])||[],account:remote.account||null,...namedAccount,customer:quick.allCustomers||metric==='debtors'?null:subject||quick.customer||(explicitCustomer?cleanCustomer(explicitCustomer):null)||(hasContext?draft.customer:null)||remote.customer||null};
   }
  }
  const balance=/\b(?:bakiye\w*|borcu\w*|alacagi\w*)\b/.test(s)&&!/tahsilat.*(?:ekle|kaydet)/.test(s);

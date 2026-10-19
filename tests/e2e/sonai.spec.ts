@@ -172,3 +172,17 @@ test('a persisted latest collection can be edited after reopening and a field an
  await send('80 bin tarihi de dün olsun');await expect(panel.getByRole('button',{name:'Düzeltmeyi onayla'})).toBeVisible();
  await send('onaylıyorum');expect(await page.evaluate(()=> (window as any).businessWrites[1].p_record)).toMatchObject({id:'saved-before-conversation',amount:'80000.00',version:2});
 });
+test('question families support help, a natural balance read, and report followups without financial writes',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/tests/assistant-preview.html');await page.waitForFunction(()=>typeof (window as any).testPanel==='function');await page.evaluate(()=> (window as any).testPanel());
+ const panel=page.getByRole('dialog',{name:'SonAI',exact:true});
+ const send=async(text:string)=>{await expect(panel.locator('#assistantInterpret')).toBeEnabled();await panel.evaluate((p,text)=>{(p.querySelector('#assistantCommand') as HTMLTextAreaElement).value=text;(p.querySelector('#assistantInterpret') as HTMLButtonElement).click();},text);await expect(panel.locator('#assistantInterpret')).toBeEnabled();};
+ await send('Tahsilatla ilgili ne sorabilirim');await expect(panel.locator('.sv-chat-assistant').last()).toContainText('açık onay');
+ await send('Ayşe hesabındaki Harmanda bize ne kadar borçlu');await expect(panel.locator('.sv-chat-assistant').last()).toContainText('2.500,00 TL');
+ await send('Ayşe hesabından Harmanda eylül satış alış tahsilat dahil Excel hazırla');await expect(panel.getByRole('link',{name:'Excel’i incele ↗'})).toBeVisible();
+ await send('tahsilatları çıkar');await expect(panel.locator('[name=collections]')).toHaveValue('no');
+ await send('sadece satışlar olsun');await expect(panel.locator('[name=direction]')).toHaveValue('satis');
+ await send('tahsilatları da ekle');await expect(panel.locator('[name=collections]')).toHaveValue('yes');
+ await send('WhatsAppa gönderme');expect(await page.evaluate(()=> (window as any).sentRequests.length)).toBe(0);
+ expect(await page.evaluate(()=> (window as any).businessWrites.length)).toBe(0);expect(errors).toEqual([]);
+});

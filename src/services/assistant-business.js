@@ -1,7 +1,9 @@
-import {parseBusinessCommand,parseBusinessCorrection,parseBusinessBatch,parseBusinessSlots,businessConfirmation} from '../lib/assistant-actions.js';
+import {periodLabel} from '../lib/assistant-memory.js';
+import {parseBusinessCommand,parseBusinessCorrection,parseBusinessBatch,parseBusinessSlots,businessConfirmation,isNegatedBusinessMutation,isUnsupportedBusinessQuery} from '../lib/assistant-actions.js';
 import {matchSpokenAccounts} from '../lib/assistant-intent.js';
 import {istanbulDate,Decimal} from '../lib/money.js';
-import {findAssistantCustomers,findAssistantCollections,readAssistantSummary,readLatestAssistantCollection} from './assistant-ledger.js';
+import {findAssistantCustomers,findAssistantCollections,readAssistantSummary,readLatestAssistantCollection,readAssistantInvoices} from './assistant-ledger.js';
+import {parseInvoiceQuery} from '../lib/assistant-invoices.js';
 import {addCollection,updateCollection,deleteCollection} from './tahsilat-manager.js';
 
 const fold=value=>String(value||'').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i').replace(/[’']/g,'').trim();
@@ -10,8 +12,8 @@ const money=value=>{const [whole,cents]=new Decimal(String(value)).toFixed(2).sp
 
 /** Volatile session context; each real scoped mutation needs its own confirmation. */
 export function createBusinessAssistant({accounts,message,choices,run,isCurrent=()=>true,
- findCustomers=findAssistantCustomers,findCollections=findAssistantCollections,readSummary=readAssistantSummary,readLatest=readLatestAssistantCollection,
- save=addCollection,update=updateCollection,cancel=deleteCollection,navigate=route=>{window.location.hash='#'+route;}}){
+ findCustomers=findAssistantCustomers,findCollections=findAssistantCollections,readSummary=readAssistantSummary,readLatest=readLatestAssistantCollection,readInvoices=readAssistantInvoices,
+ save=addCollection,update=updateCollection,cancel=deleteCollection,navigate=route=>{window.location.hash='#'+route;},onTopic=()=>{}}){
  let plan=null,generation=0,queue=[],memory=null,lastRecord=null;
  const current=(value,version=generation)=>isCurrent()&&plan===value&&version===generation;
  function buttons(items){
@@ -20,8 +22,10 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
    b.onclick=()=>{if(current(captured,version)&&captured?.phase!=='saving')return run(callback);};choices.append(b);}
  }
  function remember({accountIds,customer,period}={}){
-  const ids=(accountIds||[]).filter(id=>accounts.some(a=>a.id===id));if(ids.length)memory={accountIds:ids,customer:customer||null,period:period||null};
+  const ids=(Array.isArray(accountIds)?accountIds:[]).filter(id=>accounts.some(a=>a.id===id));if(ids.length)memory={accountIds:ids,customer:customer||null,period:period||null};
  }
+ const topicCustomer=c=>c?{name:c.name||c.customer_name,tax:c.tax||c.customer_tax_no||'',key:c.key||c.customer_key||''}:null;
+ function topic(value){try{onTopic(value);}catch{/* topic tracking is advisory */}}
  function resolveAccount(command){
   if(command.accountIds?.length)return accounts.filter(a=>command.accountIds.includes(a.id));
   if(command.account)return matchSpokenAccounts(command.account,accounts);
@@ -32,11 +36,12 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
   const found=resolveAccount(command),explicit=!!(command.explicitAccount||command.accountIds?.length||command.account);
   plan={...command,account:found.length===1?found[0]:null,accountIds:found.map(a=>a.id),phase:'start',attempted:false};generation++;
   if(command.action==='update_collection')plan.invalidField=['amount','date'].find(key=>Object.hasOwn(command,key)&&!command[key])||null;
-  if(command.action==='summary'||command.action==='latest_collection'){
+  if(command.action==='summary'||command.action==='latest_collection'||command.action==='invoices'){
    const fallback=command.action==='latest_collection'?(draft.accountIds?.length?draft.accountIds:accounts.length===1?[accounts[0].id]:[]):draft.accountIds||accounts.map(a=>a.id);
-   const selectedScope=command.action==='latest_collection'&&command.scope==='selected'&&!explicit;
+   const selectedScope=command.scope==='selected'&&!explicit;
    plan.accountIds=(command.scope==='all'?accounts.map(a=>a.id):selectedScope?draft.accountIds||[]:found.length?found.map(a=>a.id):explicit?[]:fallback).filter(id=>accounts.some(a=>a.id===id));
-   if(command.customer)plan.customerQuery=command.customer;
+   if(command.selected)plan.selected=command.selected;
+   else if(command.customer)plan.customerQuery=command.customer;
    else if(!explicit&&memory?.customer&&command.scope!=='all'&&!command.allCustomers&&(command.action!=='latest_collection'||command.useContext))plan.selected=memory.customer;
   }else if(command.referLast&&!command.latestPersisted&&lastRecord&&found.length===1&&found[0].id===lastRecord.account_id){plan.recordId=lastRecord.id;plan.customer=lastRecord.customer_name;plan.selected={name:lastRecord.customer_name,tax:lastRecord.customer_tax_no||'',key:lastRecord.customer_key};}
   else if(!command.customer&&!explicit&&memory?.customer&&!command.latestPersisted){plan.customer=memory.customer.name;plan.selected=memory.customer;}
@@ -44,7 +49,7 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
  }
  async function advance(){
   const p=plan;if(!p)return;
-  if(p.action==='summary'||p.action==='latest_collection'){await summarize(p);return;}
+  if(p.action==='summary'||p.action==='latest_collection'||p.action==='invoices'){await summarize(p);return;}
   if(!p.account){p.phase='account';message('Hangi hesapta işlem yapayım? Hesap adını söyle veya seç.');buttons(accounts.map(a=>[a.name,async()=>{p.account=a;p.accountIds=[a.id];p.selected=null;p.recordId=null;await advance();}]));return;}
   if(['update_collection','cancel_collection'].includes(p.action)&&!p.customer&&!p.record){await selectCollection(p);return;}
   if(!p.customer){p.phase='customer';message(p.account.name+' hesabındaki müşteri adını veya VKN’sini söyle.');choices.replaceChildren();return;}
@@ -59,10 +64,10 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
    p.selected=found[0];
   }
   if(p.action==='select_customer'){
-   remember({accountIds:[p.account.id],customer:p.selected});plan=null;choices.replaceChildren();message('Tamam, '+p.account.name+' hesabındaki '+p.selected.name+' üzerinden devam edelim.');return;
+   remember({accountIds:[p.account.id],customer:p.selected});topic({action:'select_customer',accountIds:[p.account.id],customer:topicCustomer(p.selected)});plan=null;choices.replaceChildren();message('Tamam, '+p.account.name+' hesabındaki '+p.selected.name+' üzerinden devam edelim.');return;
   }
   if(p.action==='balance'){
-   const c=p.selected;remember({accountIds:[p.account.id],customer:c});plan=null;choices.replaceChildren();
+   const c=p.selected;remember({accountIds:[p.account.id],customer:c});topic({action:'balance',accountIds:[p.account.id],customer:topicCustomer(c)});plan=null;choices.replaceChildren();
    message(p.account.name+' · '+c.name+': arşivdeki TL bakiyesi '+money(c.balance)+'.'+(Number(c.excluded)?' '+c.excluded+' hareket tutar veya para birimi nedeniyle dahil değil.':'')+' Bu bilgi kayıtlı geçmişe dayanır.');return;
   }
   if(p.action!=='collection'&&!p.record){await selectCollection(p);return;}
@@ -91,7 +96,7 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
  }
  async function summarize(p){
   if(p.selected&&!p.selected.tax&&!p.selected.customer_tax_no&&!p.selected.key&&!p.selected.customer_key){p.customerQuery=p.selected.name;p.selected=null;}
-  if(!p.accountIds?.length){p.phase='account';message(p.action==='latest_collection'?'Son tahsilatı hangi hesapta kontrol edeyim?':'Özeti hangi hesaptan alayım?');buttons(accounts.map(a=>[a.name,async()=>{p.account=a;p.accountIds=[a.id];await summarize(p);}]));return;}
+  if(!p.accountIds?.length){p.phase='account';message(p.action==='latest_collection'?'Son tahsilatı hangi hesapta kontrol edeyim?':p.action==='invoices'?'Faturalara hangi hesapta bakayım?':'Özeti hangi hesaptan alayım?');buttons(accounts.map(a=>[a.name,async()=>{p.account=a;p.accountIds=[a.id];await summarize(p);}]));return;}
   if(p.customerQuery&&!p.selected){
    if(p.accountIds.length!==1){message(p.action==='latest_collection'?'Bu müşterinin tahsilatı için hangi hesabı kullanayım?':'Müşteri özeti için tek hesap seçelim.');p.accountIds=[];await summarize(p);return;}
    const version=generation;p.phase='search';choices.replaceChildren();const found=await findCustomers(p.accountIds[0],p.customerQuery);
@@ -99,6 +104,7 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
    if(found.length!==1){p.phase='summary_customer';p.candidates=found;message(found.length?'Hangi müşteri? Sıra numarasını veya VKN’yi söyle.':'Müşteri bulunamadı. Adını veya VKN’sini yeniden söyle.');buttons(found.map((c,i)=>[(i+1)+'. '+c.name,async()=>{p.selected=c;await summarize(p);}]));return;}p.selected=found[0];
   }
   const version=generation;p.phase='reading';choices.replaceChildren();
+  if(p.action==='invoices'){await invoices(p,version);return;}
   if(p.action==='latest_collection'){
    const record=await readLatest({accountIds:p.accountIds,customer:p.selected||null,start:p.period?.start||null,end:p.period?.end||null});
    if(!current(p,version))return;
@@ -107,20 +113,37 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
    const account=accounts.find(a=>a.id===record.account_id);
    if(!account||!p.accountIds.includes(account.id))throw new Error('Tahsilatın hesabı doğrulanamadı.');
    const customer={name:record.customer_name,tax:record.customer_tax_no||'',key:record.customer_key};
-   remember({accountIds:[account.id],customer});
+   remember({accountIds:[account.id],customer});topic({action:'latest_collection',accountIds:[...p.accountIds],customer:p.selected?topicCustomer(p.selected):null,period:p.period||null});
+   if(record.id&&!record.cancelled_at)lastRecord={...record,account_id:account.id};
    message(account.name+' hesabında son eklenen tahsilat: '+record.customer_name+' için '+money(record.amount)+'. Tahsilat tarihi '+record.date+'.'+(record.cancelled_at?' Bu kayıt iptal edilmiş.':''));
    return;
   }
   const result=await readSummary({accountIds:p.accountIds,metric:p.metric,start:p.period?.start||null,end:p.period?.end||null,customer:p.selected||null,limit:p.limit||5});
   if(!current(p,version))return;
-  remember({accountIds:p.accountIds,customer:p.selected,period:p.period});plan=null;
-  const names=p.accountIds.map(id=>accounts.find(a=>a.id===id)?.name).join(', '),period=p.period?p.period.start+' – '+p.period.end:'Kayıtlı tüm dönem';let text=names+(p.selected?' · '+p.selected.name:'')+' · '+period+'. ';
-  if(p.metric==='debtors')text+=result.rows.length?result.rows.map((r,i)=>(i+1)+'. '+r.name+' · '+(accounts.find(a=>a.id===r.accountId)?.name||'')+': '+money(r.balance)).join('; '):'Pozitif bakiyeli müşteri bulunamadı.';
+  remember({accountIds:p.accountIds,customer:p.selected,period:p.period});topic({action:'summary',metric:p.metric,view:p.view,accountIds:[...p.accountIds],customer:p.metric==='debtors'?null:topicCustomer(p.selected),period:p.period||null,allCustomers:!p.selected});plan=null;
+  const names=p.accountIds.map(id=>accounts.find(a=>a.id===id)?.name).join(', '),period=p.period?periodLabel(p.period):'Kayıtlı tüm dönem';let text=names+(p.selected?' · '+p.selected.name:'')+' · '+period+'. ';
+  if(p.view==='receivables')text+='Müşterilerden toplam alacak '+money(result.totals.balance)+'. Pozitif müşteri bakiyeleri toplamıdır.';
+  else if(p.metric==='debtors')text+=result.rows.length?result.rows.map((r,i)=>(i+1)+'. '+r.name+' · '+(accounts.find(a=>a.id===r.accountId)?.name||'')+': '+money(r.balance)).join('; '):'Pozitif bakiyeli müşteri bulunamadı.';
   else if(p.metric==='sales_collections')text+='Satış '+money(result.totals.sales)+' eksi tahsilat '+money(result.totals.collections)+' = '+money(result.totals.salesCollections)+'.';
   else if(p.metric==='net')text+='Satış '+money(result.totals.sales)+', alış '+money(result.totals.purchases)+', tahsilat '+money(result.totals.collections)+'. Dönem neti '+money(result.totals.net)+'.';
   else text+=({collections:'Tahsilat',sales:'Satış',purchases:'Alış'}[p.metric]||'Toplam')+' toplamı '+money(result.totals[p.metric])+'.';
   if(result.excluded)text+=' '+(result.excludedScope==='account_history'?'Bu kapsamın kayıtlı geçmişinde ':'Seçilen dönemde ')+result.excluded+' hareket para birimi veya tutar nedeniyle hariç.';
   message(text+' '+(result.completeness?.note||(result.complete?'Uygulamada kayıtlı tahsilatlara göre.':'Arşivdeki kayıtlara göre; geçmişin tamlığı doğrulanmamıştır.')));
+ }
+ async function invoices(p,version){
+  const direction=p.direction||'both',order=p.order||'latest';
+  const result=await readInvoices({accountIds:p.accountIds,direction,start:p.period?.start||null,end:p.period?.end||null,customer:p.selected||null,order,limit:p.limit||3});
+  if(!current(p,version))return;
+  remember({accountIds:p.accountIds,customer:p.selected,period:p.period});
+  topic({action:'invoices',direction,order,accountIds:[...p.accountIds],customer:topicCustomer(p.selected),period:p.period||null,allCustomers:!p.selected});plan=null;
+  const names=p.accountIds.map(id=>accounts.find(a=>a.id===id)?.name).join(', '),kind={satis:'satış (giden) faturası',alis:'alış (gelen) faturası',both:'fatura'}[direction];
+  let text=names+(p.selected?' · '+p.selected.name:'')+' · '+(p.period?periodLabel(p.period):'Kayıtlı tüm dönem')+'. ';
+  if(!result.count)text+='Bu kapsamda arşivde '+kind+' bulunamadı.';
+  else{
+   text+=(direction==='both'?result.count+' fatura ('+result.salesCount+' satış, '+result.purchaseCount+' alış)':result.count+' '+kind)+'; toplam '+(direction==='satis'?money(result.totals.sales):direction==='alis'?money(result.totals.purchases):'satış '+money(result.totals.sales)+', alış '+money(result.totals.purchases))+'. ';
+   text+=(order==='largest'?'En büyük':'Son')+(result.rows.length>1?' '+result.rows.length:'')+': '+result.rows.map(r=>r.number+' · '+r.customer+' · '+money(r.amount)+' · '+r.date).join('; ')+'.';
+  }
+  message(text+' Arşivdeki TRY faturalarına göre; geçmişin tamlığı doğrulanmamıştır.');
  }
  async function preview(p){
   if(p.record)p.selected={name:p.record.customer_name,tax:p.record.customer_tax_no||'',key:p.record.customer_key};
@@ -138,7 +161,7 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
     p.action==='update_collection'?{version:p.record.version,amount:p.amount||p.record.amount,date:p.date||p.record.date,type:p.record.type||'Tahsilat',description:p.record.description||'',reason:'SonAI ile onaylanan tahsilat düzeltmesi'}:{version:p.record.version,reason:'SonAI ile onaylanan tahsilat iptali'};
    const result=p.action==='collection'?await save(p.payload):p.action==='update_collection'?await update(p.record.id,p.account.id,p.payload):await cancel(p.record.id,p.account.id,p.payload);
    if(!result?.id)throw Object.assign(new Error('Kaydın sonucu doğrulanamadı.'),{uncertain:true});if(!current(p))return;
-   lastRecord={...(p.record||{}),...p.payload,...result,account_id:p.account.id};remember({accountIds:[p.account.id],customer:p.selected});
+   lastRecord={...(p.record||{}),...p.payload,...result,account_id:p.account.id};remember({accountIds:[p.account.id],customer:p.selected});topic({action:p.action,accountIds:[p.account.id],customer:topicCustomer(p.selected),amount:p.payload.amount||p.record?.amount,date:p.payload.date||p.record?.date});
    const operation=p.action==='cancel_collection'?'iptal edildi':p.action==='update_collection'?'düzeltildi':'kaydedildi';message((p.action==='cancel_collection'?money(p.record.amount):money(p.payload.amount))+' tahsilat '+p.account.name+' / '+p.selected.name+' için '+operation+'.');
    window.dispatchEvent(new CustomEvent('collectionsChanged',{detail:{accountId:p.account.id}}));plan=null;
    if(queue.length){const next=queue.shift();start(next);try{await advance();}catch(error){if(isCurrent())message('Önceki tahsilat tamamlandı. Sıradaki işlem hazırlanamadı: '+error.message);}}
@@ -180,6 +203,8 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
   if(plan?.phase==='saving')return true;const confirmation=businessConfirmation(text);
   if(plan&&confirmation==='cancel'){const attempted=plan.attempted;clearPlan();message(attempted?'Bekleyen işlemler durduruldu. Sonucu belirsiz kaydı Cari ekranından kontrol et.':'Taslak ve sıradaki işlemler iptal edildi.');return true;}
   if(plan?.phase==='confirm'&&confirmation==='confirm'){await confirm();return true;}
+  if(isUnsupportedBusinessQuery(text)){message('Bu soruyu yanıtlayacak banka, kasa, stok, vade veya maliyet verileri şu anda SonAI’ye bağlı değil.'+(plan?' Bekleyen tahsilat taslağını değiştirmedim.':''));return true;}
+  if(isNegatedBusinessMutation(text)){message(plan?'Bu isteğe göre tahsilatı değiştirmiyorum. Önceki taslak duruyor; kapatmak için “iptal” diyebilirsin.':'Bu isteğe göre tahsilat eklemiyorum veya değiştirmiyorum.');return true;}
   // A complete report request changes the conversation topic. Never use it as a financial field.
   if(/\b(?:excel\w*|ekstre\w*|rapor\w*|pdf|fotograf\w*|gorsel\w*)\b/.test(fold(text))&&!/\b(?:duzelt\w*|degistir\w*|guncelle\w*|ekle|kaydet|isle|gir)\b/.test(fold(text))){
    if(plan?.attempted){message('Önce sonucu belirsiz tahsilatı kontrol edelim veya bekleyen işlemi iptal et.');return true;}clearPlan();return false;
@@ -206,6 +231,14 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
    if(patch.accountIds||patch.accountReference||patch.customer){message('Kaydedilmiş tahsilatın hesabı veya müşterisi taşınamaz. İptal edip yeni bir kayıt oluşturabilirsin.');return true;}
    start({action:'update_collection',referLast:true,...patch});await advance();return true;
   }
+  const invoice=!plan||!isMutation(plan.action)?parseInvoiceQuery(text,{accounts,remote}):null;
+  if(invoice){
+   if(invoice.action==='invoice_unsupported'){message('Fatura iptali, silme veya onaylama SonAI üzerinden yapılmaz; bunları fatura ekranında kendin onaylarsın. Faturaları sorgulayabilir veya ilgili ekranı açabilirim.');return true;}
+   if(invoice.action==='navigate'){clearPlan();message('Faturayı Fatura oluştur ekranında bilgileri görüp kendin onaylayarak kesersin; ekranı açıyorum.');navigate(invoice.route);return true;}
+   if(invoice.uncertainPeriod){message('Hangi dönemin faturalarına bakayım? Ay adını veya iki tarihi söyleyebilirsin.');return true;}
+   if(plan?.phase==='confirm'){message('Önce mevcut taslağı onayla, düzelt veya iptal et.');return true;}
+   queue=[];start(invoice,{draft});await advance();return true;
+  }
   const parserDraft=memory?{...draft,accountIds:memory.accountIds,customer:memory.customer?.name}:draft;
   const batch=parseBusinessBatch(text,{accounts,draft:parserDraft,remote}),command=batch?.[0]||parseBusinessCommand(text,{accounts,draft:parserDraft,remote});
   if(command?.useContext&&!memory&&draft.customer){command.customer=draft.customer;command.accountIds=(draft.accountIds||[]).filter(id=>accounts.some(a=>a.id===id));}
@@ -229,6 +262,18 @@ export function createBusinessAssistant({accounts,message,choices,run,isCurrent=
   }else if(p.phase==='confirm'){message('İşlem için “onaylıyorum”, değişiklik için yeni tutar veya tarihi, vazgeçmek için “iptal” de.');return true;}
   await advance();return true;
  }
- return {handle,reset,remember,getMemory:()=>memory?{accountIds:[...memory.accountIds],customer:memory.customer,period:memory.period}:null,
+ /** Runs a command already resolved from conversation context (read-only tools or a new draft). */
+ async function execute(command,{draft={}}={}){
+  if(plan?.phase==='saving'||plan?.phase==='confirm'&&isMutation(plan.action))return false;
+  queue=[];start(command,{draft});await advance();return true;
+ }
+ /** Persistable read context. Pending drafts are excluded on purpose. */
+ function snapshot(){return {memory:memory?{accountIds:[...memory.accountIds],customer:memory.customer,period:memory.period}:null,lastRecord:lastRecord?{id:lastRecord.id,account_id:lastRecord.account_id,customer_name:lastRecord.customer_name,customer_tax_no:lastRecord.customer_tax_no||'',customer_key:lastRecord.customer_key||'',amount:lastRecord.amount,date:lastRecord.date}:null};}
+ function restore(saved){
+  const stored=saved?.memory;
+  if(stored&&typeof stored==='object')remember({accountIds:stored.accountIds,customer:stored.customer&&typeof stored.customer==='object'&&typeof stored.customer.name==='string'?stored.customer:null,period:stored.period&&typeof stored.period.start==='string'&&typeof stored.period.end==='string'?stored.period:null});
+  const record=saved?.lastRecord;if(record&&typeof record.id==='string'&&accounts.some(a=>a.id===record.account_id))lastRecord=record;
+ }
+ return {handle,execute,reset,remember,snapshot,restore,getMemory:()=>memory?{accountIds:[...memory.accountIds],customer:memory.customer,period:memory.period}:null,
   getContext:()=>plan?{action:plan.action,phase:plan.phase,account:plan.account?.name,customer:plan.customer,amount:plan.amount,date:plan.date,queued:queue.length}:null};
 }
