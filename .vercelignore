@@ -10,3 +10,9 @@
 !vite.config.js
 !tsconfig.json
 !vercel.json
+# The capability catalog is shared by the SonAI UI and the assistant service prompt.
+!services
+!services/assistant
+!services/assistant/capabilities.mjs
+services/assistant/package.json
+services/assistant/package-lock.json
