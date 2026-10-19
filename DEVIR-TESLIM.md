@@ -1,5 +1,12 @@
 # Sonvera — devir teslim ve yapılacaklar
 
+## 19 Ekim — yayın: GitHub main, Vercel ve Oracle
+
+- Kullanıcının açık talebiyle `0cd0219` + iki yayın düzeltmesi `main` ve `cursor/live-rollout-backup-edge` dallarına push edildi. Vercel üretimi önce iki kez düştü: (1) `.vercelignore` yalnız `src/public` yüklediği için ön yüzün içe aktardığı `services/assistant/capabilities.mjs` bulunamadı (UNRESOLVED_IMPORT) — `699d63e` yalnız bu dosyayı yüklemeye ekler, sunucunun geri kalanı yine yüklenmez; (2) bu hata yüzünden `version-service-worker` `dist/sw.js` bulamadı — `1a9496f` dosya yoksa `public/sw.js`'ten yazar. Üretim `dpl_CLo9Sf4WqGzdXGrnUgCYMgt7DdeK` READY; `sonvera.com.tr` yeni `assistant-*.js` paketini ve yeni `sw.js` sürüm kimliğini sunuyor. Bu arada canlı site önceki `43e08de` sürümünde çalışmaya devam etti.
+- Oracle: önceki kaynaklar `/home/opc/sonvera/releases/before-0cd0219/`, önceki imaj `localhost/sonvera-assistant:before-0cd0219` olarak yedeklendi. Yalnız değişen `server.mjs`, `interpretation.mjs`, `capabilities.mjs`, `validation.mjs` kopyalandı (ortam dosyaları, systemd birimi, veri ve WhatsApp oturumu dokunulmadı). Yeni imaj `release-0cd0219`, `:1` etiketi buna bağlı. Yeniden başlatma öncesi aktif gönderim 0. Çalışan kaynak SHA256'ları yerel commit ile aynı, `invoices` şemada. Servis active, NRestarts=0, HTTPS `/health` 200, kimliksiz `/status` ve `/interpret` 401, sonvera.com.tr CORS 204, WhatsApp `ready`. Gerçek mesaj, tahsilat veya fatura işlemi yapılmadı.
+- Geri dönüş: `podman tag localhost/sonvera-assistant:before-0cd0219 localhost/sonvera-assistant:1 && systemctl --user restart sonvera-assistant`; ön yüz için Vercel'de `43e08de` dağıtımına geri alınabilir.
+- Kalan: girişli canlı çok turlu sohbet (gerçek Gemini) ve fiziksel iPhone kontrolü.
+
 ## 19 Ekim — SonAI konuşma belleği, takip soruları ve premium küre
 
 - Kök neden (çok turlu testlerle kanıtlandı, ilk halde 9 senaryonun 7'si düşüyordu): son yanıtın konusu tutulmuyordu; “peki geçen ayki?”, “ya satışlar?”, “onu Excel yap” rapor akışına düşüp müşteri/ay soruyordu. “geçen ayki/bu ayki” ekleri tanınmıyordu. Panel her açılışta sıfırlanıyor, ekran değişince kapanıyor, hiçbir şey saklanmıyordu. Modele son 8 kayıt (ilki karşılama) gidiyor, aktif konu gitmiyordu. Ek hata: “X hesabında bu ay tahsilat toplamı” cümlesinde “bu ay” müşteri sanılıyordu.
