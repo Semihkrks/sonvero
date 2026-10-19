@@ -217,14 +217,15 @@ function renderMenuItem(item, currentRoute, depth = 0) {
 
   if (hasChildren) {
     const childrenHtml = item.children.map(c => renderMenuItem(c, currentRoute, depth + 1)).join('');
+    const groupId = `nav-group-${item.id}`;
     return `
       <div class="nav-group ${isExpanded ? 'expanded' : ''}" data-depth="${depth}">
-        <button class="nav-item nav-item-parent ${hasActiveChild(item, currentRoute) ? 'has-active' : ''}" data-id="${item.id}" data-depth="${depth}">
+        <button type="button" class="nav-item nav-item-parent ${hasActiveChild(item, currentRoute) ? 'has-active' : ''}" data-id="${item.id}" data-depth="${depth}" title="${item.label}" aria-expanded="${isExpanded}" aria-controls="${groupId}">
           ${iconHtml}
           <span class="nav-item-label">${item.label}</span>
-          <span class="nav-item-chevron">${icons.chevron}</span>
+          <span class="nav-item-chevron" aria-hidden="true">${icons.chevron}</span>
         </button>
-        <div class="nav-children" data-parent="${item.id}">
+        <div class="nav-children" id="${groupId}" data-parent="${item.id}">
           ${childrenHtml}
         </div>
       </div>
@@ -232,11 +233,104 @@ function renderMenuItem(item, currentRoute, depth = 0) {
   }
 
   return `
-    <button class="nav-item nav-item-link ${isActive ? 'active' : ''}" data-href="${item.route}" data-depth="${depth}">
+    <button type="button" class="nav-item nav-item-link ${isActive ? 'active' : ''}" data-href="${item.route}" data-depth="${depth}" title="${item.label}"${isActive ? ' aria-current="page"' : ''}>
       ${iconHtml}
       <span class="nav-item-label">${item.label}</span>
     </button>
   `;
+}
+
+// ── Mobile drawer ──
+// Single source of truth for the mobile drawer. app.js (overlay), header.js
+// (hamburger) and bottom-nav.js ("Tüm menü") all end up toggling the
+// `sidebar-mobile-open` class; a MutationObserver keeps inert, ARIA and focus in sync.
+const MOBILE_QUERY = '(max-width: 768px)';
+const drawerState = new WeakMap();
+const isMobileViewport = () => window.matchMedia(MOBILE_QUERY).matches;
+
+function getDrawerState(sidebar) {
+  let state = drawerState.get(sidebar);
+  if (!state) {
+    state = { opener: null, restore: true, wasOpen: false };
+    drawerState.set(sidebar, state);
+  }
+  return state;
+}
+
+function syncCollapseButton(sidebar) {
+  const btn = sidebar.querySelector('#sidebarCollapseBtn');
+  if (!btn) return;
+  if (isMobileViewport()) {
+    btn.setAttribute('aria-label', 'Menüyü kapat');
+    btn.title = 'Menüyü kapat';
+    btn.removeAttribute('aria-expanded');
+    return;
+  }
+  const label = isCollapsed ? 'Menüyü genişlet' : 'Menüyü daralt';
+  btn.setAttribute('aria-label', label);
+  btn.title = label;
+  btn.setAttribute('aria-expanded', String(!isCollapsed));
+}
+
+function syncDrawer(sidebar) {
+  const state = getDrawerState(sidebar);
+  const mobile = isMobileViewport();
+  const open = sidebar.classList.contains('sidebar-mobile-open');
+  const layout = sidebar.parentElement;
+  const main = layout?.querySelector(':scope > .main-area');
+  const bottomNav = layout?.querySelector(':scope > .mobile-bottom-nav');
+  const toggle = main?.querySelector('#mobileMenuBtn');
+  const modal = mobile && open;
+
+  if (main) main.inert = modal;
+  if (bottomNav) bottomNav.inert = modal;
+  // The closed off-canvas drawer must not be reachable with Tab on mobile.
+  sidebar.inert = mobile && !open;
+  toggle?.setAttribute('aria-expanded', String(modal));
+  syncCollapseButton(sidebar);
+
+  if (state.wasOpen && !open) {
+    const active = document.activeElement;
+    const focusLost = !active || active === document.body || sidebar.contains(active);
+    if (state.restore && focusLost && sidebar.isConnected) {
+      const opener = state.opener;
+      const target = opener?.isConnected && !opener.closest('[inert]') ? opener : toggle;
+      target?.focus({ preventScroll: true });
+    }
+    state.opener = null;
+    state.restore = true;
+  }
+  state.wasOpen = open;
+}
+
+function setDrawerOpen(sidebar, open, { opener = null, restoreFocus = true } = {}) {
+  const state = getDrawerState(sidebar);
+  if (open) state.opener = opener || document.activeElement;
+  else state.restore = restoreFocus;
+  sidebar.classList.toggle('sidebar-mobile-open', open);
+  document.getElementById('sidebarOverlay')?.classList.toggle('active', open);
+  syncDrawer(sidebar);
+  if (open) sidebar.querySelector('.sidebar-nav .nav-item')?.focus({ preventScroll: true });
+}
+
+export function openMobileSidebar(opener) {
+  const sidebar = document.getElementById('mainSidebar');
+  if (sidebar) setDrawerOpen(sidebar, true, { opener });
+}
+
+export function closeMobileSidebar({ restoreFocus = true } = {}) {
+  const sidebar = document.getElementById('mainSidebar');
+  if (sidebar) setDrawerOpen(sidebar, false, { restoreFocus });
+}
+
+function syncActiveRoute(sidebar) {
+  const route = '/' + (window.location.hash.replace(/^#\/?/, '').split('?')[0] || 'dashboard');
+  sidebar.querySelectorAll('.nav-item-link').forEach((link) => {
+    const active = isRouteActive(link.dataset.href, route);
+    link.classList.toggle('active', active);
+    if (active) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
 }
 
 export function renderSidebar(currentRoute) {
@@ -250,31 +344,32 @@ export function renderSidebar(currentRoute) {
 
   const menuHtml = visibleMenuItems.map(item => renderMenuItem(item, currentRoute, 0)).join('');
   const adminHtml = [...pruneMenu(adminItems), {id:'accounts',label:'Hesaplar',route:'/accounts',icon:'building'}, {id:'settings',label:'Ayarlar',route:'/settings',icon:'settings'}].map(item => renderMenuItem(item, currentRoute, 0)).join('');
+  const collapseLabel = isCollapsed ? 'Menüyü genişlet' : 'Menüyü daralt';
 
   sidebar.innerHTML = `
     <div class="sidebar-brand">
       <div class="sidebar-brand-icon">${logoMark(36)}</div>
       <div class="sidebar-brand-text">
-        <h1>Sonvera</h1>
+        <span class="sidebar-brand-name">Sonvera</span>
         <span>E-Fatura Platformu</span>
       </div>
-      <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="Menüyü Daralt">
-        ${icons.collapse}
+      <button type="button" class="sidebar-collapse-btn" id="sidebarCollapseBtn" title="${collapseLabel}" aria-label="${collapseLabel}" aria-expanded="${!isCollapsed}" aria-controls="sidebarNav">
+        ${isCollapsed ? icons.expand : icons.collapse}
       </button>
     </div>
 
     <div class="account-switcher" id="accountSwitcher">
-      <div class="account-switcher-current">
-        <span class="account-dot" id="accountDot" style="background:#3b82f6"></span>
+      <button type="button" class="account-switcher-current" id="accountSwitcherBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="accountDropdown">
+        <span class="account-dot" id="accountDot" style="background:var(--accent-solid)" aria-hidden="true"></span>
         <span class="account-switcher-name" id="accountName">Hesap Seçin</span>
         <span class="account-switcher-env" id="accountEnv">TEST</span>
-      </div>
+      </button>
       <div class="account-dropdown" id="accountDropdown"></div>
     </div>
 
-    <nav class="sidebar-nav" id="sidebarNav">
+    <nav class="sidebar-nav" id="sidebarNav" aria-label="Ana menü">
       ${menuHtml}
-      <div class="nav-section-divider"></div>
+      <div class="nav-section-divider" aria-hidden="true"></div>
       <div class="nav-section-label">Yönetim Paneli</div>
       ${adminHtml}
     </nav>
@@ -286,20 +381,31 @@ export function renderSidebar(currentRoute) {
 
   // ── Event Bindings ──
   setTimeout(() => {
+    // Mobile drawer state (inert, aria-expanded, focus return)
+    new MutationObserver(() => syncDrawer(sidebar)).observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+    listenScoped(sidebar, window.matchMedia(MOBILE_QUERY), 'change', () => syncDrawer(sidebar));
+    listenScoped(sidebar, document, 'keydown', (e) => {
+      if (e.key !== 'Escape' || !sidebar.classList.contains('sidebar-mobile-open') || !isMobileViewport()) return;
+      e.preventDefault();
+      setDrawerOpen(sidebar, false, { restoreFocus: true });
+    });
+    listenScoped(sidebar, window, 'hashchange', () => syncActiveRoute(sidebar));
+    syncDrawer(sidebar);
+
     // Collapse toggle
     const collapseBtn = sidebar.querySelector('#sidebarCollapseBtn');
     collapseBtn?.addEventListener('click', (e) => {
       e.stopPropagation();
 
-      if (window.innerWidth <= 768) {
-        sidebar.classList.remove('sidebar-mobile-open');
-        document.getElementById('sidebarOverlay')?.classList.remove('active');
+      if (isMobileViewport()) {
+        setDrawerOpen(sidebar, false, { restoreFocus: true });
         return;
       }
 
       isCollapsed = !isCollapsed;
       sidebar.classList.toggle('sidebar-collapsed', isCollapsed);
       collapseBtn.innerHTML = isCollapsed ? icons.expand : icons.collapse;
+      syncCollapseButton(sidebar);
     });
 
     // Accordion toggle
@@ -310,6 +416,7 @@ export function renderSidebar(currentRoute) {
         expandedSections[id] = !expandedSections[id];
         const group = item.closest('.nav-group');
         group?.classList.toggle('expanded', expandedSections[id]);
+        item.setAttribute('aria-expanded', String(Boolean(expandedSections[id])));
       });
     });
 
@@ -318,29 +425,87 @@ export function renderSidebar(currentRoute) {
       item.addEventListener('click', () => {
         const href = item.dataset.href;
         if (href) navigate(href);
-        
-        // Mobile drawer auto-close
-        if (window.innerWidth <= 768) {
-          sidebar.classList.remove('sidebar-mobile-open');
-          document.getElementById('sidebarOverlay')?.classList.remove('active');
+
+        // Mobile drawer auto-close; the new page takes over, so focus does not bounce to the hamburger.
+        if (isMobileViewport() && sidebar.classList.contains('sidebar-mobile-open')) {
+          setDrawerOpen(sidebar, false, { restoreFocus: false });
         }
       });
     });
 
     // Account switcher
-    const switcher = sidebar.querySelector('#accountSwitcher');
-    const dropdown = sidebar.querySelector('#accountDropdown');
-    switcher?.addEventListener('click', (e) => {
-      e.stopPropagation();
-      dropdown?.classList.toggle('open');
-    });
-    listenScoped(sidebar, document, 'click', () => {
-      dropdown?.classList.remove('open');
-    });
+    bindAccountSwitcher(sidebar);
     loadAccountSwitcher(sidebar);
   }, 0);
 
   return sidebar;
+}
+
+function bindAccountSwitcher(sidebar) {
+  const switcher = sidebar.querySelector('#accountSwitcher');
+  const trigger = sidebar.querySelector('#accountSwitcherBtn');
+  const dropdown = sidebar.querySelector('#accountDropdown');
+  if (!switcher || !trigger || !dropdown) return;
+
+  const options = () => [...dropdown.querySelectorAll('.account-dropdown-item')];
+  const isOpen = () => dropdown.classList.contains('open');
+  const setOpen = (open, focus = null) => {
+    dropdown.classList.toggle('open', open);
+    trigger.setAttribute('aria-expanded', String(open));
+    if (!open) {
+      if (focus === 'trigger') trigger.focus();
+      return;
+    }
+    const items = options();
+    const target = focus === 'last' ? items.at(-1) : (items.find(btn => btn.classList.contains('active')) || items[0]);
+    target?.focus();
+  };
+
+  // The whole card stays clickable (same hit area as before); the inner button carries the semantics.
+  switcher.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (dropdown.contains(e.target)) return;
+    if (isOpen()) setOpen(false);
+    else setOpen(true, 'first');
+  });
+
+  trigger.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setOpen(true, e.key === 'ArrowUp' ? 'last' : 'first');
+    } else if (e.key === 'Escape' && isOpen()) {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+    }
+  });
+
+  dropdown.addEventListener('keydown', (e) => {
+    const items = options();
+    const index = items.indexOf(document.activeElement);
+    let next = null;
+    if (e.key === 'ArrowDown') next = items[(index + 1) % items.length];
+    else if (e.key === 'ArrowUp') next = items[(index - 1 + items.length) % items.length];
+    else if (e.key === 'Home') next = items[0];
+    else if (e.key === 'End') next = items.at(-1);
+    else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false, 'trigger');
+      return;
+    } else if (e.key === 'Tab') {
+      setOpen(false);
+      return;
+    }
+    if (next) {
+      e.preventDefault();
+      next.focus();
+    }
+  });
+
+  listenScoped(sidebar, document, 'click', () => {
+    if (isOpen()) setOpen(false);
+  });
 }
 
 async function loadAccountSwitcher(sidebar) {
@@ -352,7 +517,7 @@ async function loadAccountSwitcher(sidebar) {
     const dot = sidebar.querySelector('#accountDot');
     const name = sidebar.querySelector('#accountName');
     const env = sidebar.querySelector('#accountEnv');
-    if (dot) dot.style.background = active.color || '#3b82f6';
+    if (dot) dot.style.background = /^#[0-9a-f]{6}$/i.test(active.color || '') ? active.color : 'var(--accent-solid)';
     if (name) name.textContent = active.name;
     if (env) {
       env.textContent = active.environment === 'live' ? 'CANLI' : 'TEST';
@@ -364,15 +529,17 @@ async function loadAccountSwitcher(sidebar) {
   const dropdown = sidebar.querySelector('#accountDropdown');
   if (!dropdown) return;
 
-  dropdown.innerHTML = accounts.map(acc => `
-    <button class="account-dropdown-item ${acc.id === activeId ? 'active' : ''}" data-id="${acc.id}">
-      <span class="account-dot" style="background:${safeColor(acc.color)}"></span>
+  const options = accounts.map(acc => `
+    <button type="button" role="option" tabindex="-1" aria-selected="${acc.id === activeId}" class="account-dropdown-item ${acc.id === activeId ? 'active' : ''}" data-id="${escapeHtml(acc.id)}">
+      <span class="account-dot" style="background:${safeColor(acc.color)}" aria-hidden="true"></span>
       ${escapeHtml(acc.name)}
       <span class="account-switcher-env" style="${acc.environment === 'live' ? 'background:var(--success-bg);color:var(--success)' : ''}">${acc.environment === 'live' ? 'CANLI' : 'TEST'}</span>
     </button>
-  `).join('') + `
-    <button class="account-dropdown-item account-dropdown-add" data-action="add">
-      ＋ Yeni Hesap Ekle
+  `).join('');
+  dropdown.innerHTML = `
+    <div role="listbox" id="accountListbox" aria-label="API hesabı seç">${options}</div>
+    <button type="button" tabindex="-1" class="account-dropdown-item account-dropdown-add" data-action="add">
+      <span aria-hidden="true">＋</span> Yeni Hesap Ekle
     </button>
   `;
 

@@ -14,6 +14,15 @@ const ICONS = {
 const TITLES = { success: 'Tamamlandı', error: 'Hata', warning: 'Uyarı', info: 'Bilgi' };
 const MAX_VISIBLE = 4;
 
+// The live region must exist before content is inserted, otherwise screen readers miss
+// the first message. Errors additionally carry role="alert" (assertive) on the toast itself.
+function ensureLiveRegion(container) {
+  if (!container || container.hasAttribute('aria-live')) return;
+  container.setAttribute('aria-live', 'polite');
+  container.setAttribute('aria-relevant', 'additions text');
+}
+if (typeof document !== 'undefined') ensureLiveRegion(document.getElementById('toast-container'));
+
 /**
  * @param {string} message
  * @param {'success'|'error'|'warning'|'info'} [type]
@@ -22,6 +31,7 @@ const MAX_VISIBLE = 4;
 export function showToast(message, type = 'info', durationOrOptions = 4000) {
   const container = document.getElementById('toast-container');
   if (!container) return;
+  ensureLiveRegion(container);
 
   let duration = 4000;
   let actionLabel = '';
@@ -42,7 +52,7 @@ export function showToast(message, type = 'info', durationOrOptions = 4000) {
 
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.setAttribute('role', type === 'error' || type === 'warning' ? 'alert' : 'status');
+  if (type === 'error') toast.setAttribute('role', 'alert');
   toast.style.setProperty('--toast-duration', `${duration}ms`);
   toast.innerHTML = `
     <span class="toast-icon">${ICONS[icon] || ICONS[type] || ICONS.info}</span>
@@ -65,10 +75,28 @@ export function showToast(message, type = 'info', durationOrOptions = 4000) {
   let remaining = duration;
   let startedAt = Date.now();
   let timer = setTimeout(() => removeToast(toast), remaining);
-  const pause = () => { clearTimeout(timer); remaining -= Date.now() - startedAt; toast.classList.add('is-paused'); };
-  const resume = () => { startedAt = Date.now(); toast.classList.remove('is-paused'); timer = setTimeout(() => removeToast(toast), Math.max(800, remaining)); };
-  toast.addEventListener('mouseenter', pause);
-  toast.addEventListener('mouseleave', resume);
+  // Pause while hovered or while keyboard focus is inside (WCAG 2.2.1); resume only when both end.
+  let hovered = false;
+  let focused = false;
+  let paused = false;
+  const sync = () => {
+    const shouldPause = hovered || focused;
+    if (shouldPause && !paused) {
+      paused = true;
+      clearTimeout(timer);
+      remaining -= Date.now() - startedAt;
+      toast.classList.add('is-paused');
+    } else if (!shouldPause && paused) {
+      paused = false;
+      startedAt = Date.now();
+      toast.classList.remove('is-paused');
+      timer = setTimeout(() => removeToast(toast), Math.max(800, remaining));
+    }
+  };
+  toast.addEventListener('mouseenter', () => { hovered = true; sync(); });
+  toast.addEventListener('mouseleave', () => { hovered = false; sync(); });
+  toast.addEventListener('focusin', () => { focused = true; sync(); });
+  toast.addEventListener('focusout', (e) => { if (toast.contains(e.relatedTarget)) return; focused = false; sync(); });
 
   actionBtn?.addEventListener('click', () => {
     try {

@@ -18,6 +18,8 @@ import { exportInvoicesToExcel } from '../services/excel-export.js';
 import { exportCariDefter } from '../services/cari-export-worker-client.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
+import { statusBadge } from '../lib/status-badge.js';
+import { fmtCur, fmtDate, fmtDateTime as fmtDateFull, dateCellHtml, skeletonRowsHtml, rowCheckboxHtml } from '../lib/format.js';
 
 // ── SVG Icons ──
 const ic = {
@@ -72,7 +74,7 @@ function setupFilterToggle(page) {
 
   const setExpanded = (expanded) => {
     filterBar.classList.toggle('filters-expanded', expanded);
-    toggleBtn.textContent = expanded ? 'Filtreyi Gizle' : 'Filtreyi Goster';
+    toggleBtn.textContent = expanded ? 'Filtreyi Gizle' : 'Filtreyi Göster';
     toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   };
 
@@ -131,22 +133,22 @@ export async function renderOutgoingInvoices(options = {}) {
     <!-- Filter Bar -->
     <div class="nilvera-filter-bar">
       <div class="filter-group filter-search">
-        <label class="filter-label">Ara</label>
+        <label class="filter-label" for="searchInput">Ara</label>
         <div class="filter-search-row">
-          <input type="text" class="filter-input" id="searchInput" placeholder="Ara" style="width:100%" />
-          <button class="btn btn-sm btn-secondary" id="toggleFiltersBtn" type="button" aria-expanded="false">Filtreyi Goster</button>
+          <input type="search" class="filter-input" id="searchInput" placeholder="Fatura no, alıcı, VKN" style="width:100%" />
+          <button class="btn btn-sm btn-secondary" id="toggleFiltersBtn" type="button" aria-expanded="false">Filtreyi Göster</button>
         </div>
       </div>
       <div class="filter-group filter-advanced">
-        <label class="filter-label">Başlangıç Tarihi</label>
+        <label class="filter-label" for="dateStart">Başlangıç Tarihi</label>
         <input type="date" class="filter-input" id="dateStart" value="${start}" />
       </div>
       <div class="filter-group filter-advanced">
-        <label class="filter-label">Bitiş Tarihi</label>
+        <label class="filter-label" for="dateEnd">Bitiş Tarihi</label>
         <input type="date" class="filter-input" id="dateEnd" value="${end}" />
       </div>
       <div class="filter-group filter-advanced">
-        <label class="filter-label">Filtre</label>
+        <label class="filter-label" for="sourceFilter">Belge Türü</label>
         <select class="filter-input" id="sourceFilter">
           <option value="">Tümü</option>
           <option value="efatura">E-Fatura</option>
@@ -154,7 +156,7 @@ export async function renderOutgoingInvoices(options = {}) {
         </select>
       </div>
       <div class="filter-group filter-advanced">
-        <label class="filter-label">Sıralama</label>
+        <label class="filter-label" for="sortFilter">Sıralama</label>
         <select class="filter-input" id="sortFilter">
           <option value="date-desc">Fatura Tarihi</option>
           <option value="amount-desc">Tutar (Azalan)</option>
@@ -162,7 +164,7 @@ export async function renderOutgoingInvoices(options = {}) {
         </select>
       </div>
       <div class="filter-group filter-advanced">
-        <label class="filter-label">A / Z A</label>
+        <label class="filter-label" for="orderFilter">Sıra Yönü</label>
         <select class="filter-input" id="orderFilter">
           <option value="desc">Azalan</option>
           <option value="asc">Artan</option>
@@ -171,12 +173,12 @@ export async function renderOutgoingInvoices(options = {}) {
       <div class="filter-actions"><span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span><div class="filter-actions-row">
         <button class="btn btn-sm btn-primary" id="applyFilter" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
         <div style="position:relative">
-          <button class="btn btn-sm btn-success" id="exportBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
+          <button class="btn btn-sm btn-secondary" id="exportBtn" aria-haspopup="menu" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.cloudDownload} DIŞA AKTAR ${ic.chevronDown}
           </button>
         </div>
         <div style="position:relative">
-          <button class="btn btn-sm btn-primary" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
+          <button class="btn btn-sm btn-secondary" id="islemlerBtn" aria-haspopup="menu" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.gear} İŞLEMLER ${ic.chevronDown}
           </button>
         </div>
@@ -190,23 +192,19 @@ export async function renderOutgoingInvoices(options = {}) {
         <table>
           <thead>
             <tr>
-              <th style="width:30px"><input type="checkbox" id="selectAll" /></th>
+              <th style="width:30px"><label class="sv-row-check" style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;cursor:pointer"><input type="checkbox" id="selectAll" aria-label="Tümünü seç" /></label></th>
               <th>ERP</th>
               <th>Fatura Bilgisi</th>
               <th>Tarih</th>
+              <th class="sv-number">Tutar</th>
               <th>Alıcı Bilgisi</th>
               <th>Fatura Durumu</th>
               <th>Cevap</th>
-              <th>Etiket Bilgileri</th>
               <th>İşlemler</th>
             </tr>
           </thead>
           <tbody id="invoiceList">
-            <tr><td colspan="9" class="table-empty">
-              <div style="padding:40px">
-                <div class="skeleton" style="height:20px;width:60%;margin:0 auto"></div>
-              </div>
-            </td></tr>
+            ${skeletonRowsHtml(9, { label: 'Giden faturalar yükleniyor…' })}
           </tbody>
         </table>
       </div>
@@ -385,13 +383,7 @@ async function loadOutgoing(page, options = {}) {
   }
   cachedOutgoingAccountId = accountId;
 
-  tbody.innerHTML = `<tr><td colspan="9" class="table-empty">
-    <div style="padding:40px;text-align:center">
-      <div style="animation:pulse 1.5s infinite">${ic.noData}</div>
-      <p style="color:var(--text-muted);margin-top:12px">E-Fatura ve E-Arşiv verileri yükleniyor...</p>
-      <p style="font-size:11px;color:var(--text-muted)">${account.name} · ${account.environment === 'live' ? 'Canlı' : 'Test'}</p>
-    </div>
-  </td></tr>`;
+  tbody.innerHTML = skeletonRowsHtml(9, { label: `E-Fatura ve E-Arşiv verileri yükleniyor: ${escapeHtml(account.name)} · ${account.environment === 'live' ? 'Canlı' : 'Test'}` });
 
   try {
     const { start, end } = getMonthRange();
@@ -474,7 +466,7 @@ async function loadOutgoing(page, options = {}) {
       if (efOk || eaOk) {
         tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Giden fatura bulunamadı</h3><p>Bu dönemde e-Fatura veya e-Arşiv gönderilmiş fatura yok</p></div></td></tr>`;
       } else {
-        tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.error}<h3>Veri alınamadı</h3><p>API bağlantısını kontrol edin</p><button class="btn btn-primary" id="retryBtn">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.error}<h3>Veri alınamadı</h3><p role="alert">API bağlantısını kontrol edin</p><button class="btn btn-primary" id="retryBtn">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
         tbody.querySelector('#retryBtn')?.addEventListener('click', () => loadOutgoing(page, options));
       }
       updateFooter(page, 0);
@@ -495,7 +487,7 @@ async function loadOutgoing(page, options = {}) {
     if (seq !== outgoingLoadSeq || cachedOutgoingAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
-    tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.globe}<h3>Bağlantı hatası</h3><p>${e.message || 'Sunucuya ulaşılamıyor'}</p><button class="btn btn-primary" id="retryBtn2">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.globe}<h3>Bağlantı hatası</h3><p role="alert">${escapeHtml(e.message || 'Sunucuya ulaşılamıyor')}</p><button class="btn btn-primary" id="retryBtn2">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
     tbody.querySelector('#retryBtn2')?.addEventListener('click', () => loadOutgoing(page, options));
     updateFooter(page, 0);
   }
@@ -615,31 +607,30 @@ function renderTable(page, invoices) {
     const amount = fmtCur(getAmount(inv), getCurrency(inv));
     const receiver = getReceiverName(inv) || '—';
     const taxNo = getReceiverTaxNo(inv) || '—';
+    const answer = answerDisplay(inv);
+    const safeNo = escapeHtml(invoiceNo);
 
     return `<tr>
-      <td data-label="Seçim"><input type="checkbox" class="row-check" data-idx="${idx}" /></td>
+      <td data-label="Seçim">${rowCheckboxHtml(`class="row-check" data-idx="${idx}"`, `${safeNo} seç`)}</td>
       <td data-label="ERP">
         <div style="display:flex;gap:4px">
-          <button class="action-menu-btn" data-action="query" data-uuid="${escapeHtml(uuid)}" data-source="${inv._source}" ${pdfMetaAttrs({ party: receiver, number: invoiceNo, date: fmtDateShort(issueDate), amount })} title="PDF Önizle">${ic.query}</button>
+          <button class="action-menu-btn" data-action="query" data-uuid="${escapeHtml(uuid)}" data-source="${inv._source}" ${pdfMetaAttrs({ party: receiver, number: invoiceNo, date: fmtDateShort(issueDate), amount })} title="PDF Önizle" aria-label="${safeNo} PDF önizle">${ic.query}</button>
         </div>
       </td>
       <td data-label="Fatura Bilgisi">
-        <div><strong>${escapeHtml(invoiceNo)}</strong></div>
-        <div style="font-size:11px;color:var(--text-muted)">${srcBadge} / ${amount}</div>
+        <div style="white-space:nowrap"><strong>${safeNo}</strong></div>
+        <div style="font-size:11px;color:var(--text-muted)">${srcBadge}</div>
       </td>
-      <td data-label="Tarih">
-        <div style="font-size:12px">Fatura : ${fmtDateFull(issueDate)}</div>
-        <div style="font-size:11px;color:var(--text-muted)">Zarf : ${fmtDateFull(envelopeDate || issueDate)}</div>
-      </td>
+      <td data-label="Tarih">${dateCellHtml(issueDate, { secondary: `Zarf ${fmtDate(envelopeDate || issueDate)}` })}</td>
+      <td class="sv-number" data-label="Tutar">${amount}</td>
       <td data-label="Alıcı Bilgisi">
-        <div style="font-size:12px;font-weight:600">${escapeHtml(receiver)}</div>
-        <div style="font-size:11px;color:var(--text-muted)">Vergi No : ${escapeHtml(taxNo)}</div>
+        <div style="font-size:12px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(receiver)}">${escapeHtml(receiver)}</div>
+        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">VKN ${escapeHtml(taxNo)}</div>
       </td>
-      <td data-label="Fatura Durumu">${statusDisplay(inv)}</td>
-      <td data-label="Cevap">${answerDisplay(inv)}</td>
-      <td data-label="Etiket Bilgileri"><span style="font-size:11px;color:var(--text-muted)">—</span></td>
+      <td data-label="Fatura Durumu">${statusBadge(getStatus(inv), { detail: getStatusDetail(inv) })}</td>
+      <td data-label="Cevap"${answer ? '' : ' class="sv-hide-mobile"'}>${answer || '<span style="font-size:11px;color:var(--text-muted)">—</span>'}</td>
       <td data-label="İşlemler">
-        <button class="action-menu-btn action-menu-trigger" data-idx="${idx}" data-uuid="${uuid}" data-source="${inv._source}" data-archived="${isArchivedInvoice(inv) ? '1' : '0'}" title="İşlemler">${ic.menu}</button>
+        <button class="action-menu-btn action-menu-trigger" data-idx="${idx}" data-uuid="${uuid}" data-source="${inv._source}" data-archived="${isArchivedInvoice(inv) ? '1' : '0'}" title="İşlemler" aria-label="${safeNo} işlemleri" aria-haspopup="menu">${ic.menu}</button>
       </td>
     </tr>`;
   }).join('');
@@ -977,10 +968,10 @@ async function showInvoiceDetailsModal(uuid, source) {
       <div class="detail-card"><div class="filter-label">Tutar</div><div>${amount}</div></div>
       <div class="detail-card"><div class="filter-label">UUID</div><div style="word-break:break-all">${formatValue(uuid)}</div></div>
     </div>
-    <div class="form-group">
-      <label class="form-label">Ham Yanıt</label>
-      <pre style="max-height:320px;overflow:auto;background:var(--bg-input);padding:12px;border-radius:8px;font-size:12px">${JSON.stringify(effective, null, 2)}</pre>
-    </div>
+    <details class="form-group">
+      <summary style="cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--text-secondary)">Teknik ayrıntı</summary>
+      <pre style="max-height:320px;overflow:auto;background:var(--bg-input);padding:12px;border-radius:8px;font-size:12px">${escapeHtml(JSON.stringify(effective, null, 2))}</pre>
+    </details>
     ${detailRes.success ? '' : `<p style="margin-top:8px;color:var(--warning)">Detay endpoint'i hata verdi: ${detailRes.error || 'Bilinmeyen hata'}</p>`}
   `;
 
@@ -1256,61 +1247,14 @@ function updateFooter(page, count) {
   if (el) el.textContent = `Toplam Kayıt : ${count}`;
 }
 
-function statusDisplay(inv) {
-  const s = getStatus(inv);
-  const detail = getStatusDetail(inv);
-  const map = {
-    // Alıcı red (önce gelir — Answer.AnswerCode'dan)
-    rejected:     ['Reddedildi', 'danger'],
-    red:          ['Reddedildi', 'danger'],
-    reddedildi:   ['Reddedildi', 'danger'],
-    rejectall:    ['Reddedildi', 'danger'],
-    '2005':       ['Reddedildi', 'danger'],
-    // Alıcı kabul
-    documentansweredautomatically: ['Fatura Otomatik Onaylandı', 'success'],
-    accepted:     ['Kabul Edildi', 'success'],
-    approved:     ['Fatura Onaylandı', 'success'],
-    kabul:        ['Kabul Edildi', 'success'],
-    kabul_edildi: ['Kabul Edildi', 'success'],
-    acceptall:    ['Kabul Edildi', 'success'],
-    '2004':       ['Kabul Edildi', 'success'],
-    // GİB/zarf durumu
-    succeed:      ['Alıcıya İletildi', 'info'],
-    success:      ['Başarılı', 'success'],
-    basarili:     ['Başarılı', 'success'],
-    // Bekliyor / iletimde
-    waiting:      ['İşlem Bekliyor', 'warning'],
-    bekleyen:     ['Bekliyor', 'warning'],
-    // Diğer
-    cancelled:    ['İptal Edildi', 'danger'],
-    sent:         ['Gönderildi', 'info'],
-  };
-  const [text, color] = map[String(s).toLowerCase()] || [detail || s || '—', 'default'];
-  const icon = color === 'success'
-    ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
-    : color === 'danger'
-    ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`
-    : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-  return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary)">${icon} ${text}</div>`;
-}
-
 function answerDisplay(inv) {
   const status = getStatus(inv);
   if (status === 'succeed' || status === 'approved') {
-    return `<div style="font-size:11px;color:var(--text-muted)">Alıcıya Başarıylı İletildi.</div>`;
+    return `<div style="font-size:11px;color:var(--text-muted)">Alıcıya Başarıyla İletildi.</div>`;
   }
-  return `<span style="font-size:11px;color:var(--text-muted)">—</span>`;
+  return '';
 }
 
-function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('tr-TR'); } catch { return d; } }
-function fmtDateFull(d) {
-  if (!d) return '—';
-  try {
-    const dt = new Date(d);
-    return `${dt.toLocaleDateString('tr-TR')} ${dt.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
-  } catch { return d; }
-}
-function fmtCur(a, c) { if (!a && a !== 0) return '—'; try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: c || 'TRY' }).format(a); } catch { return `${a} ${c}`; } }
 
 function fmtDateShort(d) {
   if (!d) return '';

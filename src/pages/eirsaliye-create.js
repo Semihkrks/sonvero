@@ -1,5 +1,6 @@
 import {documentRecovery} from '../components/document-recovery.js';
 import {escapeHtml} from '../lib/html.js';
+import {srOnly} from '../lib/format.js';
 import {requireOnline} from '../lib/operations.js';
 import {Decimal,istanbulDate} from '../lib/money.js';
 import { listenScoped } from '../lib/page-events.js';
@@ -59,57 +60,57 @@ export async function renderEirsaliyeCreate() {
   page.innerHTML = `
     <div class="nilvera-breadcrumb">
       ${ic.truck}
-      <span>e-Irsaliye</span>
+      <span>e-İrsaliye</span>
       <span class="bc-separator">›</span>
-      <span class="bc-current">Irsaliye Olustur</span>
+      <span class="bc-current">İrsaliye Oluştur</span>
     </div>
 
     <!-- Top Action Bar -->
     <div class="invoice-create-header">
-      <h2 style="display:flex;align-items:center;gap:8px;font-size:16px">${ic.truck} Irsaliye Olustur</h2>
+      <h2 style="display:flex;align-items:center;gap:8px;font-size:16px">${ic.truck} İrsaliye Oluştur</h2>
       <div class="invoice-create-header-actions">
-        <button class="btn btn-secondary" id="btnXmlPreview" style="display:flex;align-items:center;gap:6px">${ic.xml} XML Indir</button>
-        <button class="btn btn-secondary" id="btnPreview" style="display:flex;align-items:center;gap:6px">${ic.eye} Onizle</button>
-        <button class="btn btn-warning" id="btnSaveDraft" style="display:flex;align-items:center;gap:6px">${ic.save} Taslak Olarak Kaydet</button>
-        <button class="btn btn-primary" id="btnSend" style="display:flex;align-items:center;gap:6px">${ic.send} Onayla ve Gonder</button>
+        <button type="button" class="btn btn-secondary" id="btnXmlPreview" style="display:flex;align-items:center;gap:6px">${ic.xml} XML İndir</button>
+        <button type="button" class="btn btn-secondary" id="btnPreview" style="display:flex;align-items:center;gap:6px">${ic.eye} Önizle</button>
+        <button type="button" class="btn btn-secondary" id="btnSaveDraft" style="display:flex;align-items:center;gap:6px">${ic.save} Taslak Olarak Kaydet</button>
+        <button type="button" class="btn btn-primary" id="btnSend" style="display:flex;align-items:center;gap:6px">${ic.send} Onayla ve Gönder</button>
       </div>
     </div>
 
-    <!-- 1) Alici Bilgileri — full width -->
+    <!-- 1) Alıcı Bilgileri — full width -->
     <div class="card invoice-general-card" style="margin-top:0">
-      <h3 style="margin-bottom:16px">${ic.user} Alici Bilgileri</h3>
+      <h3 style="margin-bottom:16px">${ic.user} Alıcı Bilgileri</h3>
       <div class="form-group" style="position:relative">
-        <input type="text" class="form-input" id="receiverSearch" placeholder="Firma adi veya VKN ile arayiniz..." autocomplete="off" style="padding-left:36px" />
-        <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none">${ic.search}</span>
+        <input type="text" class="form-input" id="receiverSearch" placeholder="Firma adı veya VKN ile arayınız…" aria-label="Alıcı ara (firma adı veya VKN)" autocomplete="off" style="padding-left:36px" />
+        <span aria-hidden="true" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--text-muted);pointer-events:none">${ic.search}</span>
         <div id="receiverSuggestions" class="receiver-suggestions" style="display:none"></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-        <div class="form-group"><label class="form-label">Unvan / Adi Soyadi</label><input type="text" class="form-input" id="receiverName" /></div>
-        <div class="form-group"><label class="form-label">Etiket</label>
-          <select class="form-input" id="receiverAlias"><option value="">Lutfen Etiket Seciniz</option></select>
+        <div class="form-group"><label class="form-label" for="receiverName">Unvan / Adı Soyadı</label><input type="text" class="form-input" id="receiverName" /></div>
+        <div class="form-group"><label class="form-label" for="receiverAlias">Etiket</label>
+          <select class="form-input" id="receiverAlias"><option value="">Lütfen Etiket Seçiniz</option></select>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">VKN-TCKN</label><input type="text" class="form-input" id="receiverTaxNo" /></div>
-        <div class="form-group"><label class="form-label">Vergi Dairesi</label><input type="text" class="form-input" id="receiverTaxOffice" /></div>
+        <div class="form-group"><label class="form-label" for="receiverTaxNo">VKN-TCKN</label><input type="text" class="form-input" id="receiverTaxNo" inputmode="numeric" /></div>
+        <div class="form-group"><label class="form-label" for="receiverTaxOffice">Vergi Dairesi</label><input type="text" class="form-input" id="receiverTaxOffice" /></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">Adres</label><input type="text" class="form-input" id="receiverAddress" /></div>
-        <div class="form-group"><label class="form-label">Ilce</label><input type="text" class="form-input" id="receiverDistrict" /></div>
+        <div class="form-group"><label class="form-label" for="receiverAddress">Adres</label><input type="text" class="form-input" id="receiverAddress" /></div>
+        <div class="form-group"><label class="form-label" for="receiverDistrict">İlçe</label><input type="text" class="form-input" id="receiverDistrict" /></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">Sehir</label><input type="text" class="form-input" id="receiverCity" /></div>
-        <div class="form-group"><label class="form-label">Ulke</label>
-          <select class="form-input" id="receiverCountry"><option value="Turkiye">Turkiye</option></select>
+        <div class="form-group"><label class="form-label" for="receiverCity">Şehir</label><input type="text" class="form-input" id="receiverCity" /></div>
+        <div class="form-group"><label class="form-label" for="receiverCountry">Ülke</label>
+          <select class="form-input" id="receiverCountry"><option value="Turkiye">Türkiye</option></select>
         </div>
-        <div class="form-group"><label class="form-label">Posta Kodu</label><input type="text" class="form-input" id="receiverPostalCode" /></div>
+        <div class="form-group"><label class="form-label" for="receiverPostalCode">Posta Kodu</label><input type="text" class="form-input" id="receiverPostalCode" /></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">Telefon</label><input type="text" class="form-input" id="receiverPhone" /></div>
-        <div class="form-group"><label class="form-label">Faks</label><input type="text" class="form-input" id="receiverFax" /></div>
-        <div class="form-group"><label class="form-label">Web Site Adresi</label><input type="text" class="form-input" id="receiverWeb" /></div>
+        <div class="form-group"><label class="form-label" for="receiverPhone">Telefon</label><input type="tel" class="form-input" id="receiverPhone" /></div>
+        <div class="form-group"><label class="form-label" for="receiverFax">Faks</label><input type="tel" class="form-input" id="receiverFax" /></div>
+        <div class="form-group"><label class="form-label" for="receiverWeb">Web Site Adresi</label><input type="text" class="form-input" id="receiverWeb" /></div>
       </div>
-      <div class="form-group"><label class="form-label">E-Posta</label><input type="email" class="form-input" id="receiverEmail" /></div>
+      <div class="form-group"><label class="form-label" for="receiverEmail">E-Posta</label><input type="email" class="form-input" id="receiverEmail" /></div>
     </div>
 
     <!-- 2) Genel Bilgiler — full width -->
@@ -119,18 +120,18 @@ export async function renderEirsaliyeCreate() {
         <span class="badge" id="ettnBadge" style="font-size:10px;padding:4px 10px;background:var(--accent-bg);color:var(--accent);border-radius:20px;font-family:monospace;max-width:380px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>ETTN</strong> <span id="ettnValue">otomatik</span></span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">Irsaliye Tarihi</label><input type="date" class="form-input" id="despatchDate" value="${todayStr()}" /></div>
-        <div class="form-group"><label class="form-label">Irsaliye Saati</label><input type="time" class="form-input" id="despatchTime" value="${nowTime()}" /></div>
+        <div class="form-group"><label class="form-label" for="despatchDate">İrsaliye Tarihi</label><input type="date" class="form-input" id="despatchDate" value="${todayStr()}" /></div>
+        <div class="form-group"><label class="form-label" for="despatchTime">İrsaliye Saati</label><input type="time" class="form-input" id="despatchTime" value="${nowTime()}" /></div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">Irsaliye Senaryosu</label>
+        <div class="form-group"><label class="form-label" for="despatchScenario">İrsaliye Senaryosu</label>
           <select class="form-input" id="despatchScenario">
-            <option value="TEMELFATURA">Temel Irsaliye</option>
+            <option value="TEMELFATURA">Temel İrsaliye</option>
             <option value="HALTIP">Hal Tipi</option>
-            <option value="INSAATDEMIRI">Insaat Demiri Izleme Sistemi</option>
+            <option value="INSAATDEMIRI">İnşaat Demiri İzleme Sistemi</option>
           </select>
         </div>
-        <div class="form-group"><label class="form-label">Irsaliye Tipi</label>
+        <div class="form-group"><label class="form-label" for="despatchType">İrsaliye Tipi</label>
           <select class="form-input" id="despatchType">
             <option value="SEVK">Sevk</option>
             <option value="MATBUDAN">Matbudan</option>
@@ -138,20 +139,20 @@ export async function renderEirsaliyeCreate() {
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">Irsaliye Seri</label><input type="text" class="form-input" id="despatchSerial" value="${despatchSeries}" maxlength="3" /></div>
-        <div class="form-group"><label class="form-label">Irsaliye Sablonu</label>
+        <div class="form-group"><label class="form-label" for="despatchSerial">İrsaliye Seri</label><input type="text" class="form-input" id="despatchSerial" value="${despatchSeries}" maxlength="3" /></div>
+        <div class="form-group"><label class="form-label" for="despatchTemplate">İrsaliye Şablonu</label>
           <select class="form-input" id="despatchTemplate"><option value="eIrsaliye">eIrsaliye</option></select>
         </div>
-        <div class="form-group"><label class="form-label">Para Birimi</label>
+        <div class="form-group"><label class="form-label" for="currency">Para Birimi</label>
           <select class="form-input" id="currency">
-            <option value="TRY">Turk Lirasi</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
+            <option value="TRY">Türk Lirası</option><option value="USD">USD</option><option value="EUR">EUR</option><option value="GBP">GBP</option>
           </select>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-        <div class="form-group"><label class="form-label">Sevk Tarihi</label><input type="date" class="form-input" id="shipmentDate" value="${todayStr()}" /></div>
-        <div class="form-group"><label class="form-label">Sevk Saati</label><input type="time" class="form-input" id="shipmentTime" value="${nowTime()}" /></div>
-        <div class="form-group"><label class="form-label">Arac Plaka</label><input type="text" class="form-input" id="vehiclePlate" placeholder="34 ABC 123" /></div>
+        <div class="form-group"><label class="form-label" for="shipmentDate">Sevk Tarihi</label><input type="date" class="form-input" id="shipmentDate" value="${todayStr()}" /></div>
+        <div class="form-group"><label class="form-label" for="shipmentTime">Sevk Saati</label><input type="time" class="form-input" id="shipmentTime" value="${nowTime()}" /></div>
+        <div class="form-group"><label class="form-label" for="vehiclePlate">Araç Plaka</label><input type="text" class="form-input" id="vehiclePlate" placeholder="34 ABC 123" /></div>
       </div>
     </div>
 
@@ -159,20 +160,20 @@ export async function renderEirsaliyeCreate() {
     <div class="card invoice-general-card" style="margin-top:20px">
       <h3 style="margin-bottom:14px">Dorse Plaka</h3>
       <div style="display:flex;gap:8px;align-items:flex-end">
-        <div class="form-group" style="flex:1;margin-bottom:0"><input type="text" class="form-input" id="trailerPlate" placeholder="Plaka" /></div>
-        <button class="btn btn-success btn-sm" id="addTrailerBtn" style="display:flex;align-items:center;gap:4px;white-space:nowrap">${ic.plus} PLAKA EKLE</button>
+        <div class="form-group" style="flex:1;margin-bottom:0"><input type="text" class="form-input" id="trailerPlate" placeholder="Plaka" aria-label="Dorse plakası" /></div>
+        <button type="button" class="btn btn-secondary btn-sm" id="addTrailerBtn" style="display:flex;align-items:center;gap:4px;white-space:nowrap">${ic.plus} PLAKA EKLE</button>
       </div>
       <div id="trailerList" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px"></div>
     </div>
 
-    <!-- 4) Sofor Bilgileri — full width -->
+    <!-- 4) Şoför Bilgileri — full width -->
     <div class="card invoice-general-card" style="margin-top:20px">
-      <h3 style="margin-bottom:14px">${ic.user} Sofor Bilgileri</h3>
+      <h3 style="margin-bottom:14px">${ic.user} Şoför Bilgileri</h3>
       <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-        <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label class="form-label">Ad</label><input type="text" class="form-input" id="driverFirstName" /></div>
-        <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label class="form-label">Soyad</label><input type="text" class="form-input" id="driverLastName" /></div>
-        <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label class="form-label">TCKN</label><input type="text" class="form-input" id="driverTckn" /></div>
-        <button class="btn btn-success btn-sm" id="addDriverBtn" style="display:flex;align-items:center;gap:4px;white-space:nowrap">${ic.plus} SOFOR EKLE</button>
+        <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label class="form-label" for="driverFirstName">Ad</label><input type="text" class="form-input" id="driverFirstName" /></div>
+        <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label class="form-label" for="driverLastName">Soyad</label><input type="text" class="form-input" id="driverLastName" /></div>
+        <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label class="form-label" for="driverTckn">TCKN</label><input type="text" class="form-input" id="driverTckn" inputmode="numeric" /></div>
+        <button type="button" class="btn btn-secondary btn-sm" id="addDriverBtn" style="display:flex;align-items:center;gap:4px;white-space:nowrap">${ic.plus} ŞOFÖR EKLE</button>
       </div>
       <div id="driverList" style="display:flex;flex-direction:column;gap:6px;margin-top:10px"></div>
     </div>
@@ -180,28 +181,28 @@ export async function renderEirsaliyeCreate() {
     <!-- 5) Address Tabs — full width -->
     <div class="card" style="margin-top:20px">
       <div class="despatch-tabs">
-        <button class="despatch-tab active" data-tab="delivery">Teslimat Adresi</button>
-        <button class="despatch-tab" data-tab="carrier">Tasiyici Firma Bilgileri</button>
-        <button class="despatch-tab" data-tab="buyer">Satin Alan Taraf Bilgileri</button>
-        <button class="despatch-tab" data-tab="seller">Mallari Saglayan Taraf Bilgileri</button>
-        <button class="despatch-tab" data-tab="origin">Mallarin Alinmasini Baslatan Taraf Bilgileri</button>
+        <button type="button" class="despatch-tab active" data-tab="delivery">Teslimat Adresi</button>
+        <button type="button" class="despatch-tab" data-tab="carrier">Taşıyıcı Firma Bilgileri</button>
+        <button type="button" class="despatch-tab" data-tab="buyer">Satın Alan Taraf Bilgileri</button>
+        <button type="button" class="despatch-tab" data-tab="seller">Malları Sağlayan Taraf Bilgileri</button>
+        <button type="button" class="despatch-tab" data-tab="origin">Malların Alınmasını Başlatan Taraf Bilgileri</button>
       </div>
       <div id="tabContent" style="padding:20px">
         <div class="form-group" style="margin-bottom:16px">
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary);cursor:pointer">
-            <input type="checkbox" id="useReceiverAsDelivery" checked /> Alici Adresini Teslimat Adresi Olarak Kullan
+            <input type="checkbox" id="useReceiverAsDelivery" checked /> Alıcı Adresini Teslimat Adresi Olarak Kullan
           </label>
         </div>
         <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px">
-          <div class="form-group"><label class="form-label">Adres</label><input type="text" class="form-input" id="deliveryAddress" /></div>
-          <div class="form-group"><label class="form-label">Ilce</label><input type="text" class="form-input" id="deliveryDistrict" /></div>
+          <div class="form-group"><label class="form-label" for="deliveryAddress">Adres</label><input type="text" class="form-input" id="deliveryAddress" /></div>
+          <div class="form-group"><label class="form-label" for="deliveryDistrict">İlçe</label><input type="text" class="form-input" id="deliveryDistrict" /></div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
-          <div class="form-group"><label class="form-label">Sehir</label><input type="text" class="form-input" id="deliveryCity" /></div>
-          <div class="form-group"><label class="form-label">Ulke</label>
-            <select class="form-input" id="deliveryCountry"><option value="Turkiye">Turkiye</option></select>
+          <div class="form-group"><label class="form-label" for="deliveryCity">Şehir</label><input type="text" class="form-input" id="deliveryCity" /></div>
+          <div class="form-group"><label class="form-label" for="deliveryCountry">Ülke</label>
+            <select class="form-input" id="deliveryCountry"><option value="Turkiye">Türkiye</option></select>
           </div>
-          <div class="form-group"><label class="form-label">Posta Kodu</label><input type="text" class="form-input" id="deliveryPostalCode" /></div>
+          <div class="form-group"><label class="form-label" for="deliveryPostalCode">Posta Kodu</label><input type="text" class="form-input" id="deliveryPostalCode" /></div>
         </div>
       </div>
     </div>
@@ -215,33 +216,33 @@ export async function renderEirsaliyeCreate() {
         <table class="table" id="linesTable">
           <thead>
             <tr>
-              <th style="width:30px"></th>
+              <th style="width:30px">${srOnly('Seçim')}</th>
               <th>Mal / Hizmetler</th>
-              <th>Kimye Numarasi</th>
+              <th>Künye Numarası</th>
               <th style="width:80px">Miktar</th>
               <th style="width:90px">Birim</th>
               <th style="width:100px">Birim Fiyat</th>
               <th style="width:100px">Toplam Tutar</th>
-              <th style="width:40px"></th>
+              <th style="width:40px">${srOnly('Satır işlemi')}</th>
             </tr>
           </thead>
           <tbody id="linesBody"></tbody>
         </table>
       </div>
-      <button class="btn btn-success btn-sm" id="addLineBtn" style="margin-top:12px;display:flex;align-items:center;gap:6px">${ic.plus} Yeni Satir Ekle</button>
+      <button type="button" class="btn btn-secondary btn-sm" id="addLineBtn" style="margin-top:12px;display:flex;align-items:center;gap:6px">${ic.plus} Yeni Satır Ekle</button>
     </div>
 
     <!-- 7) Bottom Tabs — full width -->
     <div class="card" style="margin-top:20px">
       <div class="despatch-tabs">
-        <button class="despatch-tab active" data-tab="notes">Irsaliye Notu</button>
-        <button class="despatch-tab" data-tab="order">Siparis Bilgileri</button>
-        <button class="despatch-tab" data-tab="attachments">Irsaliye Ek Dosyalari</button>
-        <button class="despatch-tab" data-tab="codes">Kodlar</button>
+        <button type="button" class="despatch-tab active" data-tab="notes">İrsaliye Notu</button>
+        <button type="button" class="despatch-tab" data-tab="order">Sipariş Bilgileri</button>
+        <button type="button" class="despatch-tab" data-tab="attachments">İrsaliye Ek Dosyaları</button>
+        <button type="button" class="despatch-tab" data-tab="codes">Kodlar</button>
       </div>
       <div id="bottomTabContent" style="padding:20px">
         <div class="form-group">
-          <textarea class="form-input" id="despatchNote" rows="4" placeholder="Irsaliye Notunuz Varsa Giriniz."></textarea>
+          <textarea class="form-input" id="despatchNote" rows="4" placeholder="İrsaliye notunuz varsa giriniz." aria-label="İrsaliye notu"></textarea>
         </div>
       </div>
     </div>
@@ -270,7 +271,7 @@ export async function renderEirsaliyeCreate() {
     const q = searchInput.value.trim();
     if (q.length < 3) { suggestions.style.display = 'none'; return; }
     searchTimeout = setTimeout(async () => {
-      suggestions.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center">Araniyor...</div>';
+      suggestions.innerHTML = '<div role="status" style="padding:10px;color:var(--text-muted);text-align:center">Aranıyor…</div>';
       suggestions.style.display = 'block';
       try {
         const res = await General.searchCompany(q);
@@ -288,9 +289,9 @@ export async function renderEirsaliyeCreate() {
         if (res.success && validList.length > 0) {
           suggestions.innerHTML = validList.slice(0, 10).map((c, i) => `
             <div class="receiver-suggestion-item" data-idx="${i}">
-              <div style="font-weight:600;font-size:13px">${c.Title || '—'}</div>
+              <div style="font-weight:600;font-size:13px">${escapeHtml(c.Title || '—')}</div>
               <div style="font-size:11px;color:var(--text-muted);display:flex;justify-content:space-between">
-                <span>VKN: ${c.TaxNumber || c.Identifier || 'Yok'}</span>
+                <span>VKN: ${escapeHtml(c.TaxNumber || c.Identifier || 'Yok')}</span>
               </div>
             </div>
           `).join('');
@@ -298,25 +299,25 @@ export async function renderEirsaliyeCreate() {
             item.addEventListener('click', async () => {
               const cSearch = validList[parseInt(item.dataset.idx)];
               applyReceiverToForm(page, cSearch);
-              suggestions.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center">Detaylar getiriliyor...</div>';
+              suggestions.innerHTML = '<div role="status" style="padding:10px;color:var(--text-muted);text-align:center">Detaylar getiriliyor…</div>';
               try {
                 const detailRes = await General.getGlobalCustomerInfo(cSearch.TaxNumber || cSearch.Identifier);
                 const detailData = detailRes?.success ? (detailRes.data?.Content || detailRes.data?.Data || detailRes.data) : null;
                 if (detailData && typeof detailData === 'object') applyReceiverToForm(page, detailData, cSearch);
                 suggestions.style.display = 'none';
                 searchInput.value = '';
-                showToast('Mukellef bilgileri dolduruldu', 'success');
+                showToast('Mükellef bilgileri dolduruldu', 'success');
               } catch {
                 suggestions.style.display = 'none';
                 searchInput.value = '';
-                showToast('Temel bilgiler dolduruldu, detay alinamadi', 'warning');
+                showToast('Temel bilgiler dolduruldu, detay alınamadı', 'warning');
               }
             });
           });
         } else {
-          suggestions.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center">Bulunamadi</div>';
+          suggestions.innerHTML = '<div role="status" style="padding:10px;color:var(--text-muted);text-align:center">Bulunamadı</div>';
         }
-      } catch { suggestions.innerHTML = '<div style="padding:10px;color:tomato;text-align:center">Arama hatasi</div>'; }
+      } catch { suggestions.innerHTML = '<div role="alert" style="padding:10px;color:var(--danger);text-align:center">Arama hatası</div>'; }
     }, 500);
   });
 
@@ -402,13 +403,13 @@ export async function renderEirsaliyeCreate() {
   page.querySelector('#btnXmlPreview')?.addEventListener('click', async () => {
     const model = buildDespatchModel(page, drivers, trailers);
     if (!model) return;
-    showToast('XML olusturuluyor...', 'info');
+    showToast('XML oluşturuluyor…', 'info');
     try {
       const res = await EDespatch.sendXmlPreview(model);
       const xml = res.success ? (typeof res.data === 'string' ? res.data : JSON.stringify(res.data, null, 2)) : `Hata: ${res.error}`;
       const body = document.createElement('div');
       body.innerHTML = `<pre style="font-size:11px;overflow:auto;max-height:70vh;white-space:pre-wrap;background:var(--bg-input);padding:16px;border-radius:var(--radius-sm);color:var(--text-secondary)">${escapeHtml(xml)}</pre>`;
-      showModal({ title: 'XML Onizleme', body, size: 'lg' });
+      showModal({ title: 'XML Önizleme', body, size: 'lg' });
     } catch (e) { showToast(`Hata: ${e.message}`, 'error'); }
   });
 
@@ -417,7 +418,7 @@ export async function renderEirsaliyeCreate() {
     if (!model) return;
     const body = document.createElement('div');
     body.innerHTML = `<pre style="font-size:11px;overflow:auto;max-height:70vh;white-space:pre-wrap;background:var(--bg-input);padding:16px;border-radius:var(--radius-sm);color:var(--text-secondary)">${escapeHtml(JSON.stringify(model, null, 2))}</pre>`;
-    showModal({ title: 'Irsaliye Onizleme (JSON)', body, size: 'lg' });
+    showModal({ title: 'İrsaliye Önizleme (JSON)', body, size: 'lg' });
   });
 
   function persist(){
@@ -561,7 +562,7 @@ function applyReceiverToForm(page, customer, fallback = {}) {
     // Populate aliases dropdown if we have an array
     const allAliases = src.Aliases || fb.Aliases || [];
     if (Array.isArray(allAliases) && allAliases.length) {
-      aliasSelect.innerHTML = '<option value="">Lutfen Etiket Seciniz</option>' +
+      aliasSelect.innerHTML = '<option value="">Lütfen Etiket Seçiniz</option>' +
         allAliases.map(a => {
           const n = a.Name || a.AliasName || a.Alias || '';
           return n ? `<option value="${escapeHtml(n)}" ${n === alias ? 'selected' : ''}>${escapeHtml(n)}</option>` : '';
@@ -609,15 +610,15 @@ function addLine(page) {
   const tr = document.createElement('tr');
   tr.dataset.lineIdx = idx;
   tr.innerHTML = `
-    <td><input type="checkbox" class="line-check" /></td>
+    <td><input type="checkbox" class="line-check" aria-label="Satır ${idx + 1} seç" /></td>
     <td style="position:relative">
-      <input type="text" class="form-input form-input-sm" data-field="name" placeholder="Mal/Hizmet adi yazin (stok arama)" autocomplete="off" />
+      <input type="text" class="form-input form-input-sm" data-field="name" placeholder="Mal/Hizmet adı yazın (stok arama)" aria-label="Mal / hizmet adı" autocomplete="off" />
       <div class="line-search-results receiver-suggestions" style="display:none;top:100%;left:0;right:0;z-index:80"></div>
     </td>
-    <td><input type="text" class="form-input form-input-sm" data-field="batchNo" placeholder="" /></td>
-    <td><input type="number" class="form-input form-input-sm" data-field="quantity" value="0" min="0" step="1" /></td>
+    <td><input type="text" class="form-input form-input-sm" data-field="batchNo" placeholder="" aria-label="Künye numarası" /></td>
+    <td><input type="number" class="form-input form-input-sm" data-field="quantity" value="0" min="0" step="1" aria-label="Miktar" /></td>
     <td>
-      <select class="form-input form-input-sm" data-field="unit">
+      <select class="form-input form-input-sm" data-field="unit" aria-label="Birim">
         <option value="ADET">ADET</option>
         <option value="KG">KG</option>
         <option value="LT">LT</option>
@@ -629,9 +630,9 @@ function addLine(page) {
         <option value="TON">TON</option>
       </select>
     </td>
-    <td><input type="number" class="form-input form-input-sm" data-field="unitPrice" value="0" min="0" step="0.01" /></td>
-    <td><input type="number" class="form-input form-input-sm" data-field="total" value="0" readonly style="background:var(--bg-glass)" /></td>
-    <td><button class="btn-icon" data-remove="${idx}" title="Satiri Sil">${ic.trash}</button></td>
+    <td><input type="number" class="form-input form-input-sm" data-field="unitPrice" value="0" min="0" step="0.01" aria-label="Birim fiyat" /></td>
+    <td><input type="number" class="form-input form-input-sm" data-field="total" value="0" readonly aria-label="Toplam tutar" style="background:var(--bg-glass)" /></td>
+    <td><button type="button" class="btn-icon" data-remove="${idx}" title="Satırı Sil" aria-label="Satırı sil">${ic.trash}</button></td>
   `;
 
   // Auto-calculate total
@@ -657,7 +658,7 @@ function addLine(page) {
     const val = e.target.value.trim();
     if (val.length < 3) { searchResults.style.display = 'none'; return; }
     stockTimeout = setTimeout(async () => {
-      searchResults.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center">Araniyor...</div>';
+      searchResults.innerHTML = '<div role="status" style="padding:10px;color:var(--text-muted);text-align:center">Aranıyor…</div>';
       searchResults.style.display = 'block';
       try {
         const res = await General.searchStock(val);
@@ -700,9 +701,9 @@ function addLine(page) {
             });
           });
         } else {
-          searchResults.innerHTML = '<div style="padding:10px;color:var(--text-muted);text-align:center">Bulunamadi</div>';
+          searchResults.innerHTML = '<div role="status" style="padding:10px;color:var(--text-muted);text-align:center">Bulunamadı</div>';
         }
-      } catch { searchResults.innerHTML = '<div style="padding:10px;color:tomato;text-align:center">Arama hatasi</div>'; }
+      } catch { searchResults.innerHTML = '<div role="alert" style="padding:10px;color:var(--danger);text-align:center">Arama hatası</div>'; }
     }, 500);
   });
 
@@ -711,7 +712,7 @@ function addLine(page) {
   });
 
   tr.querySelector(`[data-remove="${idx}"]`).addEventListener('click', () => {
-    if (tbody.children.length <= 1) { showToast('En az 1 satir olmali', 'warning'); return; }
+    if (tbody.children.length <= 1) { showToast('En az 1 satır olmalı', 'warning'); return; }
     tr.remove();
   });
 
@@ -722,7 +723,7 @@ function renderTrailers(page, trailers) {
   const list = page.querySelector('#trailerList');
   list.innerHTML = trailers.map((t, i) => `
     <span class="badge badge-info" style="display:flex;align-items:center;gap:4px;padding:4px 10px">
-      ${escapeHtml(t)} <button class="btn-icon" data-remove-trailer="${i}" style="padding:0;width:16px;height:16px">&times;</button>
+      ${escapeHtml(t)} <button type="button" class="btn-icon" data-remove-trailer="${i}" aria-label="${escapeHtml(t)} plakasını kaldır" style="padding:0;width:16px;height:16px">&times;</button>
     </span>
   `).join('');
   list.querySelectorAll('[data-remove-trailer]').forEach(btn => {
@@ -738,7 +739,7 @@ function renderDrivers(page, drivers) {
   list.innerHTML = drivers.map((d, i) => `
     <div class="badge badge-info" style="display:flex;align-items:center;gap:8px;padding:6px 12px">
       ${ic.user} ${escapeHtml(d.firstName)} ${escapeHtml(d.lastName)} ${d.tckn ? `(${escapeHtml(d.tckn)})` : ''}
-      <button class="btn-icon" data-remove-driver="${i}" style="padding:0;width:16px;height:16px">&times;</button>
+      <button type="button" class="btn-icon" data-remove-driver="${i}" aria-label="${escapeHtml(`${d.firstName} ${d.lastName}`.trim())} şoförünü kaldır" style="padding:0;width:16px;height:16px">&times;</button>
     </div>
   `).join('');
   list.querySelectorAll('[data-remove-driver]').forEach(btn => {
@@ -754,7 +755,7 @@ function buildDespatchModel(page, drivers, trailers) {
   const receiverTaxNo = page.querySelector('#receiverTaxNo')?.value?.trim();
 
   if (!receiverName) {
-    showToast('Alici adi zorunludur', 'warning');
+    showToast('Alıcı adı zorunludur', 'warning');
     return null;
   }
 
@@ -784,7 +785,7 @@ function buildDespatchModel(page, drivers, trailers) {
   });
 
   if (invalidLine || !lines.length) {
-    showToast('En az 1 mal/hizmet satiri ekleyin', 'warning');
+    showToast('En az 1 mal/hizmet satırı ekleyin', 'warning');
     return null;
   }
 

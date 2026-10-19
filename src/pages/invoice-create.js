@@ -65,48 +65,48 @@ export async function renderInvoiceCreate() {
       <div class="card">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
           <h3 style="font-size:16px; font-weight:700;">👥 Alıcı Bilgileri</h3>
-          <span id="tagInvoiceType" style="background:var(--accent); color:#fff; padding:4px 8px; border-radius:4px; font-size:11px; font-weight:700; display:none;"></span>
+          <span id="tagInvoiceType" class="badge badge-info" style="font-weight:700; display:none;"></span>
         </div>
 
         <div class="form-group" style="position:relative;">
           <div style="position:relative;">
             <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--text-muted); pointer-events:none;">${ic.search}</span>
-            <input type="text" class="form-input" id="searchCustomer" placeholder="Alıcı Adını Giriniz..." style="padding-left:36px; border-color:var(--accent);" autocomplete="off">
+            <input type="text" class="form-input" id="searchCustomer" aria-label="Alıcı ara" placeholder="Alıcı Adını Giriniz..." style="padding-left:36px; border-color:var(--accent);" autocomplete="off">
           </div>
           <div id="searchResults" style="display:none; position:absolute; top:100%; left:0; right:0; background:var(--bg-modal); border:1px solid var(--border); z-index:99; border-radius:6px; max-height:200px; overflow-y:auto; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);"></div>
         </div>
 
         <div class="invoice-customer-grid" style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
           <div class="form-group" style="grid-column:span 2;">
-            <label class="form-label">Unvan / Adı Soyadı *</label>
+            <label class="form-label" for="c_name">Unvan / Adı Soyadı *</label>
             <input type="text" class="form-input" id="c_name">
           </div>
           <div class="form-group">
-            <label class="form-label">Etiket (Mail)</label>
+            <label class="form-label" for="c_alias">Etiket (Mail)</label>
             <input type="text" class="form-input" id="c_alias" placeholder="urn:mail:...">
           </div>
           <div class="form-group">
-            <label class="form-label">VKN-TCKN *</label>
+            <label class="form-label" for="c_vkn">VKN-TCKN *</label>
             <input type="text" class="form-input" id="c_vkn">
           </div>
           <div class="form-group">
-            <label class="form-label">Vergi Dairesi</label>
+            <label class="form-label" for="c_vd">Vergi Dairesi</label>
             <input type="text" class="form-input" id="c_vd">
           </div>
           <div class="form-group">
-            <label class="form-label">Adres</label>
+            <label class="form-label" for="c_address">Adres</label>
             <input type="text" class="form-input" id="c_address">
           </div>
           <div class="form-group">
-            <label class="form-label">İlçe</label>
+            <label class="form-label" for="c_district">İlçe</label>
             <input type="text" class="form-input" id="c_district">
           </div>
           <div class="form-group">
-            <label class="form-label">Şehir</label>
+            <label class="form-label" for="c_city">Şehir</label>
             <input type="text" class="form-input" id="c_city">
           </div>
           <div class="form-group">
-            <label class="form-label">Ülke</label>
+            <label class="form-label" for="c_country">Ülke</label>
             <select class="form-select" id="c_country">
               <option value="Türkiye">Türkiye</option>
               <option value="Almanya">Almanya</option>
@@ -115,15 +115,15 @@ export async function renderInvoiceCreate() {
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Posta Kodu</label>
+            <label class="form-label" for="c_zip">Posta Kodu</label>
             <input type="text" class="form-input" id="c_zip">
           </div>
           <div class="form-group">
-            <label class="form-label">Telefon</label>
+            <label class="form-label" for="c_phone">Telefon</label>
             <input type="text" class="form-input" id="c_phone">
           </div>
           <div class="form-group">
-            <label class="form-label">E-Posta</label>
+            <label class="form-label" for="c_email">E-Posta</label>
             <input type="email" class="form-input" id="c_email">
           </div>
         </div>
@@ -136,31 +136,31 @@ export async function renderInvoiceCreate() {
           <svg style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
           Genel Bilgiler
         </h3>
-        <div id="ettiBadge" style="background:#64748b; color:white; padding:4px 10px; border-radius:12px; font-size:12px; display:none; align-items:center; gap:8px;">
+        <div id="ettiBadge" class="badge badge-default" style="padding:4px 10px; border-radius:12px; font-size:12px; display:none; align-items:center; gap:8px;">
           <span style="font-weight:700;">ETTN</span> <span id="ettiSpan"></span>
         </div>
       </div>
 
       <div class="invoice-general-grid-4" style="display:grid; grid-template-columns: 1fr 0.8fr 1fr 1fr; gap: 20px; margin-bottom:15px;">
         <div class="form-group" style="margin-bottom:0;">
-          <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">Fatura Tarihi</label>
-          <input type="date" class="form-input" id="g_date" value="${currentDate}" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
+          <label for="g_date" style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal); padding:0 4px; z-index:1;">Fatura Tarihi</label>
+          <input type="date" class="form-input" id="g_date" value="${currentDate}" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border);">
         </div>
         <div class="form-group" style="margin-bottom:0; position:relative;">
-          <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">Saat</label>
-          <input type="time" class="form-input" id="g_time" value="${currentTime}" step="60" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
+          <label for="g_time" style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal); padding:0 4px; z-index:1;">Saat</label>
+          <input type="time" class="form-input" id="g_time" value="${currentTime}" step="60" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border);">
         </div>
         <div class="form-group" style="margin-bottom:0; position:relative;">
-          <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">Fatura Seri</label>
-          <select class="form-select" id="g_series" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
+          <label for="g_series" style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal); padding:0 4px; z-index:1;">Fatura Seri</label>
+          <select class="form-select" id="g_series" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border);">
             <option value="AKA">AKA</option>
             <option value="BIR">BIR</option>
             <option value="ABC">ABC</option>
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0; position:relative;">
-          <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">Fatura Şablonu</label>
-          <select class="form-select" id="g_template" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
+          <label for="g_template" style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal); padding:0 4px; z-index:1;">Fatura Şablonu</label>
+          <select class="form-select" id="g_template" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border);">
             <option value="eFatura">eFatura</option>
             <option value="eArsiv">eArşiv</option>
           </select>
@@ -169,8 +169,8 @@ export async function renderInvoiceCreate() {
 
       <div class="invoice-general-grid-2" style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom:15px;">
         <div class="form-group" style="margin-bottom:0; position:relative;">
-          <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">Fatura Senaryosu</label>
-          <select class="form-select" id="g_scenario" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1; color:#3b82f6;">
+          <label for="g_scenario" style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal); padding:0 4px; z-index:1;">Fatura Senaryosu</label>
+          <select class="form-select" id="g_scenario" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border); color:var(--accent);">
             <option value="TICARIFATURA">Ticari Fatura</option>
             <option value="TEMELFATURA">Temel Fatura</option>
             <option value="HALTIPIFATURASI">Hal Tipi Faturası</option>
@@ -180,8 +180,8 @@ export async function renderInvoiceCreate() {
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0; position:relative;">
-          <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">Fatura Tipi</label>
-          <select class="form-select" id="g_type" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
+          <label for="g_type" style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal); padding:0 4px; z-index:1;">Fatura Tipi</label>
+          <select class="form-select" id="g_type" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border);">
             <option value="SATIS">Satış</option>
             <option value="IADE">İade</option>
             <option value="TEVKIFAT">Tevkifat</option>
@@ -195,20 +195,20 @@ export async function renderInvoiceCreate() {
 
       <div class="invoice-general-grid-2" style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom:15px;">
         <div class="form-group" style="margin-bottom:0; position:relative;">
-          <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">Para Birimi</label>
-          <select class="form-select" id="g_currency" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
+          <label for="g_currency" style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal); padding:0 4px; z-index:1;">Para Birimi</label>
+          <select class="form-select" id="g_currency" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border);">
             <option value="TRY">Türk Lirası</option>
 
 
           </select>
         </div>
         <div class="form-group" style="margin-bottom:0;">
-          <input type="number" class="form-input" id="g_exchange" placeholder="Döviz Kuru" disabled style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1; background:#f8fafc; color:#94a3b8;">
+          <input type="number" class="form-input" id="g_exchange" placeholder="Döviz Kuru" aria-label="Döviz Kuru" disabled style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border); background:var(--surface-2); color:var(--text-muted);">
         </div>
       </div>
 
       <div class="form-group" id="g_kdv_istisna_container" style="margin-bottom:20px; display:none;">
-          <select class="form-select" id="g_kdv_istisna" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1; color:#94a3b8;">
+          <select class="form-select" id="g_kdv_istisna" aria-label="KDV İstisna Muafiyet Sebebi" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border); color:var(--text-muted);">
             <option value="">KDV İstisna Muafiyet Sebebi</option>
             <option value="351">351 - İstisna Olmayan Diğer</option>
             <option value="350">350 - Diğerleri</option>
@@ -218,24 +218,21 @@ export async function renderInvoiceCreate() {
 
       <!-- İrsaliye Bilgileri -->
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px;">
-        <label style="position:relative; display:inline-block; width:44px; height:24px;">
-          <input type="checkbox" id="tgglIrsaliye" style="opacity:0; width:0; height:0;" onchange="this.nextElementSibling.style.backgroundColor = this.checked ? '#10b981' : '#e2e8f0'; this.nextElementSibling.firstElementChild.style.transform = this.checked ? 'translateX(20px)' : 'translateX(0)'; document.getElementById('irsaliyeDetails').style.display = this.checked ? 'flex' : 'none';">
-          <span style="position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background-color:#e2e8f0; transition:.4s; border-radius:24px;">
-            <span style="position:absolute; content:''; height:18px; width:18px; left:3px; bottom:3px; background-color:white; transition:.4s; border-radius:50%; box-shadow:0 1px 3px rgba(0,0,0,0.3);"></span>
-          </span>
+        <label for="tgglIrsaliye" style="display:inline-flex; align-items:center; gap:10px; min-height:44px; cursor:pointer; font-size:14px; color:var(--text-secondary);">
+          <input type="checkbox" id="tgglIrsaliye" role="switch" aria-controls="irsaliyeDetails" style="width:20px; height:20px; margin:0; accent-color:var(--accent); cursor:pointer;" onchange="document.getElementById('irsaliyeDetails').style.display = this.checked ? 'flex' : 'none';">
+          İrsaliye Bilgileri
         </label>
-        <span style="font-size:14px; color:var(--text-muted);">İrsaliye Bilgileri</span>
       </div>
 
       <div id="irsaliyeDetails" class="invoice-irsaliye-details" style="display:none; gap:15px; align-items:flex-end;">
         <div class="form-group" style="margin-bottom:0; flex:1; position:relative;">
-          <input type="text" class="form-input" id="irs_no" placeholder="İrsaliye Numarası" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
+          <input type="text" class="form-input" id="irs_no" placeholder="İrsaliye Numarası" aria-label="İrsaliye Numarası" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border);">
         </div>
         <div class="form-group" style="margin-bottom:0; flex:1; position:relative;">
-          <label style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal, #fff); padding:0 4px; z-index:1;">İrsaliye Tarihi</label>
-          <input type="date" class="form-input" id="irs_date" value="${new Date().toISOString().slice(0, 10)}" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:#cbd5e1;">
+          <label for="irs_date" style="font-size:10px; color:var(--text-muted); position:absolute; left:12px; top:-6px; background:var(--bg-modal); padding:0 4px; z-index:1;">İrsaliye Tarihi</label>
+          <input type="date" class="form-input" id="irs_date" value="${new Date().toISOString().slice(0, 10)}" style="border-radius:4px; padding-top:12px; padding-bottom:12px; border-color:var(--border);">
         </div>
-        <button class="btn" style="background:#10b981; color:#fff; border-radius:50%; width:44px; height:44px; display:flex; align-items:center; justify-content:center; border:none; box-shadow:0 2px 4px rgba(16,185,129,0.3); font-size:24px;">+</button>
+        <button type="button" class="btn btn-sm btn-secondary" aria-label="İrsaliye ekle" title="İrsaliye ekle" style="border-radius:50%; width:44px; height:44px; padding:0; display:flex; align-items:center; justify-content:center; font-size:24px;">+</button>
       </div>
 
       <div class="card" style="margin-top:16px; background:var(--bg-secondary); border:1px solid var(--border);">
@@ -268,7 +265,7 @@ export async function renderInvoiceCreate() {
       <div class="invoice-lines-header" style="display:flex; justify-content:space-between; align-items:flex-end; gap:16px; margin-bottom:15px;">
         <h3 style="font-size:16px; margin:0; font-weight:700;">🛒 Mal / Hizmet Bilgileri</h3>
         <div class="invoice-target-wrap" style="min-width:320px; max-width:380px; width:100%;">
-          <label class="form-label" style="font-size:11px;">Hedef Toplam (KDV Dahil)</label>
+          <label class="form-label" for="g_target_total" style="font-size:11px;">Hedef Toplam (KDV Dahil)</label>
           <input type="text" class="form-input" id="g_target_total" placeholder="Fiyat değişince miktar otomatik hesaplanır">
         </div>
       </div>
@@ -291,7 +288,7 @@ export async function renderInvoiceCreate() {
         </table>
       </div>
       <div style="margin-top:15px;">
-        <button class="btn btn-primary btn-sm" id="btnAddLine">${ic.plus} YENİ SATIR EKLE</button>
+        <button class="btn btn-secondary btn-sm" id="btnAddLine">${ic.plus} YENİ SATIR EKLE</button>
       </div>
     </div>
 
@@ -311,22 +308,22 @@ export async function renderInvoiceCreate() {
     tr.style.borderBottom = '1px dashed var(--border)';
     tr.innerHTML = `
       <td data-label="Mal / Hizmet" style="padding:10px 5px; position:relative;">
-        <input type="text" class="form-input line-name" placeholder="Ürün veya Hizmet" autocomplete="off">
-        <div class="line-search-results" style="display:none; position:absolute; top:100%; left:5px; right:5px; background:var(--bg-modal, #fff); border:1px solid var(--border); z-index:99; border-radius:6px; max-height:200px; overflow-y:auto; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);"></div>
+        <input type="text" class="form-input line-name" aria-label="Mal / Hizmet" placeholder="Ürün veya Hizmet" autocomplete="off">
+        <div class="line-search-results" style="display:none; position:absolute; top:100%; left:5px; right:5px; background:var(--bg-modal); border:1px solid var(--border); z-index:99; border-radius:6px; max-height:200px; overflow-y:auto; box-shadow:0 10px 15px -3px rgba(0,0,0,0.5);"></div>
       </td>
       <td data-label="Miktar" style="padding:10px 5px;">
-        <input type="number" class="form-input line-qty" value="1" min="0">
+        <input type="number" class="form-input line-qty" aria-label="Miktar" value="1" min="0">
       </td>
       <td data-label="Birim" style="padding:10px 5px;">
-        <select class="form-select line-unit">
+        <select class="form-select line-unit" aria-label="Birim">
           ${UNITS.map(u => `<option value="${u.val}">${u.lbl}</option>`).join('')}
         </select>
       </td>
       <td data-label="Birim Fiyat" style="padding:10px 5px;">
-        <input type="number" class="form-input line-price" value="0" step="0.01">
+        <input type="number" class="form-input line-price" aria-label="Birim Fiyat" value="0" step="0.01">
       </td>
       <td data-label="KDV (%)" style="padding:10px 5px;">
-        <select class="form-select line-tax">
+        <select class="form-select line-tax" aria-label="KDV (%)">
           <option value="20">20</option>
           <option value="18">18</option>
           <option value="10">10</option>
@@ -336,13 +333,13 @@ export async function renderInvoiceCreate() {
         </select>
       </td>
       <td data-label="İskonto (%)" style="padding:10px 5px;">
-        <input type="number" class="form-input line-disc" value="0" min="0" max="100">
+        <input type="number" class="form-input line-disc" aria-label="İskonto (%)" value="0" min="0" max="100">
       </td>
       <td data-label="Toplam" class="line-total-cell" style="padding:10px 5px;">
         <div class="line-total-txt" style="font-weight:600; text-align:right;">0,00</div>
       </td>
       <td data-label="İşlem" style="padding:10px 5px; text-align:center;">
-        <button class="btn btn-sm line-del line-item-remove" style="background:transparent; color:tomato; padding:4px;">${ic.trash}</button>
+        <button type="button" class="btn btn-sm btn-ghost line-del line-item-remove" aria-label="Satırı sil" title="Satırı sil" style="color:var(--danger); padding:4px;">${ic.trash}</button>
       </td>
     `;
 
@@ -442,7 +439,7 @@ export async function renderInvoiceCreate() {
               const price = c.Price !== undefined ? c.Price : 0;
               const tax = c.TaxPercent !== undefined ? c.TaxPercent : 20;
               return `
-              <div class="stock-search-item" data-idx="${i}" style="padding:10px; cursor:pointer; border-bottom:1px solid var(--border); background:var(--bg-modal, #fff);">
+              <div class="stock-search-item" data-idx="${i}" style="padding:10px; cursor:pointer; border-bottom:1px solid var(--border); background:var(--bg-modal);">
                 <div style="font-weight:600; font-size:13px; margin-bottom:4px;">${displayName}</div>
                 <div style="font-size:11px; color:var(--text-muted); display:flex; justify-content:space-between;">
                   <span>Fiyat: ${price} TL</span>
@@ -472,7 +469,7 @@ export async function renderInvoiceCreate() {
           }
         } catch (err) {
           console.error('[Stock Search Error]', err);
-          searchResults.innerHTML = '<div style="padding:10px; color:tomato; text-align:center;">Arama hatası</div>';
+          searchResults.innerHTML = '<div style="padding:10px; color:var(--danger); text-align:center;">Arama hatası</div>';
         }
       }, 600);
     });
@@ -608,7 +605,7 @@ export async function renderInvoiceCreate() {
     const tag = page.querySelector('#tagInvoiceType');
     tag.style.display = 'inline-block';
     tag.textContent = isEInvoice ? 'e-Fatura' : 'e-Arşiv';
-    tag.style.background = isEInvoice ? 'var(--accent)' : '#10b981';
+    tag.className = isEInvoice ? 'badge badge-info' : 'badge badge-success';
 
     const selTemplate = page.querySelector('#g_template');
     const selScenario = page.querySelector('#g_scenario');
@@ -821,7 +818,7 @@ export async function renderInvoiceCreate() {
           searchResults.innerHTML = '<div style="padding:10px; color:var(--text-muted); text-align:center;">Bulunamadı (e-Arşiv olarak manuel giriniz)</div>';
         }
       } catch (err) {
-        searchResults.innerHTML = '<div style="padding:10px; color:tomato; text-align:center;">Arama hatası</div>';
+        searchResults.innerHTML = '<div style="padding:10px; color:var(--danger); text-align:center;">Arama hatası</div>';
       }
     }, 600);
   });

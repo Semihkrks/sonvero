@@ -78,24 +78,24 @@ export async function renderSelectedAccountCari() {
 
     <div class="nilvera-filter-bar" style="flex-wrap:wrap; gap:14px;">
       <div class="filter-group" style="flex:1 1 100%;">
-        <label class="filter-label">Hesaplar <button class="sac-link" id="sacSelAll" type="button">Hepsi</button> · <button class="sac-link" id="sacSelNone" type="button">Temizle</button></label>
-        <div class="sac-chips" id="sacChips">${accountChips}</div>
+        <span class="filter-label" id="sacAccountsLabel">Hesaplar <button class="sac-link" id="sacSelAll" type="button">Hepsi</button> · <button class="sac-link" id="sacSelNone" type="button">Temizle</button></span>
+        <div class="sac-chips" id="sacChips" role="group" aria-labelledby="sacAccountsLabel">${accountChips}</div>
       </div>
-      <div class="filter-group"><label class="filter-label">Başlangıç Tarihi</label><input type="date" class="filter-input" id="sacDateStart" value="${start}" /></div>
-      <div class="filter-group"><label class="filter-label">Bitiş Tarihi</label><input type="date" class="filter-input" id="sacDateEnd" value="${end}" /></div>
+      <div class="filter-group"><label class="filter-label" for="sacDateStart">Başlangıç Tarihi</label><input type="date" class="filter-input" id="sacDateStart" value="${start}" /></div>
+      <div class="filter-group"><label class="filter-label" for="sacDateEnd">Bitiş Tarihi</label><input type="date" class="filter-input" id="sacDateEnd" value="${end}" /></div>
       <div class="filter-group">
-        <label class="filter-label">Yön</label>
-        <div class="sac-segment" id="sacDirection">
+        <span class="filter-label" id="sacDirectionLabel">Yön</span>
+        <div class="sac-segment" id="sacDirection" role="group" aria-labelledby="sacDirectionLabel">
           <button type="button" data-dir="satis">Satış</button>
           <button type="button" data-dir="alis">Alış</button>
           <button type="button" data-dir="both" class="active">Her ikisi</button>
         </div>
       </div>
       <div class="filter-group">
-        <label class="filter-label">Tahsilat</label>
-        <label class="sac-toggle"><input type="checkbox" id="sacTahsilat" checked /> <span>Dahil et</span></label>
+        <span class="filter-label" id="sacTahsilatLabel">Tahsilat</span>
+        <label class="sac-toggle"><input type="checkbox" id="sacTahsilat" checked aria-describedby="sacTahsilatLabel" /> <span>Dahil et</span></label>
       </div>
-      <div class="filter-group filter-search"><label class="filter-label">Müşteri Ara</label><input type="text" class="filter-input" id="sacSearchInput" placeholder="Ad veya VKN ile ara..." style="width:100%" /></div>
+      <div class="filter-group filter-search"><label class="filter-label" for="sacSearchInput">Müşteri Ara</label><input type="text" class="filter-input" id="sacSearchInput" placeholder="Ad veya VKN ile ara..." style="width:100%" /></div>
       <div class="filter-actions">
         <span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span>
         <div class="filter-actions-row">
@@ -104,11 +104,13 @@ export async function renderSelectedAccountCari() {
       </div>
     </div>
 
+    <div id="sacLoadAlert" class="sv-error" role="alert" hidden style="margin-bottom:16px"></div>
+
     <div class="sac-export-bar" id="sacExportBar" style="display:none">
       <span class="sac-export-label" id="sacExportLabel">Tüm işlemleri Excel'e aktar:</span>
-      <button type="button" class="btn btn-sm btn-success" id="sacExportTum">${ic.download} Tek Sayfa</button>
-      <button type="button" class="btn btn-sm btn-success" id="sacExportAyri">${ic.download} Hesaplar Ayrı</button>
-      <button type="button" class="btn btn-sm btn-primary" id="sacWhatsApp">WhatsApp’a gönder</button>
+      <button type="button" class="btn btn-sm btn-secondary" id="sacExportTum">${ic.download} Tek Sayfa</button>
+      <button type="button" class="btn btn-sm btn-secondary" id="sacExportAyri">${ic.download} Hesaplar Ayrı</button>
+      <button type="button" class="btn btn-sm btn-secondary" id="sacWhatsApp">WhatsApp’a gönder</button>
       <span class="sac-export-info" id="sacExportInfo"></span>
     </div>
 
@@ -222,12 +224,14 @@ async function loadData(page) {
   const wantSatis = direction === 'satis' || direction === 'both';
   const wantAlis = direction === 'alis' || direction === 'both';
 
-  if (listEl) listEl.innerHTML = `<div class="cari-loading-state"><div style="animation:pulse 1.5s infinite">${ic.noData}</div><p>${accountsToScan.length} hesap taranıyor...</p></div>`;
+  setLoadAlert(page, null);
+  if (listEl) listEl.innerHTML = loadingSkeleton(`${accountsToScan.length} hesap taranıyor…`);
 
   let totalSatis = 0, totalAlis = 0, totalTah = 0;
   const pendingInvoices = []; // { inv, acc, dir }
   const pendingTahsilats = []; // { t, acc }
   const failedTahsilat = [];
+  const failedSources = [];
   let completeScan=true;
 
   await forEachLimited(accountsToScan, 3, async (acc) => {
@@ -235,12 +239,14 @@ async function loadData(page) {
       // Akıllı fetch: 6 ay limiti chunking ile aşılır, kesin aylar arşivden gelir.
       const baseParams = { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) };
       const tasks = [];
+      // fetchInvoicesSmart hata durumunda boş/eksik dizi döndürür; hata stats.failed ile okunur.
+      const smart = (apiFn, docType) => { const stats = { failed: false }; return [fetchInvoicesSmart(apiFn, acc, docType, baseParams, { stats }), stats]; };
       if (wantSatis) {
-        tasks.push(['satis-ef', fetchInvoicesSmart(EInvoiceWithAccount.listSales, acc, 'efatura_sale', baseParams)]);
-        tasks.push(['satis-ea', fetchInvoicesSmart(EArchiveWithAccount.listInvoices, acc, 'earsiv', baseParams)]);
+        tasks.push(['satis-ef', ...smart(EInvoiceWithAccount.listSales, 'efatura_sale')]);
+        tasks.push(['satis-ea', ...smart(EArchiveWithAccount.listInvoices, 'earsiv')]);
       }
       if (wantAlis) {
-        tasks.push(['alis-ef', fetchInvoicesSmart(EInvoiceWithAccount.listPurchases, acc, 'efatura_purchase', baseParams)]);
+        tasks.push(['alis-ef', ...smart(EInvoiceWithAccount.listPurchases, 'efatura_purchase')]);
       }
       if (withTahsilat) {
         tasks.push(['tahsilat', listCollections({ accountId: acc.id, startDate, endDate, searchText })]);
@@ -252,9 +258,11 @@ async function loadData(page) {
         if (res.status !== 'fulfilled') {
           completeScan=false;
           if (kind === 'tahsilat') failedTahsilat.push(acc.name);
+          else failedSources.push(acc.name);
           console.error(`${acc.name} ${kind} yüklenemedi:`, res.reason);
           return;
         }
+        if (tasks[idx][2]?.failed) { completeScan=false; failedSources.push(acc.name); }
         if (kind === 'tahsilat') {
           (res.value || []).forEach(t => pendingTahsilats.push({ t: { ...t, _type: 'tahsilat' }, acc }));
         } else if (kind.startsWith('satis')) {
@@ -265,13 +273,13 @@ async function loadData(page) {
       });
     } catch (e) {
       completeScan=false;
+      failedSources.push(acc.name);
       console.error(`Error scanning account ${acc.name}:`, e);
     }
   });
 
   rememberExportPeriod(page,{start:startDate,end:endDate,complete:completeScan});
   page._whatsAppFilters=whatsAppFilters;
-  if(!completeScan)showToast('Bazı kaynaklar yüklenemedi. Görünen bakiye eksiktir; dışa aktarmadan önce taramayı yenileyin.','warning');
   function ensureCustomer(key, name, taxNo) {
     if (!customerMap[key]) customerMap[key] = { name, taxNo, items: [], totalSatis: 0, totalAlis: 0, totalTahsilat: 0, accountBreakdown: {} };
     if (name && name !== 'Bilinmeyen' && customerMap[key].name === 'Bilinmeyen') customerMap[key].name = name;
@@ -342,11 +350,36 @@ async function loadData(page) {
     const info = page.querySelector('#sacExportInfo');
     if (info) info.textContent = `${totalSatis} satış · ${totalAlis} alış · ${totalTah} tahsilat`;
   }
-  showToast(`${accountsToScan.length} hesap tarandı: ${totalSatis} satış, ${totalAlis} alış, ${totalTah} tahsilat.`, 'success');
-  if (failedTahsilat.length) {
-    showToast(`Tahsilatlar yüklenemedi: ${failedTahsilat.join(', ')}. Tekrar taramayı deneyin.`, 'warning');
+  if (!completeScan || failedTahsilat.length) {
+    // Hata başarı gibi görünmesin: kalıcı uyarı kutusu + Tekrar dene; başarı bildirimi gösterilmez.
+    const problems = [];
+    const invoiceFailures = [...new Set(failedSources)];
+    if (invoiceFailures.length) problems.push(`Fatura kaynakları yüklenemedi: ${invoiceFailures.join(', ')}.`);
+    else if (!completeScan && !failedTahsilat.length) problems.push('Bazı kaynaklar yüklenemedi.');
+    if (failedTahsilat.length) problems.push(`Tahsilatlar yüklenemedi: ${failedTahsilat.join(', ')}.`);
+    problems.push('Görünen bakiye eksik olabilir; dışa aktarmadan önce taramayı yenileyin.');
+    setLoadAlert(page, problems.join(' '));
+  } else {
+    showToast(`${accountsToScan.length} hesap tarandı: ${totalSatis} satış, ${totalAlis} alış, ${totalTah} tahsilat.`, 'success');
   }
   renderCustomerList(page);
+}
+
+// Yükleme hatası kutusu (role="alert"): message=null gizler.
+function setLoadAlert(page, message) {
+  const box = page.querySelector('#sacLoadAlert');
+  if (!box) return;
+  if (!message) { box.hidden = true; box.innerHTML = ''; return; }
+  box.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px"><span>${escapeHtml(message)}</span><button type="button" class="btn btn-sm btn-secondary" data-sac-retry>Tekrar dene</button></div>`;
+  box.hidden = false;
+  box.querySelector('[data-sac-retry]')?.addEventListener('click', () => loadData(page));
+}
+
+function loadingSkeleton(label) {
+  return `<div style="display:grid;gap:12px;padding:16px" aria-busy="true">
+    <span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap">${escapeHtml(label)}</span>
+    ${Array.from({ length: 6 }, (_, i) => `<div aria-hidden="true"><div class="sv-skeleton" style="height:14px;width:${[78, 64, 86, 58, 72, 66][i]}%"></div><div class="sv-skeleton" style="height:10px;width:40%;margin-top:6px;opacity:.6"></div></div>`).join('')}
+  </div>`;
 }
 
 // Arama kutusuna uyan müşterileri döner (aynı sıralama/filtre mantığı listeyle paylaşılır).
@@ -465,7 +498,7 @@ function renderDetailPanel(page, customer) {
     const turColor = isGelen ? 'var(--warning)' : 'var(--success)';
     return `<tr>
       <td>${fmtDate(getInvoiceDate(inv))}</td>
-      <td><span class="badge" style="background:${safeColor(inv._accountColor)};color:#fff">${escapeHtml(inv._accountName || '')}</span></td>
+      <td><span class="badge" style="--c:${safeColor(inv._accountColor)};background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--text-primary);border-left:3px solid var(--c)">${escapeHtml(inv._accountName || '')}</span></td>
       <td><span style="color:${turColor};font-weight:600">${tur}</span></td>
       <td>${escapeHtml(getInvoiceNumber(inv) || '—')}</td>
       <td style="text-align:right; font-weight:600; color:${turColor}">${fmtCur(getAmount(inv))}</td>
@@ -474,7 +507,7 @@ function renderDetailPanel(page, customer) {
 
   const tahsilatRows = tahsilats.map((inv) => `<tr>
       <td>${fmtDate(inv.date)}</td>
-      <td><span class="badge" style="background:${safeColor(inv._accountColor)};color:#fff">${escapeHtml(inv._accountName || '')}</span></td>
+      <td><span class="badge" style="--c:${safeColor(inv._accountColor)};background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--text-primary);border-left:3px solid var(--c)">${escapeHtml(inv._accountName || '')}</span></td>
       <td><span style="color:var(--tahsilat);font-weight:600">Tahsilat</span></td>
       <td>${escapeHtml(inv.description || '—')}</td>
       <td style="text-align:right; font-weight:600; color:var(--tahsilat)">${fmtCur(inv.amount)}</td>

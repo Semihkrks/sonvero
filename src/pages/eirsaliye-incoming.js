@@ -9,6 +9,9 @@ import { showModal } from '../components/modal.js';
 import { openPdfViewer } from '../components/pdf-viewer.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
+import { escapeHtml } from '../lib/html.js';
+import { fmtDate, dateCellHtml, skeletonRowsHtml, rowCheckboxHtml, srOnly } from '../lib/format.js';
+import { resolveStatus, toneColorVar } from '../lib/status-badge.js';
 
 const ic = {
   inbox: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>`,
@@ -18,6 +21,7 @@ const ic = {
   mail: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`,
   hidden: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/><line x1="2" y1="2" x2="22" y2="22"/></svg>`,
   menu: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`,
+  more: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>`,
   xml: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
   pdf: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`,
   plus: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
@@ -123,7 +127,7 @@ function setupFilterToggle(page) {
 
   const setExpanded = (expanded) => {
     filterBar.classList.toggle('filters-expanded', expanded);
-    toggleBtn.textContent = expanded ? 'Filtreyi Gizle' : 'Filtreyi Goster';
+    toggleBtn.textContent = expanded ? 'Filtreyi Gizle' : 'Filtreyi Göster';
     toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
   };
 
@@ -155,6 +159,84 @@ function mountActionDropdown(anchorBtn, dropdownEl) {
 
   dropdownEl.style.left = `${left}px`;
   dropdownEl.style.top = `${top}px`;
+}
+
+let openMenuTrigger = null;
+
+function closeActionDropdowns({ restoreFocus = false } = {}) {
+  document.querySelectorAll('.action-dropdown').forEach((d) => d.remove());
+  const trigger = openMenuTrigger;
+  openMenuTrigger = null;
+  if (!trigger) return;
+  trigger.setAttribute('aria-expanded', 'false');
+  if (restoreFocus && trigger.isConnected) trigger.focus();
+}
+
+// Menü erişilebilirliği: tetikleyicide aria-expanded, ok/Home/End ile gezinme, Escape/Tab ile kapanıp odağı tetikleyiciye geri verir.
+// Aynı tetikleyiciye ikinci tıklama menüyü kapatır (false döner).
+function openActionDropdown(trigger, dd) {
+  const wasOpen = openMenuTrigger === trigger;
+  closeActionDropdowns();
+  if (wasOpen) return false;
+  dd.setAttribute('role', 'menu');
+  const items = [...dd.querySelectorAll('.action-dropdown-item')];
+  items.forEach((it) => {
+    it.type = 'button';
+    it.setAttribute('role', 'menuitem');
+    it.tabIndex = -1;
+  });
+  mountActionDropdown(trigger, dd);
+  openMenuTrigger = trigger;
+  trigger.setAttribute('aria-expanded', 'true');
+  dd.addEventListener('click', (ev) => ev.stopPropagation());
+  dd.addEventListener('keydown', (ev) => {
+    const i = items.indexOf(document.activeElement);
+    if (ev.key === 'Escape' || ev.key === 'Tab') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeActionDropdowns({ restoreFocus: true });
+    } else if (ev.key === 'ArrowDown') {
+      ev.preventDefault();
+      items[(i + 1) % items.length]?.focus();
+    } else if (ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      items[i <= 0 ? items.length - 1 : i - 1]?.focus();
+    } else if (ev.key === 'Home') {
+      ev.preventDefault();
+      items[0]?.focus();
+    } else if (ev.key === 'End') {
+      ev.preventDefault();
+      items[items.length - 1]?.focus();
+    }
+  });
+  items[0]?.focus();
+  return true;
+}
+
+const TABLE_COLSPAN = 10;
+
+function renderLoadError(tbody, message, retry) {
+  tbody.innerHTML = `<tr><td colspan="${TABLE_COLSPAN}" class="table-empty"><div class="empty-state">${ic.noData}<h3>Veri alınamadı</h3><p role="alert">${escapeHtml(message)}</p><button type="button" class="btn btn-primary" data-retry>${ic.refresh} Tekrar Dene</button></div></td></tr>`;
+  tbody.querySelector('[data-retry]')?.addEventListener('click', retry);
+}
+
+// Durum/cevap metni: en fazla 160px, iki satırdan sonra kırpılır; tam metin title'da.
+function clampTextHtml(text, style = '') {
+  const safe = escapeHtml(text);
+  return `<span title="${safe}" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;max-width:160px;${style}">${safe}</span>`;
+}
+
+const TONE_LABEL = { success: 'Olumlu', danger: 'Sorunlu', warning: 'Bekliyor', info: 'Bilgi', default: 'Belirsiz' };
+
+// Durum noktası tonu: önce bilinen durum kodu (status-badge haritası), sonra durum metni.
+function despatchStatusTone(row) {
+  const byCode = resolveStatus(pick(row.raw, ['StatusCode', 'Status'])).tone;
+  if (byCode !== 'default') return byCode;
+  const text = String(row.status || '').toLocaleLowerCase('tr-TR');
+  if (/redd|hata|başarısız|iptal|error|fail|reject/.test(text)) return 'danger';
+  if (/bekl|işleniyor|kuyruk|waiting|pending|processing/.test(text)) return 'warning';
+  if (/gönderildi|iletildi|başarı|kabul|alındı|yanıtlandı|onay|success|succeed|accept/.test(text)) return 'success';
+  return 'default';
 }
 
 function normalizeRow(row) {
@@ -238,7 +320,22 @@ function fmtCur(a, c) {
 
 function openDetailsModal(row) {
   const body = document.createElement('div');
-  body.innerHTML = `<pre style="white-space:pre-wrap;max-height:60vh;overflow:auto;font-size:12px;background:var(--bg-secondary);padding:12px;border-radius:8px;">${JSON.stringify(row.raw, null, 2)}</pre>`;
+  const field = (label, value) => `<div><dt style="font-size:11px;color:var(--text-muted)">${label}</dt><dd style="margin:2px 0 0;font-size:13px;word-break:break-word">${escapeHtml(value || '—')}</dd></div>`;
+  body.innerHTML = `
+    <dl style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:0 0 16px">
+      ${field('İrsaliye No', row.no)}
+      ${field('İrsaliye Tarihi', row.issueDate ? fmtDateTime(row.issueDate) : '')}
+      ${field('Gönderici', row.senderName)}
+      ${field('VKN', row.senderTax)}
+      ${field('Durum', row.status)}
+      ${field('Cevap', row.answer)}
+      ${field('Tutar', fmtCur(row.amount, row.currency))}
+      ${field('UUID', row.uuid)}
+    </dl>
+    <details class="form-group">
+      <summary style="cursor:pointer;min-height:44px;display:flex;align-items:center;color:var(--text-secondary)">Teknik ayrıntı</summary>
+      <pre style="white-space:pre-wrap;max-height:60vh;overflow:auto;font-size:12px;background:var(--bg-secondary);padding:12px;border-radius:8px;">${escapeHtml(JSON.stringify(row.raw, null, 2))}</pre>
+    </details>`;
   showModal({ title: `İrsaliye Detayı — ${row.no}`, body, size: 'large' });
 }
 
@@ -411,12 +508,12 @@ async function createAnswer(row, page) {
       <div class="ans-grid">
         <label class="ans-label">Yanıt Seri
           <select id="answerSerie" class="ans-input">
-            ${series.map((s) => `<option value="${String(pick(s, ['Name']) || '').replace(/"/g, '&quot;')}">${pick(s, ['Name']) || '—'}</option>`).join('')}
+            ${series.map((s) => `<option value="${String(pick(s, ['Name']) || '').replace(/"/g, '&quot;')}">${escapeHtml(pick(s, ['Name']) || '—')}</option>`).join('')}
           </select>
         </label>
         <label class="ans-label">Yanıt Şablonu
           <select id="answerTemplate" class="ans-input">
-            ${templates.map((t) => `<option value="${String(pick(t, ['UUID']) || '').replace(/"/g, '&quot;')}">${pick(t, ['Name']) || '—'}</option>`).join('')}
+            ${templates.map((t) => `<option value="${String(pick(t, ['UUID']) || '').replace(/"/g, '&quot;')}">${escapeHtml(pick(t, ['Name']) || '—')}</option>`).join('')}
           </select>
         </label>
         <label class="ans-label">Teslim Tarihi
@@ -446,13 +543,13 @@ async function createAnswer(row, page) {
               const unitName = pick(ln, ['DeliveredUnitName']) || 'Adet';
               const unitType = pick(ln, ['DeliveredUnitType']) || 'C62';
               return `
-                <tr data-line-index="${idx}" data-unit-type="${unitType}" data-delivered-qty="${deliveredQty}">
-                  <td>${name}</td>
-                  <td>${deliveredQty} ${unitName}</td>
-                  <td><input type="number" min="0" step="0.01" data-role="accept" value="0" class="ans-input" style="width:140px;" /></td>
-                  <td>${unitName}</td>
-                  <td><input type="number" min="0" step="0.01" data-role="reject" value="0" class="ans-input" style="width:140px;" /></td>
-                  <td><input type="text" data-role="reason" class="ans-input" placeholder="Opsiyonel" style="width:190px;" /></td>
+                <tr data-line-index="${idx}" data-unit-type="${escapeHtml(unitType)}" data-delivered-qty="${deliveredQty}">
+                  <td>${escapeHtml(name)}</td>
+                  <td>${deliveredQty} ${escapeHtml(unitName)}</td>
+                  <td><input type="number" min="0" step="0.01" data-role="accept" value="0" class="ans-input" style="width:140px;" aria-label="${escapeHtml(name)} kabul miktarı" /></td>
+                  <td>${escapeHtml(unitName)}</td>
+                  <td><input type="number" min="0" step="0.01" data-role="reject" value="0" class="ans-input" style="width:140px;" aria-label="${escapeHtml(name)} red miktarı" /></td>
+                  <td><input type="text" data-role="reason" class="ans-input" placeholder="Opsiyonel" style="width:190px;" aria-label="${escapeHtml(name)} red sebebi" /></td>
                 </tr>
               `;
             }).join('')}
@@ -469,9 +566,9 @@ async function createAnswer(row, page) {
   const footer = document.createElement('div');
   footer.style.cssText = 'display:flex;justify-content:flex-end;gap:10px;width:100%';
   footer.innerHTML = `
-    <button class="btn" id="btnSendAnswer" style="background:#4f46e5;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:700;">YANITI GÖNDER</button>
-    <button class="btn" id="btnAcceptAll" style="background:#10b981;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:700;">HEPSİNİ KABUL ET</button>
-    <button class="btn" id="btnRejectAll" style="background:#ef4444;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:700;">HEPSİNİ REDDET</button>
+    <button type="button" class="btn btn-primary" id="btnSendAnswer" style="font-weight:700;">YANITI GÖNDER</button>
+    <button type="button" class="btn btn-sm btn-secondary" id="btnAcceptAll" style="font-weight:700;">HEPSİNİ KABUL ET</button>
+    <button type="button" class="btn btn-sm btn-danger" id="btnRejectAll" style="font-weight:700;">HEPSİNİ REDDET</button>
   `;
 
   const modal = showModal({ title: 'İrsaliye Yanıtı Oluştur', body, footer, size: 'xlarge' });
@@ -737,7 +834,7 @@ function showBulkSpecialCodeModal(page) {
   bodyEl.innerHTML = `
     <p style="margin:0 0 10px;color:var(--text-muted)">${items.length} kayıt için özel kod atanacak</p>
     <div class="form-group">
-      <label class="form-label">Özel Kod</label>
+      <label class="form-label" for="bulkSpecialCodeInput">Özel Kod</label>
       <input type="text" class="form-input" id="bulkSpecialCodeInput" placeholder="Örn: TOPLU-2026" maxlength="64" />
     </div>
   `;
@@ -778,69 +875,76 @@ function renderRows(page, rows) {
   if (!tbody) return;
 
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Kayıt bulunamadı</h3></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${TABLE_COLSPAN}" class="table-empty"><div class="empty-state">${ic.noData}<h3>Kayıt bulunamadı</h3></div></td></tr>`;
     if (footer) footer.textContent = 'Toplam Kayıt : 0';
     return;
   }
 
-  tbody.innerHTML = rows.map((r, idx) => `
+  tbody.innerHTML = rows.map((r, idx) => {
+    const safeNo = escapeHtml(r.no);
+    const safeUuid = escapeHtml(r.uuid);
+    const tone = despatchStatusTone(r);
+    const toneText = `Durum göstergesi: ${TONE_LABEL[tone] || TONE_LABEL.default}`;
+    const hasAlias = r.alias && r.alias !== '—';
+    return `
     <tr>
-      <td data-label="Seçim"><input type="checkbox" class="row-check" value="${r.uuid}" data-uuid="${r.uuid}" /></td>
+      <td data-label="Seçim">${rowCheckboxHtml(`class="row-check" value="${safeUuid}" data-uuid="${safeUuid}"`, `${safeNo} seç`)}</td>
       <td data-label="ERP">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button class="action-menu-btn" data-act="preview" data-idx="${idx}" title="PDF Önizleme">${ic.query}</button>
-          <button class="action-menu-btn" data-act="mail" data-idx="${idx}" title="Mailing">${ic.mail}</button>
-          <button class="action-menu-btn" data-act="hidden" data-idx="${idx}" title="Gizle">${ic.hidden}</button>
-        </div>
+        <button type="button" class="action-menu-btn" data-act="erp-menu" data-idx="${idx}" title="Belge işlemleri" aria-label="${safeNo} belge işlemleri" aria-haspopup="menu" aria-expanded="false">${ic.more}</button>
       </td>
       <td data-label="İrsaliye Bilgisi">
-        <div style="font-size:12px;font-weight:600">${r.no}</div>
-        <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:8px;">
-          <span style="display:inline-flex;align-items:center;padding:1px 10px;border-radius:999px;background:#22c55e;color:white;font-weight:700">Sevk</span>
-          <span>/ ${fmtCur(r.amount, r.currency)}</span>
-        </div>
+        <div style="font-size:12px;font-weight:600;white-space:nowrap">${safeNo}</div>
+        <div style="font-size:11px;color:var(--text-muted);display:flex;align-items:center;gap:6px;margin-top:2px"><span class="badge badge-success">Sevk</span></div>
       </td>
-      <td data-label="Tarih">
-        <div style="font-size:11px;color:var(--text-secondary)"><strong>İrsaliye:</strong> ${fmtDateTime(r.issueDate)}</div>
-        <div style="font-size:11px;color:var(--text-muted)"><strong>Zarf :</strong> ${fmtDateTime(r.envelopeDate)}</div>
-      </td>
+      <td data-label="Tarih">${dateCellHtml(r.issueDate, { secondary: r.envelopeDate ? `Zarf ${fmtDate(r.envelopeDate)}` : '' })}</td>
+      <td class="sv-number" data-label="Tutar">${fmtCur(r.amount, r.currency)}</td>
       <td data-label="Gönderici Bilgisi">
-        <div style="font-size:12px;font-weight:600">${r.senderName}</div>
-        <div style="font-size:11px;color:var(--text-muted)">Vergi No : ${r.senderTax}</div>
+        <div style="font-size:12px;font-weight:600">${escapeHtml(r.senderName)}</div>
+        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">VKN ${escapeHtml(r.senderTax)}</div>
       </td>
       <td data-label="Durum">
-        <span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary)">
-          <span style="width:9px;height:9px;border-radius:50%;background:#4caf50;display:inline-block"></span>${r.status}
+        <span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary);max-width:160px">
+          <span aria-hidden="true" title="${toneText}" style="width:9px;height:9px;flex-shrink:0;border-radius:50%;background:${toneColorVar(tone)};display:inline-block"></span>${srOnly(`${toneText}.`)}${clampTextHtml(r.status)}
         </span>
       </td>
       <td data-label="Cevap">
         ${r.canCreateAnswer
-          ? `<button class="btn btn-sm" data-act="answer" data-idx="${idx}" style="height:22px;padding:0 10px;font-size:11px;border-radius:6px;border:1px solid #10b981;color:#10b981;background:transparent;display:inline-flex;align-items:center;gap:6px;">${ic.link} YANIT OLUŞTUR</button>`
-          : `<div style="font-size:11px;color:var(--text-secondary)"><div style="display:flex;align-items:center;gap:6px;">${ic.check} ${r.answer}</div><div style="display:flex;align-items:center;gap:6px;color:#4f46e5;font-weight:600;margin-top:2px;">${ic.rule} 7 Gün Kuralı</div></div>`}
+          ? `<button type="button" class="btn btn-sm btn-secondary" data-act="answer" data-idx="${idx}" style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap">${ic.link} YANIT OLUŞTUR${srOnly(` (${safeNo})`)}</button>`
+          : `<div style="font-size:11px;color:var(--text-secondary);max-width:160px"><div style="display:flex;align-items:center;gap:6px;">${ic.check} ${clampTextHtml(r.answer)}</div><div style="display:flex;align-items:center;gap:6px;color:var(--accent);font-weight:600;margin-top:2px;">${ic.rule} 7 Gün Kuralı</div></div>`}
       </td>
-      <td data-label="Etiket"><span style="font-size:11px;color:var(--text-muted)">${r.alias}</span></td>
-      <td data-label="İşlemler"><button class="action-menu-btn" data-act="menu" data-idx="${idx}">${ic.menu}</button></td>
+      <td data-label="Etiket"${hasAlias ? '' : ' class="sv-hide-mobile"'}><span style="font-size:11px;color:var(--text-muted)">${escapeHtml(r.alias)}</span></td>
+      <td data-label="İşlemler"><button type="button" class="action-menu-btn" data-act="menu" data-idx="${idx}" title="İşlemler" aria-label="${safeNo} işlemleri" aria-haspopup="menu" aria-expanded="false">${ic.menu}</button></td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
-  tbody.querySelectorAll('[data-act="preview"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
+  // ERP menüsü: önceki üç ikon düğmesinin (önizle / mailing / gizle) aynı işleyicileri.
+  tbody.querySelectorAll('[data-act="erp-menu"]').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const row = rows[Number(btn.dataset.idx)];
-      showPdfPreviewModal(row);
-    });
-  });
+      const dd = document.createElement('div');
+      dd.className = 'action-dropdown';
+      dd.setAttribute('aria-label', `${row.no} belge işlemleri`);
+      dd.innerHTML = `
+        <button class="action-dropdown-item" data-act="preview" data-idx="${btn.dataset.idx}">${ic.query} PDF Önizle</button>
+        <button class="action-dropdown-item" data-act="mail" data-idx="${btn.dataset.idx}">${ic.mail} Mailing</button>
+        <button class="action-dropdown-item" data-act="hidden" data-idx="${btn.dataset.idx}">${ic.hidden} ${row.isArchived ? 'Arşivden Çıkar' : 'Gizle (Arşive Kaldır)'}</button>
+      `;
+      if (!openActionDropdown(btn, dd)) return;
 
-  tbody.querySelectorAll('[data-act="mail"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const row = rows[Number(btn.dataset.idx)];
-      await sendMailing(row);
-    });
-  });
-
-  tbody.querySelectorAll('[data-act="hidden"]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const row = rows[Number(btn.dataset.idx)];
-      await toggleArchiveStatus(row, page);
+      dd.querySelector('[data-act="preview"]')?.addEventListener('click', () => {
+        closeActionDropdowns({ restoreFocus: true });
+        showPdfPreviewModal(row);
+      });
+      dd.querySelector('[data-act="mail"]')?.addEventListener('click', async () => {
+        closeActionDropdowns({ restoreFocus: true });
+        await sendMailing(row);
+      });
+      dd.querySelector('[data-act="hidden"]')?.addEventListener('click', async () => {
+        closeActionDropdowns({ restoreFocus: true });
+        await toggleArchiveStatus(row, page);
+      });
     });
   });
 
@@ -854,7 +958,6 @@ function renderRows(page, rows) {
   tbody.querySelectorAll('[data-act="menu"]').forEach((btn) => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
-      document.querySelectorAll('.action-dropdown').forEach((d) => d.remove());
       const row = rows[Number(btn.dataset.idx)];
       const dd = document.createElement('div');
       dd.className = 'action-dropdown';
@@ -871,11 +974,11 @@ function renderRows(page, rows) {
         <button class="action-dropdown-item" data-act="envelope">${ic.xml} Zarf XML İndir</button>
         <button class="action-dropdown-item" data-file="pdf">${ic.pdf} PDF İndir</button>
       `;
-      mountActionDropdown(btn, dd);
+      if (!openActionDropdown(btn, dd)) return;
 
       dd.querySelectorAll('.action-dropdown-item').forEach((it) => {
         it.addEventListener('click', async () => {
-          dd.remove();
+          closeActionDropdowns({ restoreFocus: true });
           if (it.dataset.file) {
             await downloadFile(row.uuid, it.dataset.file);
             return;
@@ -904,7 +1007,7 @@ async function loadIncoming(page, options = {}) {
   if (!account) {
     cachedRows = [];
     cachedIncomingAccountId = '';
-    tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Hesap seçilmedi</h3><p>Lutfen once bir hesap secin</p></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${TABLE_COLSPAN}" class="table-empty"><div class="empty-state">${ic.noData}<h3>Hesap seçilmedi</h3><p>Lütfen önce bir hesap seçin</p></div></td></tr>`;
     return;
   }
   const accountId = account.id || '';
@@ -922,19 +1025,27 @@ async function loadIncoming(page, options = {}) {
   const startDate = page.querySelector('#startDate')?.value;
   const endDate = page.querySelector('#endDate')?.value;
 
-  tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div style="padding:24px;text-align:center;color:var(--text-muted)">e-İrsaliye verileri yükleniyor...</div></td></tr>`;
+  tbody.innerHTML = skeletonRowsHtml(TABLE_COLSPAN, { label: 'Gelen e-İrsaliye verileri yükleniyor…' });
+  const retry = () => loadIncoming(page, options);
 
   // Arşiv destekli fetch: kesinleşmiş aylar Supabase'den, son dönem API'den + arşive yazılır.
   // 6 ay limiti chunking ile aşılır; IsArchived filtresi varsa arşiv otomatik bypass olur.
   const stats = { failed: false };
-  const fetchedItems = await fetchInvoicesSmart(EDespatchWithAccount.listPurchases, account, 'eirsaliye_purchase', {
-    StartDate: startDate,
-    EndDate: endDate,
-    ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),
-  }, { signal, stats, maxPages: 10 });
+  let fetchedItems;
+  try {
+    fetchedItems = await fetchInvoicesSmart(EDespatchWithAccount.listPurchases, account, 'eirsaliye_purchase', {
+      StartDate: startDate,
+      EndDate: endDate,
+      ...(archivedOnly ? { IsArchived: true, Archived: true } : {}),
+    }, { signal, stats, maxPages: 10 });
+  } catch (error) {
+    if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId || getActiveAccountId() !== accountId) return;
+    renderLoadError(tbody, error?.message || 'Sunucuya ulaşılamıyor. Bağlantınızı kontrol edin.', retry);
+    return;
+  }
   if (fetchedItems.length === 0 && stats.failed) {
     if (seq !== incomingLoadSeq || cachedIncomingAccountId !== accountId || getActiveAccountId() !== accountId) return;
-    tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Hata: Veri alınamadı</h3></div></td></tr>`;
+    renderLoadError(tbody, 'e-İrsaliye listesi alınamadı. API bağlantısını kontrol edip tekrar deneyin.', retry);
     return;
   }
 
@@ -978,25 +1089,25 @@ export async function renderEDespatchIncoming(options = {}) {
 
     <div class="nilvera-filter-bar">
       <div class="filter-group filter-search">
-        <label class="filter-label">Ara</label>
+        <label class="filter-label" for="searchInput">Ara</label>
         <div class="filter-search-row">
-          <input type="text" class="filter-input" id="searchInput" placeholder="İrsaliye no, gönderici veya VKN" style="width:100%" />
-          <button class="btn btn-sm btn-secondary" id="toggleFiltersBtn" type="button" aria-expanded="false">Filtreyi Goster</button>
+          <input type="search" class="filter-input" id="searchInput" placeholder="İrsaliye no, gönderici veya VKN" style="width:100%" />
+          <button class="btn btn-sm btn-secondary" id="toggleFiltersBtn" type="button" aria-expanded="false">Filtreyi Göster</button>
         </div>
       </div>
       <div class="filter-group filter-advanced">
-        <label class="filter-label">Başlangıç Tarihi</label>
+        <label class="filter-label" for="startDate">Başlangıç Tarihi</label>
         <input type="date" class="filter-input" id="startDate" value="${start}" />
       </div>
       <div class="filter-group filter-advanced">
-        <label class="filter-label">Bitiş Tarihi</label>
+        <label class="filter-label" for="endDate">Bitiş Tarihi</label>
         <input type="date" class="filter-input" id="endDate" value="${end}" />
       </div>
       <div class="filter-actions"><span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span><div class="filter-actions-row">
-        <button class="btn btn-sm btn-primary" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
-        <button class="btn btn-sm" id="btnRefresh" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--bg-secondary); border:1px solid var(--border); color:var(--text-secondary)">${ic.refresh} YENİLE</button>
+        <button type="button" class="btn btn-sm btn-primary" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
+        <button type="button" class="btn btn-sm btn-secondary" id="btnRefresh" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.refresh} YENİLE</button>
         <div style="position:relative">
-          <button class="btn btn-sm btn-primary" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
+          <button type="button" class="btn btn-sm btn-secondary" id="islemlerBtn" aria-haspopup="menu" aria-expanded="false" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.gear} İŞLEMLER ${ic.chevronDown}
           </button>
         </div>
@@ -1009,18 +1120,19 @@ export async function renderEDespatchIncoming(options = {}) {
         <table>
           <thead>
             <tr>
-              <th style="width:30px"><input type="checkbox" id="selectAll" /></th>
+              <th style="width:30px"><label class="sv-row-check" style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;cursor:pointer"><input type="checkbox" id="selectAll" aria-label="Tümünü seç" /></label></th>
               <th>ERP</th>
               <th>İrsaliye Bilgisi</th>
               <th>Tarih</th>
+              <th class="sv-number">Tutar</th>
               <th>Gönderici Bilgisi</th>
               <th>İrsaliye Durumu</th>
               <th>Cevap</th>
-              <th>Etiket Bilgileri</th>
+              <th>Etiket</th>
               <th>İşlemler</th>
             </tr>
           </thead>
-          <tbody id="rowList"></tbody>
+          <tbody id="rowList">${skeletonRowsHtml(TABLE_COLSPAN, { label: 'Gelen e-İrsaliye verileri yükleniyor…' })}</tbody>
         </table>
       </div>
       <div class="table-footer" style="display:flex">
@@ -1038,9 +1150,9 @@ export async function renderEDespatchIncoming(options = {}) {
     page.querySelectorAll('.row-check').forEach((c) => { c.checked = e.target.checked; });
   });
 
-  page.querySelector('#islemlerBtn')?.addEventListener('click', (e) => {
+  const islemlerBtn = page.querySelector('#islemlerBtn');
+  islemlerBtn?.addEventListener('click', (e) => {
     e.stopPropagation();
-    document.querySelectorAll('.action-dropdown').forEach((d) => d.remove());
     const dd = document.createElement('div');
     dd.className = 'action-dropdown';
     dd.innerHTML = `
@@ -1051,12 +1163,12 @@ export async function renderEDespatchIncoming(options = {}) {
       <button class="action-dropdown-item" data-act="draft">${ic.plus} Taslak Oluştur</button>
       <button class="action-dropdown-item" data-act="special-code">${ic.tag} Özel Kod Alanı</button>
     `;
-    mountActionDropdown(e.target.closest('button'), dd);
+    if (!openActionDropdown(islemlerBtn, dd)) return;
 
     dd.querySelectorAll('.action-dropdown-item').forEach((btn) => {
       btn.addEventListener('click', async (ev) => {
         ev.stopPropagation();
-        dd.remove();
+        closeActionDropdowns({ restoreFocus: true });
         const act = btn.dataset.act;
         if (BULK_OPERATIONS[act]) await bulkSetOperation(page, act, options);
         else if (act === 'draft') await bulkCreateDraft(page);
@@ -1065,11 +1177,10 @@ export async function renderEDespatchIncoming(options = {}) {
     });
   });
 
-  listenScoped(page, document, 'click', () => {
-    document.querySelectorAll('.action-dropdown').forEach((d) => d.remove());
-  });
+  listenScoped(page, document, 'click', () => closeActionDropdowns());
 
-  await loadIncoming(page, options);
+  // Sayfa hemen döner; liste iskelet satırlarla açılır, yükleyici tbody'yi doldurur (hata da sayfa içinde gösterilir).
+  void loadIncoming(page, options);
   const batchAccountId = getActiveAccountId();
   if (batchAccountId) {
     for (const kind of listDocumentBatchKinds(batchAccountId)) {

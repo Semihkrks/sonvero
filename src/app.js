@@ -7,6 +7,7 @@ import 'flatpickr/dist/flatpickr.min.css';
 import '@fontsource/inter/400.css';
 import '@fontsource/inter/500.css';
 import '@fontsource/inter/600.css';
+import '@fontsource/inter/700.css';
 import './styles/system.css';
 import './styles/assistant.css';
 import { clearPrivateStorage, hasPendingMutation } from './lib/operations.js';
@@ -56,7 +57,7 @@ document.documentElement.setAttribute('data-theme', savedTheme);
 // PWA durum çubuğu (saat/pil şeridi) temayı takip etsin; tema sonradan değişince de güncellenir.
 const syncThemeColor = () => {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#1a1d26' : '#ffffff');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#15181e' : '#ffffff');
   // black-translucent iOS'ta saat şeridini buzlu cam yapıyor; opak çubuk o bulanıklığı kaldırır.
   document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.setAttribute('content', dark ? 'black' : 'default');
 };

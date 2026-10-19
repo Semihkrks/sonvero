@@ -65,9 +65,9 @@ export async function renderMultiAccountCari() {
       ${ic.layers} <span>Tüm Hesaplar Cari</span> <span class="bc-separator">›</span> <span class="bc-current">Satış Faturaları</span>
     </div>
     <div class="nilvera-filter-bar">
-      <div class="filter-group"><label class="filter-label">Başlangıç Tarihi</label><input type="date" class="filter-input" id="macDateStart" value="${start}" /></div>
-      <div class="filter-group"><label class="filter-label">Bitiş Tarihi</label><input type="date" class="filter-input" id="macDateEnd" value="${end}" /></div>
-      <div class="filter-group filter-search"><label class="filter-label">Müşteri Ara</label><input type="text" class="filter-input" id="macSearchInput" placeholder="Ad veya VKN ile ara..." style="width:100%" /></div>
+      <div class="filter-group"><label class="filter-label" for="macDateStart">Başlangıç Tarihi</label><input type="date" class="filter-input" id="macDateStart" value="${start}" /></div>
+      <div class="filter-group"><label class="filter-label" for="macDateEnd">Bitiş Tarihi</label><input type="date" class="filter-input" id="macDateEnd" value="${end}" /></div>
+      <div class="filter-group filter-search"><label class="filter-label" for="macSearchInput">Müşteri Ara</label><input type="text" class="filter-input" id="macSearchInput" placeholder="Ad veya VKN ile ara..." style="width:100%" /></div>
       <div class="filter-actions">
         <span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span>
         <div class="filter-actions-row">
@@ -75,6 +75,7 @@ export async function renderMultiAccountCari() {
         </div>
       </div>
     </div>
+    <div id="macLoadAlert" class="sv-error" role="alert" hidden style="margin-bottom:16px"></div>
     <div class="cari-main-content" id="macMainContent">
       <div class="cari-customer-list-container">
         <div class="cari-customer-list-header">
@@ -113,12 +114,13 @@ async function loadMultiAccountData(page) {
     return;
   }
 
+  setLoadAlert(page, null);
   const startDate = page.querySelector('#macDateStart')?.value || '';
   const endDate = page.querySelector('#macDateEnd')?.value || '';
   const searchText = page.querySelector('#macSearchInput')?.value.trim() || '';
 
   if (listEl) {
-    listEl.innerHTML = `<div class="cari-loading-state"><div style="animation:pulse 1.5s infinite">${ic.noData}</div><p>${allAccounts.length} hesap taranıyor...</p></div>`;
+    listEl.innerHTML = loadingSkeleton(`${allAccounts.length} hesap taranıyor…`);
   }
 
   let totalInvoices = 0;
@@ -129,17 +131,21 @@ async function loadMultiAccountData(page) {
   const pendingInvoices = []; // { inv, acc }
   const pendingTahsilats = []; // { t, acc }
   const failedTahsilat = [];
+  const failedSources = [];
   let completeScan=true;
 
   await forEachLimited(allAccounts, 3, async (acc) => {
     try {
       // Akıllı fetch: 6 ay limiti chunking ile aşılır, kesin aylar arşivden gelir.
+      // fetchInvoicesSmart hata durumunda boş/eksik dizi döndürür; hata stats.failed ile okunur.
+      const efStats = { failed: false }, eaStats = { failed: false };
       const [efRes, eaRes, thRes] = await Promise.allSettled([
-        fetchInvoicesSmart(EInvoiceWithAccount.listSales, acc, 'efatura_sale', { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) }),
-        fetchInvoicesSmart(EArchiveWithAccount.listInvoices, acc, 'earsiv', { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) }),
+        fetchInvoicesSmart(EInvoiceWithAccount.listSales, acc, 'efatura_sale', { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) }, { stats: efStats }),
+        fetchInvoicesSmart(EArchiveWithAccount.listInvoices, acc, 'earsiv', { StartDate: startDate, EndDate: endDate, ...(searchText && { Search: searchText }) }, { stats: eaStats }),
         listCollections({ accountId: acc.id, startDate, endDate, searchText })
       ]);
       if([efRes,eaRes,thRes].some(result=>result.status!=='fulfilled'))completeScan=false;
+      if (efRes.status !== 'fulfilled' || eaRes.status !== 'fulfilled' || efStats.failed || eaStats.failed) { completeScan=false; failedSources.push(acc.name); }
       if (efRes.status === 'fulfilled') efRes.value.forEach(i => pendingInvoices.push({ inv: { ...i, _type: 'efatura' }, acc }));
       if (eaRes.status === 'fulfilled') eaRes.value.forEach(i => pendingInvoices.push({ inv: { ...i, _type: 'earsiv' }, acc }));
       if (thRes.status === 'fulfilled') thRes.value.forEach(t => pendingTahsilats.push({ t: { ...t, _type: 'tahsilat' }, acc }));
@@ -149,12 +155,12 @@ async function loadMultiAccountData(page) {
       }
     } catch (e) {
       completeScan=false;
+      failedSources.push(acc.name);
       console.error(`Error scanning account ${acc.name}:`, e);
     }
   });
 
   rememberExportPeriod(page,{start:startDate,end:endDate,complete:completeScan});
-  if(!completeScan)showToast('Bazı kaynaklar yüklenemedi. Görünen bakiye eksiktir; dışa aktarmadan önce taramayı yenileyin.','warning');
   function ensureCustomer(key, name, taxNo) {
     if (!customerMap[key]) {
       customerMap[key] = { name, taxNo, invoices: [], totalAmount: 0, totalTahsilat: 0, accountBreakdown: {} };
@@ -232,11 +238,35 @@ async function loadMultiAccountData(page) {
   });
 
   isScanning = false;
-  showToast(`${allAccounts.length} hesaptan toplam ${totalInvoices} satış faturası ve ${totalTahsilats} tahsilat tarandı.`, 'success');
-  if (failedTahsilat.length) {
-    showToast(`Tahsilatlar yüklenemedi: ${failedTahsilat.join(', ')}. Tekrar taramayı deneyin.`, 'warning');
+  if (!completeScan || failedTahsilat.length) {
+    // Hata başarı gibi görünmesin: kalıcı uyarı kutusu + Tekrar dene; başarı bildirimi gösterilmez.
+    const problems = [];
+    const invoiceFailures = [...new Set(failedSources)];
+    if (invoiceFailures.length) problems.push(`Fatura kaynakları yüklenemedi: ${invoiceFailures.join(', ')}.`);
+    if (failedTahsilat.length) problems.push(`Tahsilatlar yüklenemedi: ${failedTahsilat.join(', ')}.`);
+    problems.push('Görünen bakiye eksik olabilir; dışa aktarmadan önce taramayı yenileyin.');
+    setLoadAlert(page, problems.join(' '));
+  } else {
+    showToast(`${allAccounts.length} hesaptan toplam ${totalInvoices} satış faturası ve ${totalTahsilats} tahsilat tarandı.`, 'success');
   }
   renderCustomerList(page);
+}
+
+// Yükleme hatası kutusu (role="alert"): message=null gizler.
+function setLoadAlert(page, message) {
+  const box = page.querySelector('#macLoadAlert');
+  if (!box) return;
+  if (!message) { box.hidden = true; box.innerHTML = ''; return; }
+  box.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px"><span>${escapeHtml(message)}</span><button type="button" class="btn btn-sm btn-secondary" data-mac-retry>Tekrar dene</button></div>`;
+  box.hidden = false;
+  box.querySelector('[data-mac-retry]')?.addEventListener('click', () => loadMultiAccountData(page));
+}
+
+function loadingSkeleton(label) {
+  return `<div style="display:grid;gap:12px;padding:16px" aria-busy="true">
+    <span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap">${escapeHtml(label)}</span>
+    ${Array.from({ length: 6 }, (_, i) => `<div aria-hidden="true"><div class="sv-skeleton" style="height:14px;width:${[78, 64, 86, 58, 72, 66][i]}%"></div><div class="sv-skeleton" style="height:10px;width:40%;margin-top:6px;opacity:.6"></div></div>`).join('')}
+  </div>`;
 }
 
 function renderCustomerList(page) {
@@ -320,7 +350,7 @@ function renderDetailPanel(page, customer) {
   const invoiceRows = invoices.map((inv) => `
     <tr>
       <td>${fmtDate(getInvoiceDate(inv))}</td>
-      <td><span class="badge" style="background:${safeColor(inv._accountColor)};color:#fff">${escapeHtml(inv._accountName || '')}</span></td>
+      <td><span class="badge" style="--c:${safeColor(inv._accountColor)};background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--text-primary);border-left:3px solid var(--c)">${escapeHtml(inv._accountName || '')}</span></td>
       <td>${escapeHtml(getInvoiceNumber(inv) || '—')}</td>
       <td style="text-align:right; font-weight:600; color:var(--success)">${fmtCur(getAmount(inv))}</td>
     </tr>`).join('');
@@ -328,7 +358,7 @@ function renderDetailPanel(page, customer) {
   const tahsilatRows = tahsilats.map((inv) => `
     <tr>
       <td>${fmtDate(inv.date)}</td>
-      <td><span class="badge" style="background:${safeColor(inv._accountColor)};color:#fff">${escapeHtml(inv._accountName || '')}</span></td>
+      <td><span class="badge" style="--c:${safeColor(inv._accountColor)};background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--text-primary);border-left:3px solid var(--c)">${escapeHtml(inv._accountName || '')}</span></td>
       <td><span style="color:var(--tahsilat);font-weight:600">${escapeHtml(inv.description || 'Tahsilat')}</span></td>
       <td style="text-align:right; font-weight:600; color:var(--tahsilat)">-${fmtCur(inv.amount)}</td>
     </tr>`).join('');
@@ -339,7 +369,7 @@ function renderDetailPanel(page, customer) {
         <h3>${escapeHtml(customer.name)}</h3><span class="cari-detail-vkn">VKN: ${escapeHtml(customer.taxNo)}</span>
       </div>
       <div class="cari-detail-actions">
-        <button class="btn btn-sm btn-success" id="macExportBtn">${ic.download} Excel'e Aktar</button>
+        <button class="btn btn-sm btn-secondary" id="macExportBtn">${ic.download} Excel'e Aktar</button>
       </div>
     </div>
     
@@ -407,7 +437,7 @@ function renderDetailPanel(page, customer) {
       showToast('Hata: ' + (e.message || e), 'error');
     }
   });
-  const whatsApp=document.createElement('button');whatsApp.type='button';whatsApp.className='btn btn-sm btn-primary';whatsApp.textContent='WhatsApp’a gönder';
+  const whatsApp=document.createElement('button');whatsApp.type='button';whatsApp.className='btn btn-sm btn-secondary';whatsApp.textContent='WhatsApp’a gönder';
   panel.querySelector('#macExportBtn')?.after(whatsApp);
   whatsApp.onclick=async()=>{
     whatsApp.disabled=true;

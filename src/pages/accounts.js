@@ -70,12 +70,12 @@ async function refreshGrid(page) {
       <div class="account-card-key" style="display:flex;align-items:center;gap:6px">${ic.key} ${acc.has_api_key ? 'Anahtar sunucuda tanımlı' : 'Anahtar gerekli'}</div>
       <div class="account-card-actions">
         ${acc.id !== activeId
-          ? `<button class="btn btn-sm btn-primary" data-action="activate" data-id="${acc.id}" style="display:flex;align-items:center;gap:4px">${ic.check} Aktif Yap</button>`
+          ? `<button class="btn btn-sm btn-secondary" data-action="activate" data-id="${acc.id}" style="display:flex;align-items:center;gap:4px">${ic.check} Aktif Yap</button>`
           : `<span class="badge badge-success" style="display:flex;align-items:center;gap:4px">${ic.check} Aktif Hesap</span>`
         }
         <button class="btn btn-sm btn-secondary" data-action="test" data-id="${acc.id}">Bağlantıyı test et</button>
-        <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${acc.id}" aria-label="Hesabı düzenle">${ic.edit}</button>
-        <button class="btn btn-sm btn-danger" data-action="delete" data-id="${acc.id}">${ic.trash}</button>
+        <button class="btn btn-sm btn-secondary" data-action="edit" data-id="${acc.id}" aria-label="${escapeHtml(acc.name)} hesabını düzenle" title="Hesabı düzenle">${ic.edit}</button>
+        <button class="btn btn-sm btn-ghost" data-action="delete" data-id="${acc.id}" aria-label="${escapeHtml(acc.name)} hesabını devre dışı bırak" title="Hesabı devre dışı bırak" style="color:var(--danger)">${ic.trash}</button>
       </div>
     </div>
   `).join('');
@@ -116,52 +116,52 @@ function showAccountForm(page, existing = null) {
   let savingAccount = false;
   const existingPrefs = { invoice_series: existing?.invoice_series };
   const colorOptions = ACCOUNT_COLORS.map(c =>
-    `<button type="button" class="color-opt" data-color="${c}" style="width:28px;height:28px;border-radius:50%;border:2px solid ${c === (existing?.color || '#3b82f6') ? 'white' : 'transparent'};background:${c};cursor:pointer;transition:all 0.15s"></button>`
+    `<button type="button" class="color-opt" data-color="${c}" aria-label="Renk ${c}" aria-pressed="${c === (existing?.color || '#3b82f6') ? 'true' : 'false'}" style="width:28px;height:28px;border-radius:50%;border:2px solid ${c === (existing?.color || '#3b82f6') ? 'var(--text-primary)' : 'transparent'};background:${c};cursor:pointer;transition:all 0.15s"></button>`
   ).join('');
 
   const body = document.createElement('div');
   body.innerHTML = `
     <div class="form-group">
-      <label class="form-label">Hesap Adı</label>
+      <label class="form-label" for="accName">Hesap Adı</label>
       <input type="text" class="form-input" id="accName" placeholder="Firma Muhasebe Hesabı" value="${escapeHtml(existing?.name || '')}" />
       <span class="form-hint">Bu hesabı tanımlayacak bir isim</span>
     </div>
     <div class="form-group">
-      <label class="form-label">API Anahtarı</label>
+      <label class="form-label" for="accApiKey">API Anahtarı</label>
       <input type="password" class="form-input" id="accApiKey" placeholder="9EE05B6564525810C86A32646DB46A26..." value="${''}" />
       <span class="form-hint">Yeni anahtar girebilirsiniz. Düzenlerken boş bırakırsanız mevcut anahtar korunur.</span>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Ortam</label>
+        <label class="form-label" for="accEnv">Ortam</label>
         <select class="form-select" id="accEnv">
           <option value="test" ${existing?.environment !== 'live' ? 'selected' : ''}>Test (apitest.nilvera.com)</option>
           <option value="live" ${existing?.environment === 'live' ? 'selected' : ''}>Canlı (api.nilvera.com)</option>
         </select>
       </div>
       <div class="form-group">
-        <label class="form-label">Renk</label>
-        <div style="display:flex;gap:6px;flex-wrap:wrap" id="colorPicker">${colorOptions}</div>
+        <span class="form-label" id="colorPickerLabel">Renk</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap" id="colorPicker" role="group" aria-labelledby="colorPickerLabel">${colorOptions}</div>
       </div>
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Firma Adı <span style="color:var(--text-muted)">(opsiyonel)</span></label>
+        <label class="form-label" for="accCompany">Firma Adı <span style="color:var(--text-muted)">(opsiyonel)</span></label>
         <input type="text" class="form-input" id="accCompany" value="${escapeHtml(existing?.company_name || '')}" />
       </div>
       <div class="form-group">
-        <label class="form-label">VKN <span style="color:var(--text-muted)">(opsiyonel)</span></label>
+        <label class="form-label" for="accVkn">VKN <span style="color:var(--text-muted)">(opsiyonel)</span></label>
         <input type="text" class="form-input" id="accVkn" value="${escapeHtml(existing?.vkn || '')}" />
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       <div class="form-group">
-        <label class="form-label">Fatura Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
+        <label class="form-label" for="accInvoiceSeries">Fatura Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
         <input type="text" class="form-input" id="accInvoiceSeries" maxlength="12" placeholder="Örn: AKA / BIR" value="${escapeHtml(existingPrefs.invoice_series || '')}" />
         <span class="form-hint">Fatura Oluştur ekranında seri otomatik gelir.</span>
       </div>
       <div class="form-group">
-        <label class="form-label">İrsaliye Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
+        <label class="form-label" for="accDespatchSeries">İrsaliye Seri <span style="color:var(--text-muted)">(opsiyonel)</span></label>
         <input type="text" class="form-input" id="accDespatchSeries" maxlength="12" placeholder="Örn: AYK" value="${escapeHtml(existing?.despatch_series || '')}" />
         <span class="form-hint">İrsaliye Oluştur ekranında seri otomatik gelir.</span>
       </div>
@@ -187,8 +187,9 @@ function showAccountForm(page, existing = null) {
   setTimeout(() => {
     document.querySelectorAll('.color-opt').forEach(opt => {
       opt.addEventListener('click', () => {
-        document.querySelectorAll('.color-opt').forEach(o => o.style.borderColor = 'transparent');
-        opt.style.borderColor = 'white';
+        document.querySelectorAll('.color-opt').forEach(o => { o.style.borderColor = 'transparent'; o.setAttribute('aria-pressed', 'false'); });
+        opt.style.borderColor = 'var(--text-primary)';
+        opt.setAttribute('aria-pressed', 'true');
         selectedColor = opt.dataset.color;
       });
     });

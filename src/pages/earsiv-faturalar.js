@@ -17,6 +17,8 @@ import { exportInvoicesToExcel } from '../services/excel-export.js';
 import { exportCariDefter } from '../services/cari-export-worker-client.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
 import { registerCacheReset } from '../router.js';
+import { statusBadge } from '../lib/status-badge.js';
+import { fmtCur, fmtDate, dateCellHtml, skeletonRowsHtml, rowCheckboxHtml } from '../lib/format.js';
 
 // ── SVG Icons ──
 const ic = {
@@ -32,6 +34,8 @@ const ic = {
   chevronDown: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`,
   cloudDownload: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   gear: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`,
+  check: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+  x: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
   tag: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
   code: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`,
   fileText: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`,
@@ -77,19 +81,19 @@ export async function renderEArsivInvoices() {
     <!-- Filter Bar -->
     <div class="nilvera-filter-bar">
       <div class="filter-group filter-search">
-        <label class="filter-label">Ara</label>
-        <input type="text" class="filter-input" id="searchInput" placeholder="Ara" style="width:100%" />
+        <label class="filter-label" for="searchInput">Ara</label>
+        <input type="search" class="filter-input" id="searchInput" placeholder="Fatura no, alıcı, VKN" style="width:100%" />
       </div>
       <div class="filter-group">
-        <label class="filter-label">Başlangıç Tarihi</label>
+        <label class="filter-label" for="dateStart">Başlangıç Tarihi</label>
         <input type="date" class="filter-input" id="dateStart" value="${start}" />
       </div>
       <div class="filter-group">
-        <label class="filter-label">Bitiş Tarihi</label>
+        <label class="filter-label" for="dateEnd">Bitiş Tarihi</label>
         <input type="date" class="filter-input" id="dateEnd" value="${end}" />
       </div>
       <div class="filter-group">
-        <label class="filter-label">Sıralama</label>
+        <label class="filter-label" for="sortFilter">Sıralama</label>
         <select class="filter-input" id="sortFilter">
           <option value="date-desc">Fatura Tarihi</option>
           <option value="amount-desc">Tutar (Azalan)</option>
@@ -97,7 +101,7 @@ export async function renderEArsivInvoices() {
         </select>
       </div>
       <div class="filter-group">
-        <label class="filter-label">A / Z A</label>
+        <label class="filter-label" for="orderFilter">Sıra Yönü</label>
         <select class="filter-input" id="orderFilter">
           <option value="desc">Azalan</option>
           <option value="asc">Artan</option>
@@ -106,12 +110,12 @@ export async function renderEArsivInvoices() {
       <div class="filter-actions"><span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span><div class="filter-actions-row">
         <button class="btn btn-sm btn-primary" id="applyFilter" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
         <div style="position:relative">
-          <button class="btn btn-sm btn-success" id="exportBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
+          <button class="btn btn-sm btn-secondary" id="exportBtn" aria-haspopup="menu" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.cloudDownload} DIŞA AKTAR ${ic.chevronDown}
           </button>
         </div>
         <div style="position:relative">
-          <button class="btn btn-sm btn-primary" id="islemlerBtn" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
+          <button class="btn btn-sm btn-secondary" id="islemlerBtn" aria-haspopup="menu" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">
             ${ic.gear} İŞLEMLER ${ic.chevronDown}
           </button>
         </div>
@@ -125,23 +129,18 @@ export async function renderEArsivInvoices() {
         <table>
           <thead>
             <tr>
-              <th style="width:30px"><input type="checkbox" id="selectAll" /></th>
+              <th style="width:30px"><label class="sv-row-check" style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;cursor:pointer"><input type="checkbox" id="selectAll" aria-label="Tümünü seç" /></label></th>
               <th>ERP</th>
               <th>Fatura Bilgisi</th>
               <th>Tarih</th>
+              <th class="sv-number">Tutar</th>
               <th>Alıcı Bilgisi</th>
               <th>Fatura Durumu</th>
-              
-              <th>Etiket Bilgileri</th>
               <th>İşlemler</th>
             </tr>
           </thead>
           <tbody id="invoiceList">
-            <tr><td colspan="8" class="table-empty">
-              <div style="padding:40px">
-                <div class="skeleton" style="height:20px;width:60%;margin:0 auto"></div>
-              </div>
-            </td></tr>
+            ${skeletonRowsHtml(8, { label: 'e-Arşiv faturaları yükleniyor…' })}
           </tbody>
         </table>
       </div>
@@ -302,13 +301,7 @@ async function loadEarsiv(page) {
   }
   cachedEarsivAccountId = accountId;
 
-  tbody.innerHTML = `<tr><td colspan="8" class="table-empty">
-    <div style="padding:40px;text-align:center">
-      <div style="animation:pulse 1.5s infinite">${ic.noData}</div>
-      <p style="color:var(--text-muted);margin-top:12px">E-Arşiv verileri yükleniyor...</p>
-      <p style="font-size:11px;color:var(--text-muted)">${account.name} · ${account.environment === 'live' ? 'Canlı' : 'Test'}</p>
-    </div>
-  </td></tr>`;
+  tbody.innerHTML = skeletonRowsHtml(8, { label: `E-Arşiv verileri yükleniyor: ${escapeHtml(account.name)} · ${account.environment === 'live' ? 'Canlı' : 'Test'}` });
 
   try {
     const { start, end } = getMonthRange();
@@ -341,7 +334,7 @@ async function loadEarsiv(page) {
       if (fetchOk) {
         tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.noData}<h3>Giden fatura bulunamadı</h3><p>Bu dönemde gönderilmiş e-Arşiv fatura yok</p></div></td></tr>`;
       } else {
-        tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.error}<h3>Veri alınamadı</h3><p>API bağlantısını kontrol edin</p><button class="btn btn-primary" id="retryBtn">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.error}<h3>Veri alınamadı</h3><p role="alert">API bağlantısını kontrol edin</p><button class="btn btn-primary" id="retryBtn">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
         tbody.querySelector('#retryBtn')?.addEventListener('click', () => loadEarsiv(page));
       }
       updateFooter(page, 0);
@@ -356,7 +349,7 @@ async function loadEarsiv(page) {
     if (seq !== earsivLoadSeq || cachedEarsivAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
-    tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.globe}<h3>Bağlantı hatası</h3><p>${e.message || 'Sunucuya ulaşılamıyor'}</p><button class="btn btn-primary" id="retryBtn2">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="table-empty"><div class="empty-state">${ic.globe}<h3>Bağlantı hatası</h3><p role="alert">${escapeHtml(e.message || 'Sunucuya ulaşılamıyor')}</p><button class="btn btn-primary" id="retryBtn2">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
     tbody.querySelector('#retryBtn2')?.addEventListener('click', () => loadEarsiv(page));
     updateFooter(page, 0);
   }
@@ -441,31 +434,28 @@ function renderTable(page, invoices) {
     const amount = fmtCur(getAmount(inv), getCurrency(inv));
     const receiver = getReceiverName(inv) || '—';
     const taxNo = getReceiverTaxNo(inv) || '—';
+    const safeNo = escapeHtml(invoiceNo);
 
     return `<tr>
-      <td data-label="Seçim"><input type="checkbox" class="row-check" data-idx="${idx}" data-uuid="${uuid}" data-source="${inv._source}" /></td>
+      <td data-label="Seçim">${rowCheckboxHtml(`class="row-check" data-idx="${idx}" data-uuid="${escapeHtml(uuid)}" data-source="${inv._source}"`, `${safeNo} seç`)}</td>
       <td data-label="ERP">
         <div style="display:flex;gap:4px">
-          <button class="action-menu-btn" data-action="query" data-uuid="${escapeHtml(uuid)}" ${pdfMetaAttrs({ party: receiver, number: invoiceNo, date: fmtDateShort(issueDate), amount })} title="PDF Önizle">${ic.query}</button>
+          <button class="action-menu-btn" data-action="query" data-uuid="${escapeHtml(uuid)}" ${pdfMetaAttrs({ party: receiver, number: invoiceNo, date: fmtDateShort(issueDate), amount })} title="PDF Önizle" aria-label="${safeNo} PDF önizle">${ic.query}</button>
         </div>
       </td>
       <td data-label="Fatura Bilgisi">
-        <div><strong>${escapeHtml(invoiceNo)}</strong></div>
-        <div style="font-size:11px;color:var(--text-muted)">${srcBadge} / ${amount}</div>
+        <div style="white-space:nowrap"><strong>${safeNo}</strong></div>
+        <div style="font-size:11px;color:var(--text-muted)">${srcBadge}</div>
       </td>
-      <td data-label="Tarih">
-        <div style="font-size:12px">Fatura : ${fmtDateFull(issueDate)}</div>
-        <div style="font-size:11px;color:var(--text-muted)">Zarf : ${fmtDateFull(envelopeDate || issueDate)}</div>
-      </td>
+      <td data-label="Tarih">${dateCellHtml(issueDate, { secondary: `Zarf ${fmtDate(envelopeDate || issueDate)}` })}</td>
+      <td class="sv-number" data-label="Tutar">${amount}</td>
       <td data-label="Alıcı Bilgisi">
-        <div style="font-size:12px;font-weight:600">${escapeHtml(receiver)}</div>
-        <div style="font-size:11px;color:var(--text-muted)">Vergi No : ${escapeHtml(taxNo)}</div>
+        <div style="font-size:12px;font-weight:600;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escapeHtml(receiver)}">${escapeHtml(receiver)}</div>
+        <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">VKN ${escapeHtml(taxNo)}</div>
       </td>
-      <td data-label="Fatura Durumu">${statusDisplay(inv)}</td>
-      
-      <td data-label="Etiket Bilgileri"><span style="font-size:11px;color:var(--text-muted)">—</span></td>
+      <td data-label="Fatura Durumu">${statusBadge(getStatus(inv), { detail: getStatusDetail(inv) })}</td>
       <td data-label="İşlemler">
-        <button class="action-menu-btn action-menu-trigger" data-idx="${idx}" data-uuid="${uuid}" data-source="${inv._source}" title="İşlemler">${ic.menu}</button>
+        <button class="action-menu-btn action-menu-trigger" data-idx="${idx}" data-uuid="${escapeHtml(uuid)}" data-source="${inv._source}" title="İşlemler" aria-label="${safeNo} işlemleri" aria-haspopup="menu">${ic.menu}</button>
       </td>
     </tr>`;
   }).join('');
@@ -791,56 +781,13 @@ function updateFooter(page, count) {
   if (el) el.textContent = `Toplam Kayıt : ${count}`;
 }
 
-function statusDisplay(inv) {
-  const s = getStatus(inv);
-  const detail = getStatusDetail(inv);
-  const map = {
-    rejected:     ['Reddedildi', 'danger'],
-    red:          ['Reddedildi', 'danger'],
-    reddedildi:   ['Reddedildi', 'danger'],
-    rejectall:    ['Reddedildi', 'danger'],
-    '2005':       ['Reddedildi', 'danger'],
-    documentansweredautomatically: ['Fatura Otomatik Onaylandı', 'success'],
-    accepted:     ['Kabul Edildi', 'success'],
-    approved:     ['Fatura Onaylandı', 'success'],
-    kabul:        ['Kabul Edildi', 'success'],
-    kabul_edildi: ['Kabul Edildi', 'success'],
-    acceptall:    ['Kabul Edildi', 'success'],
-    '2004':       ['Kabul Edildi', 'success'],
-    succeed:      ['Alıcıya İletildi', 'info'],
-    success:      ['Başarılı', 'success'],
-    basarili:     ['Başarılı', 'success'],
-    waiting:      ['İşlem Bekliyor', 'warning'],
-    bekleyen:     ['Bekliyor', 'warning'],
-    cancelled:    ['İptal Edildi', 'danger'],
-    sent:         ['Gönderildi', 'info'],
-  };
-  const [text, color] = map[String(s).toLowerCase()] || [detail || s || '—', 'default'];
-  const icon = color === 'success'
-    ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>`
-    : color === 'danger'
-    ? `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>`
-    : `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
-  return `<div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-secondary)">${icon} ${text}</div>`;
-}
-
 function answerDisplay(inv) {
   const status = getStatus(inv);
   if (status === 'succeed' || status === 'approved') {
-    return `<div style="font-size:11px;color:var(--text-muted)">Alıcıya Başarıylı İletildi.</div>`;
+    return `<div style="font-size:11px;color:var(--text-muted)">Alıcıya Başarıyla İletildi.</div>`;
   }
-  return `<span style="font-size:11px;color:var(--text-muted)">—</span>`;
+  return '';
 }
-
-function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleDateString('tr-TR'); } catch { return d; } }
-function fmtDateFull(d) {
-  if (!d) return '—';
-  try {
-    const dt = new Date(d);
-    return `${dt.toLocaleDateString('tr-TR')} ${dt.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
-  } catch { return d; }
-}
-function fmtCur(a, c) { if (!a && a !== 0) return '—'; try { return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: c || 'TRY' }).format(a); } catch { return `${a} ${c}`; } }
 
 function fmtDateShort(d) {
   if (!d) return '';

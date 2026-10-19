@@ -1,4 +1,5 @@
 import {sonaiMark} from './sonai-mark.js';
+import {openMobileSidebar} from './sidebar.js';
 const svg=(body)=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+body+'</svg>';
 const ICONS={
  layers:svg('<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>'),
@@ -17,11 +18,6 @@ const QUICK_GROUPS=[
 
 let closeQuickSheet=null;
 
-function openSidebar(){
- document.querySelector('.sidebar')?.classList.add('sidebar-mobile-open');
- document.querySelector('#sidebarOverlay')?.classList.add('active');
- document.querySelector('.sidebar button, .sidebar a')?.focus();
-}
 
 function openQuickSheet(trigger,route){
  if(closeQuickSheet) return;
@@ -62,7 +58,7 @@ function openQuickSheet(trigger,route){
  overlay.addEventListener('click',()=>close());
  head.querySelector('.quick-sheet-close').addEventListener('click',()=>close());
  body.addEventListener('click',(e)=>{const link=e.target.closest('.quick-sheet-link');if(link&&link.getAttribute('href')==='#'+route) close(false);});
- all.addEventListener('click',()=>{close(false);openSidebar();});
+ all.addEventListener('click',()=>{close(false);openMobileSidebar(trigger);});
  document.addEventListener('keydown',onKey);
  window.addEventListener('hashchange',onRoute);
  void sheet.offsetWidth;
@@ -76,7 +72,7 @@ export function renderBottomNav(currentRoute){
  const nav=document.createElement('nav');nav.className='mobile-bottom-nav';nav.setAttribute('aria-label','Ana gezinme');
  const items=[
   ['Ana Sayfa','/dashboard',svg('<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>')],
-  ['Toplu Tahsilat','/toplu-tahsilat',svg('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>')],
+  ['Tahsilat','/toplu-tahsilat',svg('<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>')],
   ['SonAI','assistant-panel',sonaiMark],
   ['Cari','/cari',svg('<path d="M20 8H4a2 2 0 0 1 0-4h14v4M4 8v12h16V8M20 12h-5v4h5"/>')],
   ['Diğer',null,svg('<path d="M4 6h16M4 12h16M4 18h16"/>')]

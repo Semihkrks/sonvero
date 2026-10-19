@@ -33,7 +33,7 @@ export async function renderExportPage() {
         <h3 style="margin-bottom:16px;font-size:15px;font-weight:700;display:flex;align-items:center;gap:6px">${ic.settings} Export Ayarları</h3>
 
         <div class="form-group">
-          <label class="form-label">Fatura Kaynağı</label>
+          <label class="form-label" for="exportSource">Fatura Kaynağı</label>
           <select class="form-select" id="exportSource">
             <option value="outgoing">Giden Faturalar</option>
             <option value="incoming">Gelen Faturalar</option>
@@ -42,17 +42,17 @@ export async function renderExportPage() {
 
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Başlangıç Tarihi</label>
+            <label class="form-label" for="dateStart">Başlangıç Tarihi</label>
             <input type="date" class="form-input" id="dateStart" />
           </div>
           <div class="form-group">
-            <label class="form-label">Bitiş Tarihi</label>
+            <label class="form-label" for="dateEnd">Bitiş Tarihi</label>
             <input type="date" class="form-input" id="dateEnd" />
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label">Dosya Adı</label>
+          <label class="form-label" for="fileName">Dosya Adı</label>
           <input type="text" class="form-input" id="fileName" placeholder="Otomatik: firma adı ve dönem" value="" />
         </div>
 
@@ -76,8 +76,8 @@ export async function renderExportPage() {
         <p style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Export dosyasına dahil edilecek sütunları seçin</p>
 
         <div style="margin-bottom:16px">
-          <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:8px">Fatura Sütunları</div>
-          <div id="invoiceCols" style="display:flex;flex-direction:column;gap:4px">
+          <div id="invoiceColsLabel" style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:8px">Fatura Sütunları</div>
+          <div id="invoiceCols" role="group" aria-labelledby="invoiceColsLabel" style="display:flex;flex-direction:column;gap:4px">
             ${INVOICE_COLUMNS.map(c => `
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:4px;transition:all 0.15s;font-size:13px" class="col-option">
                 <input type="checkbox" data-key="${c.key}" ${c.checked ? 'checked' : ''} />
@@ -88,8 +88,8 @@ export async function renderExportPage() {
         </div>
 
         <div>
-          <div style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:8px">Kalem Sütunları</div>
-          <div id="lineCols" style="display:flex;flex-direction:column;gap:4px">
+          <div id="lineColsLabel" style="font-size:12px;font-weight:700;color:var(--text-secondary);margin-bottom:8px">Kalem Sütunları</div>
+          <div id="lineCols" role="group" aria-labelledby="lineColsLabel" style="display:flex;flex-direction:column;gap:4px">
             ${LINE_COLUMNS.map(c => `
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:4px 8px;border-radius:4px;transition:all 0.15s;font-size:13px" class="col-option">
                 <input type="checkbox" data-key="${c.key}" ${c.checked ? 'checked' : ''} />
@@ -107,7 +107,8 @@ export async function renderExportPage() {
     const dateRange={start:page.querySelector('#dateStart')?.value||null,end:page.querySelector('#dateEnd')?.value||null};
     const btn = page.querySelector('#exportBtn');
     btn.disabled = true;
-    btn.innerHTML = `${ic.loader} Yükleniyor...`;
+    btn.innerHTML = `${ic.loader} Yükleniyor…`;
+    btn.setAttribute('aria-busy', 'true');
 
     try {
       if(!account)throw new Error('Önce firma hesabı seçin.');
@@ -147,6 +148,7 @@ export async function renderExportPage() {
     } finally {
       btn.disabled = false;
       btn.innerHTML = `${ic.download} Excel Olarak İndir`;
+      btn.removeAttribute('aria-busy');
     }
   });
 

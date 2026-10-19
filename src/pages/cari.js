@@ -150,7 +150,7 @@ export async function renderCariPage() {
     <!-- Filter Bar -->
     <div class="nilvera-filter-bar">
       <div class="filter-group">
-        <label class="filter-label">Kaynak</label>
+        <label class="filter-label" for="cariSourceFilter">Kaynak</label>
         <select class="filter-input" id="cariSourceFilter">
           <option value="tumu" selected>Tümü (Giden + Gelen)</option>
           <option value="giden">Giden Kutusu (Satış)</option>
@@ -158,22 +158,22 @@ export async function renderCariPage() {
         </select>
       </div>
       <div class="filter-group">
-        <label class="filter-label">Başlangıç Tarihi</label>
+        <label class="filter-label" for="cariDateStart">Başlangıç Tarihi</label>
         <input type="date" class="filter-input" id="cariDateStart" value="${start}" />
       </div>
       <div class="filter-group">
-        <label class="filter-label">Bitiş Tarihi</label>
+        <label class="filter-label" for="cariDateEnd">Bitiş Tarihi</label>
         <input type="date" class="filter-input" id="cariDateEnd" value="${end}" />
       </div>
       <div class="filter-group filter-search">
-        <label class="filter-label">Müşteri Ara</label>
+        <label class="filter-label" for="cariSearchInput">Müşteri Ara</label>
         <input type="text" class="filter-input" id="cariSearchInput" placeholder="Ad veya VKN ile ara..." style="width:100%" />
       </div>
       <div class="filter-actions">
         <span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span>
         <div class="filter-actions-row">
           <button type="button" class="btn btn-sm btn-primary" id="cariApplyBtn">${ic.search} ARA</button>
-          <button type="button" class="btn btn-sm btn-warning" id="cariImportBtn">
+          <button type="button" class="btn btn-sm btn-secondary" id="cariImportBtn">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             Toplu Tahsilat
           </button>
@@ -212,6 +212,8 @@ export async function renderCariPage() {
         </div>
       </div>
     </div>
+
+    <div id="cariLoadAlert" class="sv-error" role="alert" hidden style="margin-bottom:16px"></div>
 
     <!-- Main Content -->
     <div class="cari-main-content" id="cariMainContent">
@@ -287,12 +289,13 @@ async function loadCariData(page) {
   const dateEnd = page.querySelector('#cariDateEnd')?.value || '';
 
   const customerListEl = page.querySelector('#cariCustomerList');
+  setCariLoadAlert(page, null);
   if (customerListEl) {
+    const sourceLabel = currentSource === 'tumu' ? 'Giden + Gelen' : (currentSource === 'giden' ? 'Giden Kutusu' : 'Gelen Kutusu');
     customerListEl.innerHTML = `
-      <div class="cari-loading-state">
-        <div style="animation:pulse 1.5s infinite">${ic.noData}</div>
-        <p>Faturalar yükleniyor...</p>
-        <p style="font-size:11px;color:var(--text-muted)">${account.name} · ${currentSource === 'tumu' ? 'Giden + Gelen' : (currentSource === 'giden' ? 'Giden Kutusu' : 'Gelen Kutusu')}</p>
+      <div style="display:grid;gap:12px;padding:16px" aria-busy="true">
+        <span role="status" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap">Faturalar yükleniyor: ${escapeHtml(account.name)} · ${sourceLabel}</span>
+        ${Array.from({ length: 6 }, (_, i) => `<div aria-hidden="true"><div class="sv-skeleton" style="height:14px;width:${[78, 64, 86, 58, 72, 66][i]}%"></div><div class="sv-skeleton" style="height:10px;width:40%;margin-top:6px;opacity:.6"></div></div>`).join('')}
       </div>`;
   }
 
@@ -306,16 +309,19 @@ async function loadCariData(page) {
     // Her faturayı yönüyle (_direction) etiketliyoruz: giden=satış (borç), gelen=alım (alacak).
     // Böylece bir müşterinin hem giden hem gelen faturaları aynı cari'de birleşir.
     const tasks = [];
+    // fetchInvoicesSmart dilim/sayfa hatasında boş/eksik dizi döndürür; hatayı stats.failed ile bildirir.
+    const sourceStats = [];
+    const track = (label) => { const stats = { failed: false, label }; sourceStats.push(stats); return stats; };
     if (wantGiden) {
       // Giden = Satış (E-Fatura Sale + E-Arşiv — e-arşiv daima giden/satıştır)
-      tasks.push(fetchInvoicesSmart(EInvoiceWithAccount.listSales, account, 'efatura_sale', { StartDate: dateStart, EndDate: dateEnd }, { signal })
+      tasks.push(fetchInvoicesSmart(EInvoiceWithAccount.listSales, account, 'efatura_sale', { StartDate: dateStart, EndDate: dateEnd }, { signal, stats: track('Giden e-Fatura') })
         .then(r => r.map(i => ({ ...i, _source: 'efatura', _direction: 'giden' }))));
-      tasks.push(fetchInvoicesSmart(EArchiveWithAccount.listInvoices, account, 'earsiv', { StartDate: dateStart, EndDate: dateEnd }, { signal })
+      tasks.push(fetchInvoicesSmart(EArchiveWithAccount.listInvoices, account, 'earsiv', { StartDate: dateStart, EndDate: dateEnd }, { signal, stats: track('e-Arşiv') })
         .then(r => r.map(i => ({ ...i, _source: 'earsiv', _direction: 'giden' }))));
     }
     if (wantGelen) {
       // Gelen = Alım (E-Fatura Purchase)
-      tasks.push(fetchInvoicesSmart(EInvoiceWithAccount.listPurchases, account, 'efatura_purchase', { StartDate: dateStart, EndDate: dateEnd }, { signal })
+      tasks.push(fetchInvoicesSmart(EInvoiceWithAccount.listPurchases, account, 'efatura_purchase', { StartDate: dateStart, EndDate: dateEnd }, { signal, stats: track('Gelen e-Fatura') })
         .then(r => r.map(i => ({ ...i, _source: 'efatura', _direction: 'gelen' }))));
     }
 
@@ -341,7 +347,9 @@ async function loadCariData(page) {
       return;
     }
 
-    rememberExportPeriod(page,{start:dateStart,end:dateEnd,complete:!collectionError&&results.every(result=>result.status==='fulfilled')});
+    const failedSources = sourceStats.filter(stats => stats.failed).map(stats => stats.label);
+    const invoicesIncomplete = failedSources.length > 0 || results.some(result => result.status === 'rejected');
+    rememberExportPeriod(page,{start:dateStart,end:dateEnd,complete:!collectionError&&!invoicesIncomplete});
     allInvoices = fetchedInvoices;
     allCollections = fetchedCollections;
     buildCustomerMap();
@@ -363,9 +371,12 @@ async function loadCariData(page) {
     const searchInput = page.querySelector('#cariSearchInput');
     const searchValue = searchInput ? searchInput.value.trim() : '';
     
-    if(results.some(result=>result.status==='rejected'))showToast('Bazı fatura kaynakları yüklenemedi. Görünen bakiye eksiktir; Ara ile tekrar deneyin.','warning');
-    if (collectionError) {
-      showToast(`Faturalar geldi ama tahsilatlar yüklenemedi: ${collectionError.message}. ARA ile tekrar deneyin.`, 'warning');
+    if (invoicesIncomplete || collectionError) {
+      // Hata başarı gibi görünmesin: kalıcı uyarı kutusu + Tekrar dene; başarı bildirimi gösterilmez.
+      const problems = [];
+      if (invoicesIncomplete) problems.push(`Bazı fatura kaynakları yüklenemedi${failedSources.length ? ` (${failedSources.join(', ')})` : ''}. Görünen bakiye eksik olabilir.`);
+      if (collectionError) problems.push(`Tahsilatlar yüklenemedi: ${collectionError.message}`);
+      setCariLoadAlert(page, problems.join(' '));
     } else if (searchValue) {
       showToast(`Arama tamamlandı: "${searchValue}" için sonuçlar listelendi.`, 'success');
     } else {
@@ -376,16 +387,26 @@ async function loadCariData(page) {
       return;
     }
     console.error('Cari data load error:', e);
-    showToast(`Veri yükleme hatası: ${e.message}`, 'error');
+    setCariLoadAlert(page, `Veri yükleme hatası: ${e.message || 'Sunucuya ulaşılamıyor'}`);
     if (customerListEl) {
       customerListEl.innerHTML = `
         <div class="cari-loading-state">
           ${ic.noData}
           <h3>Veri alınamadı</h3>
-          <p>${e.message}</p>
+          <p>${escapeHtml(e.message || '')}</p>
         </div>`;
     }
   }
+}
+
+// Yükleme hatası kutusu (role="alert"): message=null gizler.
+function setCariLoadAlert(page, message) {
+  const box = page.querySelector('#cariLoadAlert');
+  if (!box) return;
+  if (!message) { box.hidden = true; box.innerHTML = ''; return; }
+  box.innerHTML = `<div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px"><span>${escapeHtml(message)}</span><button type="button" class="btn btn-sm btn-secondary" data-cari-retry>Tekrar dene</button></div>`;
+  box.hidden = false;
+  box.querySelector('[data-cari-retry]')?.addEventListener('click', () => loadCariData(page));
 }
 
 // ── Build Customer Map ──
@@ -696,9 +717,9 @@ function renderDetailPanel(page, customer, key) {
         <span class="cari-detail-vkn">VKN: ${escapeHtml(customer.taxNo)}</span>
       </div>
       <div class="cari-detail-actions">
-        <button class="btn btn-sm btn-warning" id="toggleTahsilatFormBtn">+ Tahsilat Ekle</button>
-        <button class="btn btn-sm btn-success" id="exportCariBtn">${ic.download} Excel'e Aktar</button>
-        <button class="btn btn-sm btn-primary" id="cariWhatsAppBtn" type="button">WhatsApp’a gönder</button>
+        <button class="btn btn-sm btn-primary" id="toggleTahsilatFormBtn">+ Tahsilat Ekle</button>
+        <button class="btn btn-sm btn-secondary" id="exportCariBtn">${ic.download} Excel'e Aktar</button>
+        <button class="btn btn-sm btn-secondary" id="cariWhatsAppBtn" type="button">WhatsApp’a gönder</button>
       </div>
     </div>
 

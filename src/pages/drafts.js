@@ -7,6 +7,7 @@ import { showToast } from '../components/toast.js';
 import { openPdfViewer, pdfMetaAttrs, readPdfMeta } from '../components/pdf-viewer.js';
 import { navigate, registerCacheReset } from '../router.js';
 import { getActiveAccount, getActiveAccountId } from '../services/account-manager.js';
+import { fmtDate, fmtDateTime, dateCellHtml, skeletonRowsHtml, rowCheckboxHtml } from '../lib/format.js';
 
 const INVOICE_EDIT_CONTEXT_KEY = 'nilfatura_invoice_edit_context';
 
@@ -54,19 +55,19 @@ export async function renderDrafts() {
 
     <div class="nilvera-filter-bar">
       <div class="filter-group filter-search">
-        <label class="filter-label">Ara</label>
-        <input type="text" class="filter-input" id="searchInput" placeholder="Fatura no, alıcı veya VKN ara" style="width:100%" />
+        <label class="filter-label" for="searchInput">Ara</label>
+        <input type="search" class="filter-input" id="searchInput" placeholder="Fatura no, alıcı veya VKN ara" style="width:100%" />
       </div>
       <div class="filter-group">
-        <label class="filter-label">Başlangıç Tarihi</label>
+        <label class="filter-label" for="startDate">Başlangıç Tarihi</label>
         <input type="date" class="filter-input" id="startDate" />
       </div>
       <div class="filter-group">
-        <label class="filter-label">Bitiş Tarihi</label>
+        <label class="filter-label" for="endDate">Bitiş Tarihi</label>
         <input type="date" class="filter-input" id="endDate" />
       </div>
       <div class="filter-group">
-        <label class="filter-label">Kaynak</label>
+        <label class="filter-label" for="draftSource">Kaynak</label>
         <select class="filter-input" id="draftSource">
           <option value="einvoice">E-Fatura</option>
           <option value="earchive">E-Arşiv</option>
@@ -74,7 +75,7 @@ export async function renderDrafts() {
       </div>
       <div class="filter-actions"><span class="filter-label filter-actions-spacer" aria-hidden="true">&nbsp;</span><div class="filter-actions-row">
         <button class="btn btn-sm btn-primary" id="btnSearch" style="height:34px; padding:0 20px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.search} ARA</button>
-        <button class="btn btn-sm" id="btnRefresh" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px; background:var(--bg-secondary); border:1px solid var(--border); color:var(--text-secondary)">${ic.refresh} YENİLE</button>
+        <button class="btn btn-sm btn-secondary" id="btnRefresh" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.refresh} YENİLE</button>
         <button class="btn btn-sm btn-success" id="btnSendBulk" style="height:34px; padding:0 16px; font-weight:600; font-size:12px; border-radius:6px; display:flex; align-items:center; gap:6px">${ic.send} ONAYLA VE GÖNDER</button>
       </div>
       </div>
@@ -85,18 +86,18 @@ export async function renderDrafts() {
         <table>
           <thead>
             <tr>
-              <th style="width:30px"><input type="checkbox" id="selectAll" /></th>
+              <th style="width:30px"><label class="sv-row-check" style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;min-height:24px;cursor:pointer"><input type="checkbox" id="selectAll" aria-label="Tümünü seç" /></label></th>
               <th>ERP</th>
               <th>Fatura Bilgisi</th>
               <th>Tarih</th>
+              <th class="sv-number">Tutar</th>
               <th>Alıcı Bilgisi</th>
               <th>Alıcı Etiket</th>
               <th>Fatura Türü</th>
-              <th>Etiket Bilgileri</th>
               <th>İşlemler</th>
             </tr>
           </thead>
-          <tbody id="draftList"></tbody>
+          <tbody id="draftList">${skeletonRowsHtml(9, { label: 'Taslaklar yükleniyor…' })}</tbody>
         </table>
       </div>
       <div class="table-footer" id="tableFooter" style="display:none">
@@ -144,7 +145,8 @@ export async function renderDrafts() {
     document.querySelectorAll('.action-dropdown').forEach(d => d.remove());
   });
 
-  await loadDrafts(page);
+  // Sayfa hemen döner; liste gövdesi yükleme bitince dolar (hata durumu da tablo içinde gösterilir).
+  void loadDrafts(page);
   if(getActiveAccountId())restoreBatchResults(page,getActiveAccountId(),selectedSource+'-send');
   return page;
 }
@@ -174,7 +176,7 @@ async function loadDrafts(page) {
   const signal = draftsAbort.signal;
   cachedDraftsAccountId = accountId;
 
-  tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div style="padding:24px;text-align:center;color:var(--text-muted)">Taslaklar yükleniyor...</div></td></tr>`;
+  tbody.innerHTML = skeletonRowsHtml(9, { label: 'Taslaklar yükleniyor…' });
 
   try {
     const api = selectedSource === 'earchive' ? EArchiveWithAccount : EInvoiceWithAccount;
@@ -191,7 +193,7 @@ async function loadDrafts(page) {
     }
 
     if (!res.success) {
-      tbody.innerHTML = emptyRow(`Hata: ${res.error}`);
+      renderLoadError(page, `Hata: ${res.error || 'Bilinmeyen hata'}`);
       updateFooter(page, 0);
       return;
     }
@@ -207,7 +209,7 @@ async function loadDrafts(page) {
     if (seq !== draftsLoadSeq || cachedDraftsAccountId !== accountId || getActiveAccountId() !== accountId) {
       return;
     }
-    tbody.innerHTML = emptyRow(`Bağlantı hatası: ${e.message}`);
+    renderLoadError(page, `Bağlantı hatası: ${e?.message || 'Sunucuya ulaşılamıyor'}`);
     updateFooter(page, 0);
   }
 }
@@ -252,7 +254,7 @@ function renderRows(page, drafts) {
     const amount = info.PayableAmount;
     const curr = info.CurrencyCode || 'TRY';
     const issueDate = fmtDateTime(info.IssueDate);
-    const createdDate = fmtDateTime(info.CreatedDate || info.IssueDate);
+    const safeNo = escapeHtmlAttr(no);
     const receiverName = customer.ReceiverName || customer.CustomerName || customer.Name || customer.name || '—';
     const receiverTax = customer.ReceiverTaxNumber || customer.TaxNumber || '—';
     const alias = customer.ReceiverAlias || customer.Alias || extractDraftAlias(d) || 'Belirtilmemiş';
@@ -261,30 +263,26 @@ function renderRows(page, drafts) {
 
     return `
       <tr>
-        <td><input type="checkbox" class="row-check" value="${uuid}" data-alias="${escapeHtmlAttr(alias)}" /></td>
-        <td>
-          <button class="action-menu-btn" data-action="preview" data-uuid="${escapeHtmlAttr(uuid)}" data-source="${selectedSource}" ${pdfMetaAttrs({ party: receiverName, number: no === '—' ? '' : no, date: issueDate, amount: fmtCur(amount, curr) })} title="PDF Önizleme">${ic.query}</button>
+        <td data-label="Seçim">${rowCheckboxHtml(`class="row-check" data-idx="${idx}" value="${escapeHtmlAttr(uuid)}" data-alias="${escapeHtmlAttr(alias)}"`, `${safeNo} seç`)}</td>
+        <td data-label="ERP">
+          <button class="action-menu-btn" data-action="preview" data-uuid="${escapeHtmlAttr(uuid)}" data-source="${selectedSource}" ${pdfMetaAttrs({ party: receiverName, number: no === '—' ? '' : no, date: issueDate, amount: fmtCur(amount, curr) })} title="PDF Önizleme" aria-label="${safeNo} PDF önizle">${ic.query}</button>
         </td>
-        <td>
-          <div style="font-size:12px;font-weight:600">Seri/No : ${escapeHtmlAttr(no)}</div>
+        <td data-label="Fatura Bilgisi">
+          <div style="font-size:12px;font-weight:600;white-space:nowrap">Seri/No : ${safeNo}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-            <span style="border:1px solid #22c55e;color:#15803d;border-radius:999px;padding:1px 8px;background:#f0fdf4;font-weight:600">${typeStr}</span>
-            <span>${fmtCur(amount, curr)}</span>
+            <span class="badge badge-success">${escapeHtmlAttr(typeStr)}</span>
           </div>
         </td>
-        <td>
-          <div style="font-size:11px;color:var(--text-secondary)"><strong>Fatura:</strong> ${issueDate}</div>
-          <div style="font-size:11px;color:var(--text-muted)"><strong>Kayıt:</strong> ${createdDate}</div>
-        </td>
-        <td>
+        <td data-label="Tarih">${dateCellHtml(info.IssueDate, { secondary: `Kayıt ${fmtDate(info.CreatedDate || info.IssueDate)}` })}</td>
+        <td class="sv-number" data-label="Tutar">${fmtCur(amount, curr)}</td>
+        <td data-label="Alıcı Bilgisi">
           <div style="font-size:12px;font-weight:600">${escapeHtmlAttr(receiverName)}</div>
-          <div style="font-size:11px;color:var(--text-muted)">Vergi No : ${escapeHtmlAttr(receiverTax)}</div>
+          <div style="font-size:11px;color:var(--text-muted);white-space:nowrap">VKN ${escapeHtmlAttr(receiverTax)}</div>
         </td>
-        <td><span style="font-size:11px;color:var(--text-secondary)">${escapeHtmlAttr(alias)}</span></td>
-        <td><span class="badge badge-info">${profile}</span></td>
-        <td><span style="font-size:11px;color:var(--text-muted)">—</span></td>
-        <td>
-          <button class="action-menu-btn action-menu-trigger" data-idx="${idx}" data-uuid="${uuid}" data-source="${selectedSource}" data-alias="${escapeHtmlAttr(alias)}" title="İşlemler">${ic.menu}</button>
+        <td data-label="Alıcı Etiket"><span style="font-size:11px;color:var(--text-secondary)">${escapeHtmlAttr(alias)}</span></td>
+        <td data-label="Fatura Türü"><span class="badge badge-info">${escapeHtmlAttr(profile)}</span></td>
+        <td data-label="İşlemler">
+          <button class="action-menu-btn action-menu-trigger" data-idx="${idx}" data-uuid="${escapeHtmlAttr(uuid)}" data-source="${selectedSource}" data-alias="${escapeHtmlAttr(alias)}" title="İşlemler" aria-label="${safeNo} işlemleri" aria-haspopup="menu">${ic.menu}</button>
         </td>
       </tr>
     `;
@@ -668,17 +666,15 @@ function updateFooter(page, count) {
 }
 
 function emptyRow(message) {
-  return `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>${message}</h3></div></td></tr>`;
+  return `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>${escapeHtmlAttr(message)}</h3></div></td></tr>`;
 }
 
-function fmtDateTime(d) {
-  if (!d) return '—';
-  try {
-    const dt = new Date(d);
-    return `${dt.toLocaleDateString('tr-TR')} ${dt.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
-  } catch {
-    return d;
-  }
+// Yükleme hatası tablo içinde gösterilir; "Tekrar Dene" aynı yükleyiciyi çağırır.
+function renderLoadError(page, message) {
+  const tbody = page.querySelector('#draftList');
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="9" class="table-empty"><div class="empty-state">${ic.noData}<h3>Taslaklar alınamadı</h3><p role="alert">${escapeHtmlAttr(message)}</p><button class="btn btn-primary" type="button" id="draftsRetryBtn">${ic.refresh} Tekrar Dene</button></div></td></tr>`;
+  tbody.querySelector('#draftsRetryBtn')?.addEventListener('click', () => loadDrafts(page));
 }
 
 function fmtCur(a, c) {
