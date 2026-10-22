@@ -40,3 +40,11 @@ SAFE/
 *.dump
 DEKONTÖRNEKLERİ/
 .vercel
+
+# Personal financial exports and reference screenshots
+/*.xlsx
+/*.xls
+/*.pdf
+/*.csv
+/public/cari_template.xlsx
+/nilvera/
